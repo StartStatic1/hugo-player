@@ -7,14 +7,31 @@ channelsRouter.get("/", async (req, res) => {
   if (!playlistUrl) return res.status(400).json({ error: "missing_url" });
 
   try {
-    const response = await fetch(playlistUrl);
-    if (!response.ok) throw new Error("Failed to fetch playlist");
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 20000);
+
+    const response = await fetch(playlistUrl, {
+      signal: controller.signal,
+      headers: { "User-Agent": "HugoPlayer/1.0" }
+    });
+    clearTimeout(timeout);
+
+    if (!response.ok) {
+      return res.status(502).json({ error: `upstream_${response.status}` });
+    }
+
     const text = await response.text();
+    if (!text || text.length < 10) {
+      return res.status(422).json({ error: "empty_playlist" });
+    }
 
     const parsed = parseM3U(text);
     res.json(parsed);
   } catch (e: any) {
-    res.status(500).json({ error: e.message });
+    if (e.name === "AbortError") {
+      return res.status(504).json({ error: "timeout_fetching_playlist" });
+    }
+    res.status(500).json({ error: e.message || "fetch_failed" });
   }
 });
 
@@ -35,7 +52,7 @@ function parseM3U(content: string) {
       const group = groupMatch ? groupMatch[1].trim() : "Outros";
 
       const next = lines[i + 1];
-      if (next && !next.startsWith("#")) {
+      if (next && !next.startsWith("#") && next.startsWith("http")) {
         channels.push({ name, url: next, logo, group });
         groups.set(group, (groups.get(group) || 0) + 1);
         i++;
@@ -43,10 +60,12 @@ function parseM3U(content: string) {
     }
   }
 
-  const categories = Array.from(groups.entries()).map(([name, count]) => ({ name, count }));
+  const categories = Array.from(groups.entries())
+    .map(([name, count]) => ({ name, count }))
+    .sort((a, b) => b.count - a.count);
 
   return {
-    channels,
+    channels: channels.slice(0, 400),
     categories,
     total: channels.length
   };
