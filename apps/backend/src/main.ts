@@ -3,7 +3,6 @@ import express, { type NextFunction, type Request, type Response } from "express
 import helmet from "helmet";
 import cors from "cors";
 import rateLimit from "express-rate-limit";
-import compression from "compression";
 import { z } from "zod";
 import { randomBytes, randomUUID, scryptSync, timingSafeEqual } from "node:crypto";
 import { promises as fs } from "node:fs";
@@ -91,12 +90,10 @@ const playlistSchema = z.object({
   name: z.string().trim().min(1).max(80),
   type: z.enum(["m3u", "xtream"]).default("m3u"),
   url: z.string().trim().min(5),
-  // Xtream: opcionalmente servidor + usuário + senha separados
   username: z.string().trim().min(1).max(200).optional(),
   password: z.string().trim().min(1).max(200).optional(),
 });
 
-/** Para Xtream com usuário/senha separados, monta a URL get.php (usada também pelo /catalog). */
 function normalizePlaylistUrl(p: z.infer<typeof playlistSchema>): string {
   if (p.type !== "xtream" || !p.username || !p.password) return p.url;
   const base = new URL(/^https?:\/\//i.test(p.url) ? p.url : `http://${p.url}`);
@@ -112,20 +109,15 @@ const app = express();
 app.disable("x-powered-by");
 app.set("trust proxy", 1);
 app.use(helmet());
-app.use(compression());
 app.use(cors({ origin: true }));
 const jsonSmall = express.json({ limit: "32kb" });
-// /epg aceita corpos maiores (lista de ids); demais rotas ficam com 32 KB
 app.use((req, res, next) => (req.path.startsWith("/epg") ? next() : jsonSmall(req, res, next)));
 app.use(rateLimit({ windowMs: 60_000, limit: 200 }));
 
 app.use("/tmdb", tmdbRouter);
 app.use("/recovery", recoveryRouter);
 app.use("/channels", channelsRouter);
-/**
- * Resolve a playlist da requisição: playlistId (query ou body) + credenciais
- * do dispositivo, ou URL direta (?url=, compatível com /channels).
- */
+
 const resolvePlaylist: PlaylistResolver = (req) => {
   const playlistId = (req.query.playlistId as string | undefined) ?? (req.body?.playlistId as string | undefined);
   if (playlistId) {
