@@ -25,6 +25,9 @@ fun SettingsScreen(onBack: () -> Unit) = SettingsScreen(null, null, onBack)
 
 @Composable
 fun SettingsScreen(deviceId: String?, deviceKey: String?, onBack: () -> Unit) {
+    // Garante configurações + cache em disco mesmo se a MainActivity não inicializar
+    val appContext = androidx.compose.ui.platform.LocalContext.current.applicationContext
+    remember { CatalogRepository.init(appContext); true }
     var ttl by remember { mutableIntStateOf(AppSettings.catalogTtlHours) }
     var liveFormat by remember { mutableStateOf(AppSettings.liveFormat) }
     var autoOpen by remember { mutableStateOf(AppSettings.autoOpenLastPlaylist) }

@@ -214,3 +214,28 @@ private fun SeriesDetailsView(series: Series, onPlay: (PlaybackRequest) -> Unit,
         }
     }
 }
+
+/**
+ * Compatibilidade com a rota antiga "series/..." do AppNavigation (sem catálogo).
+ * A tela completa de séries é SeriesContent, usada pela BrowseScreen.
+ */
+@Composable
+fun SeriesScreen(onBack: () -> Unit) {
+    Column(
+        Modifier.fillMaxSize().background(HugoColors.Background).padding(24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Text("Séries", color = Color.White, fontSize = 28.sp)
+        Spacer(Modifier.height(16.dp))
+        Text(
+            "As séries serão carregadas da playlist selecionada.\nCapas e informações vêm da lista do provedor.",
+            color = HugoColors.TextMuted,
+            fontSize = 14.sp
+        )
+        Spacer(Modifier.height(24.dp))
+        Button(onClick = onBack, colors = ButtonDefaults.buttonColors(containerColor = HugoColors.Accent)) {
+            Text("Voltar")
+        }
+    }
+}

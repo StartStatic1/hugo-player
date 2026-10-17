@@ -48,6 +48,9 @@ fun BrowseScreen(
     onPlay: (PlaybackRequest) -> Unit,
     onBack: () -> Unit,
 ) {
+    // Garante configurações + cache em disco mesmo se a MainActivity não inicializar
+    val appContext = androidx.compose.ui.platform.LocalContext.current.applicationContext
+    remember { CatalogRepository.init(appContext); true }
     var tab by rememberSaveable { mutableStateOf(initialTab) }
     var catalog by remember { mutableStateOf(CatalogRepository.cached(playlistId)) }
     var loading by remember { mutableStateOf(catalog == null) }
