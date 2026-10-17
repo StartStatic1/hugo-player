@@ -30,26 +30,34 @@ function classify(name: string, group: string, url: string): "live" | "movie" | 
   const n = (name || "").toLowerCase();
   const u = (url || "").toLowerCase();
 
-  // 24H groups are live (looping content)
+  // Parent groups explicit
+  if (g.startsWith("filmes") || g.startsWith("filme |") || g.startsWith("movies") || g.includes("filmes |")) return "movie";
+  if (g.startsWith("séries") || g.startsWith("series") || g.startsWith("serie |") || g.includes("séries |")) return "series";
+  if (g.startsWith("tv ao vivo") || g.startsWith("live") || g.startsWith("canais") || g.includes("tv |")) return "live";
+
+  // 24H is usually live looping
   if (g.startsWith("24h") || g.includes("24 horas") || g.includes("24hrs")) return "live";
 
-  // Clear live groups
-  if (g.includes("canais abertos") || g.includes("globo ") || g.includes("rede record") || g.includes("sbt") || g.includes("band ") || g.includes("sport") || g.includes("noticias") || g.includes("news")) return "live";
+  // Streaming services = movies (unless series indicator)
+  if (g.includes("prime") || g.includes("netflix") || g.includes("disney") || g.includes("hbo") || g.includes("apple tv") || g.includes("crunchyroll") || g.includes("paramount") || g.includes("globoplay") || g.includes("look") || g.includes("directv")) {
+    if (n.match(/s\d{1,2}e\d{1,2}/i) || g.includes("serie") || g.includes("temporada")) return "series";
+    return "movie";
+  }
 
-  // Streaming services = VOD
-  if (g.includes("prime") || g.includes("netflix") || g.includes("disney") || g.includes("hbo") || g.includes("apple tv") || g.includes("crunchyroll") || g.includes("discovery") || g.includes("paramount") || g.includes("globoplay") || g.includes("look") || g.includes("claro video") || g.includes("directv")) return "movie";
-
-  // Genre groups = usually movies
+  // Genre-based
   if (g.includes("ação") || g.includes("comédia") || g.includes("drama") || g.includes("terror") || g.includes("romance") || g.includes("animação") || g.includes("suspense") || g.includes("lançamento") || g.includes("legendados")) return "movie";
 
-  // Series indicators
-  if (g.includes("serie") || g.includes("series") || g.includes("temporada") || g.includes("dorama") || n.match(/s\d{1,2}e\d{1,2}/i)) return "series";
+  // Live indicators
+  if (g.includes("canais abertos") || g.includes("globo ") || g.includes("rede record") || g.includes("sbt") || g.includes("band ") || g.includes("sport") || g.includes("noticias")) return "live";
 
-  // URL hints
-  if (u.includes(".ts") && !g.includes("filme") && !g.includes("movie")) return "live";
+  // Series by name pattern
+  if (n.match(/s\d{1,2}e\d{1,2}/i) || g.includes("dorama") || g.includes("temporada")) return "series";
+
+  // URL
   if (u.includes(".mp4") || u.includes(".mkv")) return "movie";
+  if (u.includes(".ts") && !g.includes("filme") && !g.includes("movie")) return "live";
 
-  return "movie"; // default to movie for unknown VOD-style
+  return "movie";
 }
 
 function parseM3U(content: string) {
