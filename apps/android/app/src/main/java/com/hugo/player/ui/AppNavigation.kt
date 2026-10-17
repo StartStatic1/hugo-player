@@ -26,7 +26,7 @@ fun AppNavigation() {
                 onSelect = { playlistId ->
                     nav.navigate("home/$playlistId")
                 },
-                onAddNew = { /* open site or show message */ }
+                onAddNew = { }
             )
         }
         composable("home/{playlistId}") {
@@ -38,5 +38,10 @@ fun AppNavigation() {
         composable("series") { SeriesScreen(onBack = { nav.popBackStack() }) }
         composable("live") { LiveTvScreen(onBack = { nav.popBackStack() }) }
         composable("settings") { SettingsScreen(onBack = { nav.popBackStack() }) }
+        composable("player/{url}/{title}") { backStack ->
+            val url = backStack.arguments?.getString("url") ?: ""
+            val title = backStack.arguments?.getString("title") ?: "Canal"
+            PlayerScreen(streamUrl = url, title = title, onBack = { nav.popBackStack() })
+        }
     }
 }
