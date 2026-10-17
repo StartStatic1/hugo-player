@@ -13,6 +13,9 @@ object LiveTvCache {
     var selectedCategory: String? = null
     var playlistId: String? = null
     var playlistName: String? = null
+    var playlistUrl: String? = null
+    var currentPage: Int = 0
+    var hasMore: Boolean = true
 
     fun save(context: Context) {
         try {
@@ -40,6 +43,7 @@ object LiveTvCache {
                 .putString("categories", catArr.toString())
                 .putString("playlistId", playlistId)
                 .putString("playlistName", playlistName)
+                .putString("playlistUrl", playlistUrl)
                 .putString("selectedCategory", selectedCategory)
                 .apply()
         } catch (_: Exception) {}
@@ -72,6 +76,7 @@ object LiveTvCache {
             }
             playlistId = prefs.getString("playlistId", null)
             playlistName = prefs.getString("playlistName", null)
+            playlistUrl = prefs.getString("playlistUrl", null)
             selectedCategory = prefs.getString("selectedCategory", null)
         } catch (_: Exception) {}
     }
@@ -82,5 +87,8 @@ object LiveTvCache {
         selectedCategory = null
         playlistId = null
         playlistName = null
+        playlistUrl = null
+        currentPage = 0
+        hasMore = true
     }
 }
