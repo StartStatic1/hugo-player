@@ -8,7 +8,7 @@ const CACHE_TTL = 10 * 60 * 1000;
 channelsRouter.get("/", async (req, res) => {
   const playlistUrl = req.query.url as string;
   const page = parseInt(req.query.page as string) || 0;
-  const limit = parseInt(req.query.limit as string) || 200;
+  const limit = Math.min(parseInt(req.query.limit as string) || 200, 100000);
   const type = req.query.type as string;
   const group = req.query.group as string;
   if (!playlistUrl) return res.status(400).json({ error: "missing_url" });
@@ -20,7 +20,7 @@ channelsRouter.get("/", async (req, res) => {
       data = cached;
     } else {
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 120000);
+      const timeout = setTimeout(() => controller.abort(), 180000);
       const response = await fetch(playlistUrl, {
         signal: controller.signal,
         headers: { "User-Agent": "TiviMate/4.7.0 (Android 11; NVIDIA SHIELD TV Pro)" }
@@ -56,9 +56,7 @@ channelsRouter.get("/", async (req, res) => {
   }
 });
 
-// Detect episode pattern and extract series name
 function extractSeriesInfo(name: string): { seriesName: string; season: number; episode: number } | null {
-  // Patterns: S01E01, S1E1, S01 E01, Season 1 Episode 1, 1x01, etc.
   const patterns = [
     /(.+?)\s*[Ss](\d+)\s*[Ee](\d+)/i,
     /(.+?)\s*(\d+)x(\d+)/i,
@@ -80,13 +78,10 @@ function extractSeriesInfo(name: string): { seriesName: string; season: number; 
 
 function classify(name: string, group: string, url: string): "live" | "movie" | "series" {
   const g = (group || "").toLowerCase().trim();
-  const n = (name || "").toLowerCase();
   const u = (url || "").toLowerCase();
 
-  // Episode pattern = series
   if (extractSeriesInfo(name)) return "series";
 
-  // Group-based
   if (g.startsWith("canais") || g.startsWith("tv ao vivo") || g.startsWith("live") || g.includes("[24h]") ||
       g.includes("globo") || g.includes("record") || g.includes("sbt") || g.includes("band") ||
       g.includes("sport") || g.includes("noticias") || g.includes("telecine") || g.includes("premiere")) return "live";
@@ -100,7 +95,6 @@ function classify(name: string, group: string, url: string): "live" | "movie" | 
 
   if (g.startsWith("filmes") || g.startsWith("filme") || g.includes("filme")) return "movie";
 
-  // URL-based
   if (u.includes("/series/") || u.includes("/serie/")) return "series";
   if (u.includes("/movie/") || u.includes("/movies/")) return "movie";
   if (u.includes(".mp4") || u.includes(".mkv") || u.includes(".avi")) return "movie";
