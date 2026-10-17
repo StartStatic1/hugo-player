@@ -131,11 +131,49 @@ Returns `{ "playlists": [ { "id", "name", "type", "url", "username?", "epgUrl?",
 
 - `201` created · `400` validation · `401` bad credentials · `402` license expired · `409` limit of 20 playlists
 
+### `GET /catalog`  *(Part A — content detection)*
+Fetches the playlist and returns content split into **live / movies / series**, with categories (provider order) and logos.
+
+- Auth mode (recommended): `?playlistId=<id>` + headers `x-device-id` / `x-device-key` — the playlist URL never leaves the server.
+- Direct mode: `?url=<playlist url>&type=m3u|xtream`.
+- Options: `refresh=1` (bypass the 15 min cache), `liveFormat=m3u8|ts` (Xtream live URLs, default `m3u8`), `sections=live,movies,series` (omit item arrays you don't need).
+
+```json
+{
+  "source": "m3u | xtream",
+  "epgUrl": "http://…/xmltv.php?… or url-tvg from #EXTM3U",
+  "live":   { "categories": [{ "id", "name", "count" }], "items": [{ "id", "name", "url", "logo", "group", "categoryId", "epgId", "streamId?", "catchup?" }] },
+  "movies": { "categories": [...], "items": [{ "id", "name", "url", "poster", "group", "categoryId", "year?", "rating?" }] },
+  "series": { "categories": [...], "items": [{ "id", "name", "cover", "group", "categoryId", "seriesId?", "seasons": [{ "season", "episodes": [...] }], "episodeCount" }] },
+  "stats":  { "live", "movies", "series", "episodes" }
+}
+```
+
+**How the type is detected (M3U):** score-based, combining Xtream URL paths (`/live/`, `/movie/`, `/series/` — strongest), episode patterns in the name (`S01E02`, `S1 E2`, `T01E02`, `1x02`, `Temporada 1 Episódio 2`, `Season 1 Episode 2`), file extension (`.m3u8/.ts` → live, `.mp4/.mkv/.avi…` → VOD), `tvg-id` / `catchup` attributes (live), `group-title` keywords in PT/EN/ES/AR (Filmes, Movies, VOD, Películas, أفلام · Séries, Series, Temporada, Doramas, مسلسلات · Canais, Live, Ao Vivo, 24/7, قنوات…) and a year in the title (movie). Episodes are grouped into show → season → episode.
+
+**Xtream Codes:** detected when the URL is `get.php` / `player_api.php` with `username` + `password` (or the playlist type is `xtream`). Uses `player_api.php` actions `get_live_categories`, `get_live_streams`, `get_vod_categories`, `get_vod_streams`, `get_series_categories`, `get_series`; falls back to parsing the M3U if the API fails.
+
+### `GET /catalog/series/:id`
+Seasons and episodes of a series. Xtream ids (`x-series-123`) call `get_series_info`; M3U series are returned from the grouped catalog. Same auth/`url` params as `/catalog`.
+
+### `GET /catalog/category/:section/:categoryId`
+Only the items of one category (`section` = `live | movies | series`).
+
+### `GET /channels?url=` *(legacy)*
+Flat list used by older app builds, now powered by the same parser/classifier (`type` per channel, `epgUrl`, `limit`, `type` filter).
+
+### Tests
+
+```bash
+npm test -w apps/backend   # tsc + node --test (synthetic fixtures, no real streams)
+```
+
 ## Security notes
 
 - Device Keys are stored only as salted **scrypt** hashes and compared with `timingSafeEqual`.
 - `helmet`, CORS allow-list, JSON body limit (32 KB), global and registration-specific rate limits.
 - Request validation with **zod**.
+- Playlist/EPG fetches only allow `http(s)` to public hosts (no `localhost`/private IPs; set `ALLOW_PRIVATE_URLS=1` for local testing). DNS rebinding is not covered yet.
 - The JSON file store is for development; replace it with PostgreSQL (or similar) before production, and encrypt stored Xtream passwords.
 
 ## Roadmap

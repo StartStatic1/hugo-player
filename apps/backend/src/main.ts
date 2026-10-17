@@ -3,6 +3,7 @@ import express, { type NextFunction, type Request, type Response } from "express
 import helmet from "helmet";
 import cors from "cors";
 import rateLimit from "express-rate-limit";
+import compression from "compression";
 import { z } from "zod";
 import { randomBytes, randomUUID, scryptSync, timingSafeEqual } from "node:crypto";
 import { promises as fs } from "node:fs";
@@ -10,6 +11,7 @@ import path from "node:path";
 import { tmdbRouter } from "./routes-tmdb.js";
 import { recoveryRouter } from "./routes-recovery.js";
 import { channelsRouter } from "./routes-channels.js";
+import { createCatalogRouter } from "./routes-catalog.js";
 
 const PORT = Number(process.env.PORT ?? 8080);
 const DATA_FILE = path.resolve(process.env.DATA_FILE ?? "./data/db.json");
@@ -88,12 +90,28 @@ const playlistSchema = z.object({
   name: z.string().trim().min(1).max(80),
   type: z.enum(["m3u", "xtream"]).default("m3u"),
   url: z.string().trim().min(5),
+  // Xtream: opcionalmente servidor + usuário + senha separados
+  username: z.string().trim().min(1).max(200).optional(),
+  password: z.string().trim().min(1).max(200).optional(),
 });
+
+/** Para Xtream com usuário/senha separados, monta a URL get.php (usada também pelo /catalog). */
+function normalizePlaylistUrl(p: z.infer<typeof playlistSchema>): string {
+  if (p.type !== "xtream" || !p.username || !p.password) return p.url;
+  const base = new URL(/^https?:\/\//i.test(p.url) ? p.url : `http://${p.url}`);
+  const u = new URL("/get.php", `${base.protocol}//${base.host}`);
+  u.searchParams.set("username", p.username);
+  u.searchParams.set("password", p.password);
+  u.searchParams.set("type", "m3u_plus");
+  u.searchParams.set("output", "m3u8");
+  return u.toString();
+}
 
 const app = express();
 app.disable("x-powered-by");
 app.set("trust proxy", 1);
 app.use(helmet());
+app.use(compression());
 app.use(cors({ origin: true }));
 app.use(express.json({ limit: "32kb" }));
 app.use(rateLimit({ windowMs: 60_000, limit: 200 }));
@@ -101,6 +119,22 @@ app.use(rateLimit({ windowMs: 60_000, limit: 200 }));
 app.use("/tmdb", tmdbRouter);
 app.use("/recovery", recoveryRouter);
 app.use("/channels", channelsRouter);
+app.use(
+  "/catalog",
+  createCatalogRouter((req) => {
+    // 1) playlistId + credenciais do dispositivo (a URL fica só no servidor)
+    const playlistId = req.query.playlistId as string | undefined;
+    if (playlistId) {
+      const device = authDevice(req.header("x-device-id"), req.header("x-device-key"));
+      if (!device) return "unauthorized";
+      const p = db.playlists.find((x) => x.id === playlistId && x.deviceId === device.deviceId);
+      return p ? { url: p.url, type: p.type } : null;
+    }
+    // 2) URL direta (compatível com /channels)
+    const url = req.query.url as string | undefined;
+    return url ? { url, type: (req.query.type as string) || undefined } : null;
+  })
+);
 
 app.get("/health", (_req, res) => {
   res.json({ status: "ok", time: new Date().toISOString() });
@@ -130,12 +164,16 @@ app.post("/devices/register", async (req, res) => {
   res.status(201).json({ registered: true, created: true });
 });
 
-function requireDevice(req: Request, res: Response, next: NextFunction) {
-  const id = req.header("x-device-id");
-  const key = req.header("x-device-key");
-  if (!id || !key) return res.status(401).json({ error: "invalid_credentials" });
+function authDevice(id: string | undefined, key: string | undefined): Device | null {
+  if (!id || !key) return null;
   const device = db.devices[id.toUpperCase()];
-  if (!device || !verifyKey(key.toUpperCase(), device)) return res.status(401).json({ error: "invalid_credentials" });
+  if (!device || !verifyKey(key.toUpperCase(), device)) return null;
+  return device;
+}
+
+function requireDevice(req: Request, res: Response, next: NextFunction) {
+  const device = authDevice(req.header("x-device-id"), req.header("x-device-key"));
+  if (!device) return res.status(401).json({ error: "invalid_credentials" });
   (req as any).device = device;
   next();
 }
@@ -152,10 +190,18 @@ app.post("/playlists", requireDevice, async (req, res) => {
   const device = (req as any).device as Device;
   const parsed = playlistSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "validation_error", details: parsed.error.flatten() });
+  let url: string;
+  try {
+    url = normalizePlaylistUrl(parsed.data);
+  } catch {
+    return res.status(400).json({ error: "invalid_url" });
+  }
   const playlist: Playlist = {
     id: randomUUID(),
     deviceId: device.deviceId,
-    ...parsed.data,
+    name: parsed.data.name,
+    type: parsed.data.type,
+    url,
     createdAt: new Date().toISOString(),
   };
   db.playlists.push(playlist);

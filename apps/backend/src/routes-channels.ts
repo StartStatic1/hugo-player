@@ -1,104 +1,66 @@
 import { Router } from "express";
+import { classifyEntry } from "./content/classify.js";
+import { parseM3U } from "./content/m3u.js";
+import { fetchText } from "./content/net.js";
+import { sendError } from "./routes-catalog.js";
 
+/**
+ * Endpoint legado usado pelo app (lista plana de canais + categorias).
+ * Agora usa o mesmo parser/classificador do /catalog. Para o catálogo
+ * completo separado (live/filmes/séries + Xtream) use GET /catalog.
+ */
 export const channelsRouter = Router();
 
 channelsRouter.get("/", async (req, res) => {
   const playlistUrl = req.query.url as string;
   if (!playlistUrl) return res.status(400).json({ error: "missing_url" });
+  const limit = Math.min(Number(req.query.limit ?? 1000) || 1000, 20000);
+  const onlyType = req.query.type as string | undefined;
 
   try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 30000);
-
-    const response = await fetch(playlistUrl, {
-      signal: controller.signal,
-      headers: { "User-Agent": "TiviMate/4.7.0 (Android 11; NVIDIA SHIELD TV Pro)" }
-    });
-    clearTimeout(timeout);
-
-    if (!response.ok) {
-      return res.status(502).json({ error: `upstream_${response.status}` });
-    }
-
-    const text = await response.text();
-    if (!text || text.length < 10) {
-      return res.status(422).json({ error: "empty_playlist" });
-    }
-
-    const parsed = parseM3U(text);
-    res.json(parsed);
-  } catch (e: any) {
-    if (e.name === "AbortError") {
-      return res.status(504).json({ error: "timeout_fetching_playlist" });
-    }
-    res.status(500).json({ error: e.message || "fetch_failed" });
+    const text = await fetchText(playlistUrl, 30_000);
+    if (!text || text.length < 10) return res.status(422).json({ error: "empty_playlist" });
+    res.json(buildChannels(text, limit, onlyType));
+  } catch (e) {
+    sendError(res, e);
   }
 });
 
-function classify(name: string, group: string, url: string): "live" | "movie" | "series" | "other" {
-  const g = (group || "").toLowerCase();
-  const n = (name || "").toLowerCase();
-  const u = (url || "").toLowerCase();
+export function buildChannels(text: string, limit = 1000, onlyType?: string) {
+  const pl = parseM3U(text);
+  const all = pl.entries.map((e) => ({
+    name: e.name,
+    url: e.url,
+    logo: e.logo,
+    group: e.group,
+    tvgId: e.tvgId,
+    type: classifyEntry({ name: e.name, group: e.group, url: e.url, attrs: e.attrs }).type,
+  }));
+  const channels = onlyType ? all.filter((c) => c.type === onlyType) : all;
 
-  // Series indicators
-  if (g.includes("serie") || g.includes("series") || g.includes("temporada") || g.includes("season") || g.includes("dorama") || n.includes("s0") || n.includes("e0")) return "series";
-
-  // Movie indicators
-  if (g.includes("filme") || g.includes("movie") || g.includes("vod") || g.includes("cinema") || g.includes("netflix") || g.includes("hbo") || g.includes("prime") || g.includes("disney") || g.includes("paramount") || g.includes("globoplay") || g.includes("telecine") || n.includes("(20") || n.includes("(19")) return "movie";
-
-  // Live indicators
-  if (g.includes("live") || g.includes("tv") || g.includes("canal") || g.includes("sport") || g.includes("news") || g.includes("infantil") || g.includes("desenho") || g.includes("aberto") || g.includes("globo") || g.includes("record") || g.includes("sbt") || g.includes("band") || u.includes(".ts") || u.includes("live")) return "live";
-
-  // Default: if URL looks like VOD (mp4, mkv) treat as movie
-  if (u.includes(".mp4") || u.includes(".mkv") || u.includes(".avi")) return "movie";
-
-  return "other";
-}
-
-function parseM3U(content: string) {
-  const lines = content.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
-  const channels: { name: string; url: string; logo?: string; group?: string; type: string }[] = [];
-  const groups = new Map<string, { count: number; type: string }>();
-
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    if (line.startsWith("#EXTINF")) {
-      const nameMatch = line.match(/,(.+)$/);
-      const logoMatch = line.match(/tvg-logo="([^"]+)"/i);
-      const groupMatch = line.match(/group-title="([^"]+)"/i);
-
-      const name = nameMatch ? nameMatch[1].trim() : "Canal";
-      const logo = logoMatch ? logoMatch[1] : undefined;
-      const group = groupMatch ? groupMatch[1].trim() : "Outros";
-
-      const next = lines[i + 1];
-      if (next && !next.startsWith("#") && next.startsWith("http")) {
-        const type = classify(name, group, next);
-        channels.push({ name, url: next, logo, group, type });
-
-        const existing = groups.get(group);
-        if (existing) {
-          existing.count++;
-        } else {
-          groups.set(group, { count: 1, type });
-        }
-        i++;
-      }
-    }
+  const groups = new Map<string, { count: number; types: Record<string, number> }>();
+  for (const c of channels) {
+    const g = groups.get(c.group) ?? { count: 0, types: {} };
+    g.count++;
+    g.types[c.type] = (g.types[c.type] ?? 0) + 1;
+    groups.set(c.group, g);
   }
-
-  const categories = Array.from(groups.entries())
-    .map(([name, info]) => ({ name, count: info.count, type: info.type }))
-    .sort((a, b) => b.count - a.count);
+  const categories = Array.from(groups.entries()).map(([name, info]) => ({
+    name,
+    count: info.count,
+    // tipo predominante da categoria
+    type: Object.entries(info.types).sort((a, b) => b[1] - a[1])[0][0],
+  }));
 
   return {
-    channels: channels.slice(0, 1000),
+    channels: channels.slice(0, limit),
     categories,
     total: channels.length,
+    epgUrl: pl.epgUrl,
     stats: {
-      live: channels.filter(c => c.type === "live").length,
-      movies: channels.filter(c => c.type === "movie").length,
-      series: channels.filter(c => c.type === "series").length
-    }
+      live: all.filter((c) => c.type === "live").length,
+      movies: all.filter((c) => c.type === "movie").length,
+      series: all.filter((c) => c.type === "series").length,
+    },
   };
 }
