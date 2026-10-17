@@ -49,7 +49,7 @@ fun LiveTvScreen(
         try {
             val playlistUrl = withTimeoutOrNull(15000) { getPlaylistUrl(playlistId, deviceId, deviceKey) }
             if (playlistUrl != null) {
-                val result = withTimeoutOrNull(45000) { loadChannelsFromUrl(playlistUrl) }
+                val result = withTimeoutOrNull(45000) { loadChannelsFromUrl(playlistUrl, limit = 500) }
                 if (result != null) {
                     LiveTvCache.channels = result.first
                     LiveTvCache.categories = result.second
@@ -59,7 +59,7 @@ fun LiveTvScreen(
                     categories = result.second.filter { it.type == "live" || it.type == "other" }
                     selectedCategory = categories.firstOrNull()?.name
                 } else error = "Timeout"
-            } else error = "Playlist n\u00e3o encontrada"
+            } else error = "Playlist não encontrada"
         } catch (e: Exception) { error = e.message ?: "Erro" }
         loading = false
     }
@@ -129,19 +129,19 @@ suspend fun getPlaylistUrl(playlistId: String, deviceId: String, deviceKey: Stri
     } catch (e: Exception) { null }
 }
 
-suspend fun loadChannelsFromUrl(playlistUrl: String): Pair<List<Channel>, List<Category>> = withContext(Dispatchers.IO) {
+suspend fun loadChannelsFromUrl(playlistUrl: String, limit: Int = 500): Pair<List<Channel>, List<Category>> = withContext(Dispatchers.IO) {
     val encoded = java.net.URLEncoder.encode(playlistUrl, "UTF-8")
-    val endpoint = "http://65.21.48.50:8080/channels?url=$encoded"
+    val endpoint = "http://65.21.48.50:8080/channels?url=$encoded&limit=$limit"
     val url = URL(endpoint)
     val conn = url.openConnection() as java.net.HttpURLConnection
     conn.connectTimeout = 20000
-    conn.readTimeout = 40000
+    conn.readTimeout = 60000
     if (conn.responseCode !in 200..299) throw Exception("HTTP ${conn.responseCode}")
     val text = conn.inputStream.bufferedReader().readText()
     val json = JSONObject(text)
     val chArr = json.optJSONArray("channels") ?: return@withContext Pair(emptyList(), emptyList())
     val channels = buildList {
-        for (i in 0 until chArr.length().coerceAtMost(800)) {
+        for (i in 0 until chArr.length()) {
             val c = chArr.getJSONObject(i)
             add(Channel(c.optString("name", "Canal"), c.getString("url"), c.optString("logo").takeIf { it.isNotEmpty() }, c.optString("group", "Outros"), c.optString("type", "other")))
         }
