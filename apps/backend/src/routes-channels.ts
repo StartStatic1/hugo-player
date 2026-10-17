@@ -1,66 +1,95 @@
 import { Router } from "express";
-import { classifyEntry } from "./content/classify.js";
-import { parseM3U } from "./content/m3u.js";
-import { fetchText } from "./content/net.js";
-import { sendError } from "./routes-catalog.js";
 
-/**
- * Endpoint legado usado pelo app (lista plana de canais + categorias).
- * Agora usa o mesmo parser/classificador do /catalog. Para o catálogo
- * completo separado (live/filmes/séries + Xtream) use GET /catalog.
- */
 export const channelsRouter = Router();
 
 channelsRouter.get("/", async (req, res) => {
   const playlistUrl = req.query.url as string;
   if (!playlistUrl) return res.status(400).json({ error: "missing_url" });
-  const limit = Math.min(Number(req.query.limit ?? 1000) || 1000, 20000);
-  const onlyType = req.query.type as string | undefined;
 
   try {
-    const text = await fetchText(playlistUrl, 30_000);
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 30000);
+    const response = await fetch(playlistUrl, {
+      signal: controller.signal,
+      headers: { "User-Agent": "TiviMate/4.7.0 (Android 11; NVIDIA SHIELD TV Pro)" }
+    });
+    clearTimeout(timeout);
+    if (!response.ok) return res.status(502).json({ error: `upstream_${response.status}` });
+    const text = await response.text();
     if (!text || text.length < 10) return res.status(422).json({ error: "empty_playlist" });
-    res.json(buildChannels(text, limit, onlyType));
-  } catch (e) {
-    sendError(res, e);
+    const parsed = parseM3U(text);
+    res.json(parsed);
+  } catch (e: any) {
+    if (e.name === "AbortError") return res.status(504).json({ error: "timeout" });
+    res.status(500).json({ error: e.message || "fetch_failed" });
   }
 });
 
-export function buildChannels(text: string, limit = 1000, onlyType?: string) {
-  const pl = parseM3U(text);
-  const all = pl.entries.map((e) => ({
-    name: e.name,
-    url: e.url,
-    logo: e.logo,
-    group: e.group,
-    tvgId: e.tvgId,
-    type: classifyEntry({ name: e.name, group: e.group, url: e.url, attrs: e.attrs }).type,
-  }));
-  const channels = onlyType ? all.filter((c) => c.type === onlyType) : all;
+function classify(name: string, group: string, url: string): "live" | "movie" | "series" {
+  const g = (group || "").toLowerCase();
+  const n = (name || "").toLowerCase();
+  const u = (url || "").toLowerCase();
 
-  const groups = new Map<string, { count: number; types: Record<string, number> }>();
-  for (const c of channels) {
-    const g = groups.get(c.group) ?? { count: 0, types: {} };
-    g.count++;
-    g.types[c.type] = (g.types[c.type] ?? 0) + 1;
-    groups.set(c.group, g);
+  // 24H groups are live (looping content)
+  if (g.startsWith("24h") || g.includes("24 horas") || g.includes("24hrs")) return "live";
+
+  // Clear live groups
+  if (g.includes("canais abertos") || g.includes("globo ") || g.includes("rede record") || g.includes("sbt") || g.includes("band ") || g.includes("sport") || g.includes("noticias") || g.includes("news")) return "live";
+
+  // Streaming services = VOD
+  if (g.includes("prime") || g.includes("netflix") || g.includes("disney") || g.includes("hbo") || g.includes("apple tv") || g.includes("crunchyroll") || g.includes("discovery") || g.includes("paramount") || g.includes("globoplay") || g.includes("look") || g.includes("claro video") || g.includes("directv")) return "movie";
+
+  // Genre groups = usually movies
+  if (g.includes("ação") || g.includes("comédia") || g.includes("drama") || g.includes("terror") || g.includes("romance") || g.includes("animação") || g.includes("suspense") || g.includes("lançamento") || g.includes("legendados")) return "movie";
+
+  // Series indicators
+  if (g.includes("serie") || g.includes("series") || g.includes("temporada") || g.includes("dorama") || n.match(/s\d{1,2}e\d{1,2}/i)) return "series";
+
+  // URL hints
+  if (u.includes(".ts") && !g.includes("filme") && !g.includes("movie")) return "live";
+  if (u.includes(".mp4") || u.includes(".mkv")) return "movie";
+
+  return "movie"; // default to movie for unknown VOD-style
+}
+
+function parseM3U(content: string) {
+  const lines = content.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+  const channels: { name: string; url: string; logo?: string; group?: string; type: string }[] = [];
+  const groups = new Map<string, { count: number; type: string }>();
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (line.startsWith("#EXTINF")) {
+      const nameMatch = line.match(/,(.+)$/);
+      const logoMatch = line.match(/tvg-logo="([^"]+)"/i);
+      const groupMatch = line.match(/group-title="([^"]+)"/i);
+      const name = nameMatch ? nameMatch[1].trim() : "Canal";
+      const logo = logoMatch ? logoMatch[1] : undefined;
+      const group = groupMatch ? groupMatch[1].trim() : "Outros";
+      const next = lines[i + 1];
+      if (next && !next.startsWith("#") && next.startsWith("http")) {
+        const type = classify(name, group, next);
+        channels.push({ name, url: next, logo, group, type });
+        const existing = groups.get(group);
+        if (existing) existing.count++;
+        else groups.set(group, { count: 1, type });
+        i++;
+      }
+    }
   }
-  const categories = Array.from(groups.entries()).map(([name, info]) => ({
-    name,
-    count: info.count,
-    // tipo predominante da categoria
-    type: Object.entries(info.types).sort((a, b) => b[1] - a[1])[0][0],
-  }));
+
+  const categories = Array.from(groups.entries())
+    .map(([name, info]) => ({ name, count: info.count, type: info.type }))
+    .sort((a, b) => b.count - a.count);
 
   return {
-    channels: channels.slice(0, limit),
+    channels: channels.slice(0, 800),
     categories,
     total: channels.length,
-    epgUrl: pl.epgUrl,
     stats: {
-      live: all.filter((c) => c.type === "live").length,
-      movies: all.filter((c) => c.type === "movie").length,
-      series: all.filter((c) => c.type === "series").length,
-    },
+      live: channels.filter(c => c.type === "live").length,
+      movies: channels.filter(c => c.type === "movie").length,
+      series: channels.filter(c => c.type === "series").length
+    }
   };
 }
