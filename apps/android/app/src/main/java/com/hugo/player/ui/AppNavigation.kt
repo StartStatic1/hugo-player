@@ -26,10 +26,28 @@ fun AppNavigation() {
             PlaylistScreen(
                 deviceId = deviceId,
                 deviceKey = deviceKey,
-                onSelect = { playlistId ->
-                    nav.navigate("home/$deviceId/$deviceKey/$playlistId")
+                onSelect = { playlistId, playlistName ->
+                    nav.navigate("loading/$deviceId/$deviceKey/$playlistId/$playlistName")
                 },
                 onAddNew = { }
+            )
+        }
+        composable("loading/{deviceId}/{deviceKey}/{playlistId}/{playlistName}") { backStack ->
+            val deviceId = backStack.arguments?.getString("deviceId") ?: ""
+            val deviceKey = backStack.arguments?.getString("deviceKey") ?: ""
+            val playlistId = backStack.arguments?.getString("playlistId") ?: ""
+            val playlistName = backStack.arguments?.getString("playlistName") ?: "Playlist"
+            LoadingScreen(
+                playlistId = playlistId,
+                playlistName = playlistName,
+                deviceId = deviceId,
+                deviceKey = deviceKey,
+                onLoaded = {
+                    nav.navigate("home/$deviceId/$deviceKey/$playlistId") {
+                        popUpTo("playlists/$deviceId/$deviceKey") { inclusive = false }
+                    }
+                },
+                onError = { nav.popBackStack() }
             )
         }
         composable("home/{deviceId}/{deviceKey}/{playlistId}") { backStack ->
@@ -39,6 +57,8 @@ fun AppNavigation() {
             HomeScreen(onNavigate = { route ->
                 when (route) {
                     "live" -> nav.navigate("live/$deviceId/$deviceKey/$playlistId")
+                    "movies" -> nav.navigate("movies")
+                    "series" -> nav.navigate("series")
                     else -> nav.navigate(route)
                 }
             })
