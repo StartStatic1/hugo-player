@@ -41,9 +41,12 @@ fun HomeScreen(onNavigate: (String) -> Unit) {
                     verticalArrangement = Arrangement.spacedBy(20.dp)
                 ) {
                     IconTile("Filmes", Icons.Default.Movie) { onNavigate("movies") }
-                    IconTile("Séries", Icons.Default.Tv) { onNavigate("series") }
+                    IconTile("S\u00e9ries", Icons.Default.Tv) { onNavigate("series") }
                 }
             }
+
+            Spacer(Modifier.height(20.dp))
+            IconTile("Configura\u00e7\u00f5es", Icons.Default.Settings, Modifier.fillMaxWidth().height(80.dp)) { onNavigate("settings") }
         }
     }
 }
