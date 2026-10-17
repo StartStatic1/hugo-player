@@ -5,42 +5,154 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Hugo Player - Ativação</title>
 <style>
-:root { --bg:#0b0d17; --card:#151827; --primary:#7c5cff; --text:#e6e8f2; --muted:#9aa0b8; }
-*{box-sizing:border-box}
-body{margin:0;font-family:system-ui,sans-serif;background:var(--bg);color:var(--text);display:flex;min-height:100vh;align-items:center;justify-content:center;padding:20px}
-.card{background:var(--card);padding:32px;border-radius:16px;width:100%;max-width:440px;border:1px solid #ffffff12}
-h1{margin:0 0 8px;text-align:center;font-size:28px}
-.subtitle{color:var(--muted);text-align:center;margin:0 0 28px;font-size:14px}
-label{display:block;font-size:13px;color:var(--muted);margin:16px 0 6px}
-input,select,button{width:100%;padding:12px 14px;border-radius:10px;border:1px solid #ffffff1a;background:#0b0d17;color:var(--text);font-size:15px}
-button{background:var(--primary);border:none;font-weight:600;cursor:pointer;margin-top:20px}
-button:hover{opacity:.9}
-.status{margin-top:16px;padding:12px;border-radius:8px;font-size:14px;display:none}
-.status.ok{background:#34d39922;color:#34d399;display:block}
-.status.err{background:#f8717122;color:#f87171;display:block}
-.mono{font-family:ui-monospace,monospace;letter-spacing:1px}
+:root {
+  --bg: #07080f;
+  --card: #12141f;
+  --primary: #8b5cf6;
+  --primary-dark: #7c3aed;
+  --text: #f1f5f9;
+  --muted: #94a3b8;
+  --border: #1e293b;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+}
+.header {
+  text-align: center;
+  padding: 40px 20px 20px;
+}
+.logo {
+  font-size: 32px;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+}
+.logo span { color: var(--primary); }
+.tagline { color: var(--muted); margin-top: 6px; }
+.container {
+  max-width: 480px;
+  margin: 0 auto;
+  padding: 0 20px 60px;
+}
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 28px;
+  margin-bottom: 20px;
+}
+h2 { margin: 0 0 6px; font-size: 20px; }
+.desc { color: var(--muted); font-size: 14px; margin: 0 0 24px; }
+label {
+  display: block;
+  font-size: 13px;
+  color: var(--muted);
+  margin: 16px 0 6px;
+  font-weight: 500;
+}
+input {
+  width: 100%;
+  padding: 14px 16px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: #0a0c14;
+  color: var(--text);
+  font-size: 15px;
+}
+input:focus { outline: none; border-color: var(--primary); }
+.mono { font-family: ui-monospace, SFMono-Regular, monospace; letter-spacing: 0.5px; }
+button {
+  width: 100%;
+  padding: 16px;
+  border: none;
+  border-radius: 12px;
+  background: var(--primary);
+  color: white;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  margin-top: 20px;
+}
+button:hover { background: var(--primary-dark); }
+.status {
+  margin-top: 16px;
+  padding: 14px;
+  border-radius: 10px;
+  font-size: 14px;
+  display: none;
+}
+.status.ok { background: #10b98122; color: #34d399; display: block; }
+.status.err { background: #ef444422; color: #f87171; display: block; }
+.info-box {
+  background: #1e1b4b;
+  border: 1px solid #312e81;
+  border-radius: 12px;
+  padding: 16px;
+  font-size: 14px;
+  color: #c4b5fd;
+  margin-top: 12px;
+}
+.steps { display: flex; gap: 12px; margin-top: 24px; }
+.step {
+  flex: 1;
+  background: #0f172a;
+  border-radius: 12px;
+  padding: 14px;
+  text-align: center;
+  font-size: 13px;
+}
+.step strong { display: block; color: var(--primary); margin-bottom: 4px; }
+.footer {
+  text-align: center;
+  color: var(--muted);
+  font-size: 12px;
+  margin-top: 30px;
+}
 </style>
 </head>
 <body>
-<div class="card">
-  <h1>Hugo Player</h1>
-  <p class="subtitle">Ative seu dispositivo</p>
+<div class="header">
+  <div class="logo">Hugo <span>Player</span></div>
+  <div class="tagline">Ative seu dispositivo e comece a assistir</div>
+</div>
 
-  <label>Device ID</label>
-  <input id="deviceId" class="mono" placeholder="AA:BB:CC:DD:EE:FF" autocomplete="off">
+<div class="container">
+  <div class="card">
+    <h2>Ativação do Dispositivo</h2>
+    <p class="desc">Cole os dados que aparecem no aplicativo</p>
 
-  <label>Device Key</label>
-  <input id="deviceKey" class="mono" placeholder="8 caracteres" maxlength="8" autocomplete="off">
+    <label>Device ID</label>
+    <input id="deviceId" class="mono" placeholder="AA:BB:CC:DD:EE:FF" autocomplete="off">
 
-  <label>Playlist (M3U ou Xtream)</label>
-  <input id="playlistUrl" placeholder="https://...">
+    <label>Device Key</label>
+    <input id="deviceKey" class="mono" placeholder="8 caracteres" maxlength="8" autocomplete="off">
 
-  <label>Nome da playlist</label>
-  <input id="playlistName" placeholder="Minha Lista" value="Principal">
+    <label>URL da Playlist (M3U ou Xtream)</label>
+    <input id="playlistUrl" placeholder="https://...">
 
-  <button onclick="activate()">Ativar Dispositivo</button>
+    <label>Nome da playlist</label>
+    <input id="playlistName" placeholder="Minha Lista" value="Principal">
 
-  <div id="status" class="status"></div>
+    <button onclick="activate()">Ativar Agora</button>
+
+    <div id="status" class="status"></div>
+
+    <div class="info-box">
+      Você pode adicionar várias playlists no mesmo dispositivo. Depois de ativar, é só voltar aqui e ativar outra lista com o mesmo Device ID.
+    </div>
+  </div>
+
+  <div class="steps">
+    <div class="step"><strong>1</strong> Abra o app</div>
+    <div class="step"><strong>2</strong> Copie ID e Key</div>
+    <div class="step"><strong>3</strong> Ative aqui</div>
+  </div>
+
+  <div class="footer">Hugo Player • Ativação segura por dispositivo</div>
 </div>
 
 <script>
@@ -59,7 +171,6 @@ async function activate() {
   }
 
   try {
-    // 1. Register / check device
     const reg = await fetch(API + "/devices/register", {
       method: "POST",
       headers: {"Content-Type":"application/json"},
@@ -70,7 +181,6 @@ async function activate() {
       throw new Error(err.error || "Erro no registro");
     }
 
-    // 2. Add playlist
     const pl = await fetch(API + "/playlists", {
       method: "POST",
       headers: {
@@ -86,7 +196,7 @@ async function activate() {
       throw new Error(err.error || "Erro ao adicionar playlist");
     }
 
-    show("Dispositivo ativado com sucesso! Abra o app e atualize.", "ok");
+    show("Dispositivo ativado! Abra o app e atualize a lista.", "ok");
   } catch (e) {
     show(e.message, "err");
   }
