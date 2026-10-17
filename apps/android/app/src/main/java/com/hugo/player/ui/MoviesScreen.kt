@@ -25,6 +25,7 @@ import coil.compose.AsyncImage
 import com.hugo.player.data.CatalogRepository
 import com.hugo.player.data.db.CategoryEntity
 import com.hugo.player.data.db.ChannelEntity
+import kotlinx.coroutines.launch
 
 @Composable
 fun MoviesScreen(
@@ -34,6 +35,7 @@ fun MoviesScreen(
 ) {
     val context = LocalContext.current
     val repo = remember { CatalogRepository(context) }
+    val scope = rememberCoroutineScope()
     var categories by remember { mutableStateOf<List<CategoryEntity>>(emptyList()) }
     var movies by remember { mutableStateOf<List<ChannelEntity>>(emptyList()) }
     var selectedCat by remember { mutableStateOf<String?>(null) }
@@ -42,6 +44,7 @@ fun MoviesScreen(
     var hasMore by remember { mutableStateOf(true) }
     var loadingMore by remember { mutableStateOf(false) }
     val gridState = rememberLazyGridState()
+    val catListState = androidx.compose.foundation.lazy.rememberLazyListState()
 
     LaunchedEffect(playlistId) {
         categories = repo.getCategories(playlistId, "movie")
@@ -59,10 +62,10 @@ fun MoviesScreen(
             movies = repo.getChannels(playlistId, "movie", selectedCat, 0, 100)
             hasMore = movies.size >= 100
             loading = false
+            gridState.scrollToItem(0)
         }
     }
 
-    // Load more when scrolling near end
     LaunchedEffect(gridState) {
         snapshotFlow { gridState.layoutInfo.visibleItemsInfo.lastOrNull()?.index }
             .collect { lastIndex ->
@@ -92,10 +95,16 @@ fun MoviesScreen(
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("Nenhum filme nesta lista", color = Color(0xFF94A3B8)) }
         } else {
             Row(Modifier.fillMaxSize()) {
-                LazyColumn(Modifier.width(150.dp).fillMaxHeight().background(Color(0xFF12141C)), contentPadding = PaddingValues(4.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                LazyColumn(Modifier.width(150.dp).fillMaxHeight().background(Color(0xFF12141C)), state = catListState, contentPadding = PaddingValues(4.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     items(categories) { cat ->
                         val selected = cat.name == selectedCat
-                        Card(onClick = { selectedCat = cat.name }, colors = CardDefaults.cardColors(containerColor = if (selected) Color(0xFFEC4899) else Color(0xFF1E2236)), shape = RoundedCornerShape(4.dp), modifier = Modifier.height(38.dp)) {
+                        Card(onClick = {
+                            selectedCat = cat.name
+                            scope.launch {
+                                val idx = categories.indexOf(cat)
+                                if (idx >= 0) catListState.animateScrollToItem(idx)
+                            }
+                        }, colors = CardDefaults.cardColors(containerColor = if (selected) Color(0xFFEC4899) else Color(0xFF1E2236)), shape = RoundedCornerShape(4.dp), modifier = Modifier.height(38.dp)) {
                             Row(Modifier.padding(horizontal = 6.dp).fillMaxSize(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                                 Text(cat.name, color = Color.White, fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
                                 Text("${cat.count}", color = Color(0xFF94A3B8), fontSize = 9.sp)
