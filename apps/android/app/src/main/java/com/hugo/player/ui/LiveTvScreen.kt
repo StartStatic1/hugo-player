@@ -33,11 +33,15 @@ fun LiveTvScreen(
     var allChannels by remember { mutableStateOf<List<Channel>>(emptyList()) }
     var categories by remember { mutableStateOf<List<Category>>(emptyList()) }
     var selectedCategory by remember { mutableStateOf<String?>(null) }
-    var loading by remember { mutableStateOf(true) }
+    var loading by remember { mutableStateOf(allChannels.isEmpty()) }
     var error by remember { mutableStateOf<String?>(null) }
     var debugInfo by remember { mutableStateOf("") }
 
     LaunchedEffect(playlistId) {
+        if (allChannels.isNotEmpty()) {
+            loading = false
+            return@LaunchedEffect
+        }
         loading = true
         error = null
         debugInfo = "Buscando playlist..."
@@ -47,24 +51,23 @@ fun LiveTvScreen(
             }
             debugInfo = "URL: ${playlistUrl ?: "null"}"
             if (playlistUrl != null) {
-                debugInfo = "Carregando canais de: $playlistUrl"
-                val result = withTimeoutOrNull(30000) {
+                debugInfo = "Carregando canais..."
+                val result = withTimeoutOrNull(45000) {
                     loadChannelsFromUrl(playlistUrl)
                 }
                 if (result != null) {
                     allChannels = result.first
                     categories = result.second
                     selectedCategory = categories.firstOrNull()?.name
-                    debugInfo = "Carregados ${allChannels.size} canais, ${categories.size} categorias"
+                    debugInfo = "${allChannels.size} canais"
                 } else {
-                    error = "Timeout ao carregar canais"
+                    error = "Timeout ao carregar"
                 }
             } else {
-                error = "Playlist n\u00e3o encontrada ou URL inv\u00e1lida"
+                error = "Playlist n\u00e3o encontrada"
             }
         } catch (e: Exception) {
-            error = e.message ?: "Erro desconhecido"
-            debugInfo = e.stackTraceToString().take(200)
+            error = e.message ?: "Erro"
         }
         loading = false
     }
@@ -90,26 +93,22 @@ fun LiveTvScreen(
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     CircularProgressIndicator(color = Color(0xFF8B5CF6))
-                    Spacer(Modifier.height(16.dp))
+                    Spacer(Modifier.height(12.dp))
                     Text(debugInfo, color = Color(0xFF94A3B8), fontSize = 12.sp)
                 }
             }
         } else if (error != null) {
             Box(Modifier.fillMaxSize().padding(16.dp), contentAlignment = Alignment.Center) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("Erro: $error", color = Color.Red, fontSize = 16.sp)
-                    Spacer(Modifier.height(8.dp))
-                    Text(debugInfo, color = Color(0xFF94A3B8), fontSize = 12.sp)
-                }
+                Text("Erro: $error", color = Color.Red)
             }
         } else if (allChannels.isEmpty()) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("Nenhum canal encontrado\n$debugInfo", color = Color(0xFF94A3B8))
+                Text("Nenhum canal", color = Color(0xFF94A3B8))
             }
         } else {
             Row(Modifier.fillMaxSize()) {
                 LazyColumn(
-                    Modifier.width(220.dp).fillMaxHeight().background(Color(0xFF12141C)),
+                    Modifier.width(200.dp).fillMaxHeight().background(Color(0xFF12141C)),
                     contentPadding = PaddingValues(8.dp),
                     verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
@@ -120,14 +119,16 @@ fun LiveTvScreen(
                             colors = CardDefaults.cardColors(
                                 containerColor = if (selected) Color(0xFF8B5CF6) else Color(0xFF1E2236)
                             ),
-                            shape = RoundedCornerShape(8.dp)
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.height(48.dp)
                         ) {
                             Row(
-                                Modifier.padding(12.dp).fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween
+                                Modifier.padding(horizontal = 10.dp).fillMaxSize(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text(cat.name, color = Color.White, fontSize = 14.sp, maxLines = 1)
-                                Text("${cat.count}", color = Color(0xFF94A3B8), fontSize = 12.sp)
+                                Text(cat.name, color = Color.White, fontSize = 13.sp, maxLines = 1, modifier = Modifier.weight(1f))
+                                Text("${cat.count}", color = Color(0xFF94A3B8), fontSize = 11.sp)
                             }
                         }
                     }
@@ -142,13 +143,14 @@ fun LiveTvScreen(
                         Card(
                             onClick = { onPlay(ch.url, ch.name) },
                             colors = CardDefaults.cardColors(containerColor = Color(0xFF151827)),
-                            shape = RoundedCornerShape(8.dp)
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.height(52.dp)
                         ) {
                             Row(
-                                Modifier.padding(14.dp).fillMaxWidth(),
+                                Modifier.padding(horizontal = 14.dp).fillMaxSize(),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text(ch.name, color = Color.White, fontSize = 15.sp, modifier = Modifier.weight(1f))
+                                Text(ch.name, color = Color.White, fontSize = 14.sp, maxLines = 1)
                             }
                         }
                     }
@@ -166,8 +168,7 @@ suspend fun getPlaylistUrl(playlistId: String, deviceId: String, deviceKey: Stri
         conn.setRequestProperty("x-device-key", deviceKey)
         conn.connectTimeout = 10000
         conn.readTimeout = 10000
-        val code = conn.responseCode
-        if (code !in 200..299) return@withContext null
+        if (conn.responseCode !in 200..299) return@withContext null
         val text = conn.inputStream.bufferedReader().readText()
         val json = JSONObject(text)
         val arr = json.optJSONArray("playlists") ?: return@withContext null
@@ -180,45 +181,40 @@ suspend fun getPlaylistUrl(playlistId: String, deviceId: String, deviceKey: Stri
 }
 
 suspend fun loadChannelsFromUrl(playlistUrl: String): Pair<List<Channel>, List<Category>> = withContext(Dispatchers.IO) {
-    try {
-        val encoded = java.net.URLEncoder.encode(playlistUrl, "UTF-8")
-        val endpoint = "http://65.21.48.50:8080/channels?url=$encoded"
-        val url = URL(endpoint)
-        val conn = url.openConnection() as java.net.HttpURLConnection
-        conn.connectTimeout = 15000
-        conn.readTimeout = 25000
-        val code = conn.responseCode
-        if (code !in 200..299) throw Exception("HTTP $code")
-        val text = conn.inputStream.bufferedReader().readText()
-        val json = JSONObject(text)
+    val encoded = java.net.URLEncoder.encode(playlistUrl, "UTF-8")
+    val endpoint = "http://65.21.48.50:8080/channels?url=$encoded"
+    val url = URL(endpoint)
+    val conn = url.openConnection() as java.net.HttpURLConnection
+    conn.connectTimeout = 20000
+    conn.readTimeout = 40000
+    if (conn.responseCode !in 200..299) throw Exception("HTTP ${conn.responseCode}")
+    val text = conn.inputStream.bufferedReader().readText()
+    val json = JSONObject(text)
 
-        val chArr = json.optJSONArray("channels") ?: return@withContext Pair(emptyList(), emptyList())
-        val channels = buildList {
-            for (i in 0 until chArr.length().coerceAtMost(300)) {
-                val c = chArr.getJSONObject(i)
-                add(Channel(
-                    c.optString("name", "Canal"),
-                    c.getString("url"),
-                    c.optString("logo").takeIf { it.isNotEmpty() },
-                    c.optString("group", "Outros")
-                ))
-            }
+    val chArr = json.optJSONArray("channels") ?: return@withContext Pair(emptyList(), emptyList())
+    val channels = buildList {
+        for (i in 0 until chArr.length().coerceAtMost(600)) {
+            val c = chArr.getJSONObject(i)
+            add(Channel(
+                c.optString("name", "Canal"),
+                c.getString("url"),
+                c.optString("logo").takeIf { it.isNotEmpty() },
+                c.optString("group", "Outros")
+            ))
         }
-
-        val catArr = json.optJSONArray("categories")
-        val categories = if (catArr != null) {
-            buildList {
-                for (i in 0 until catArr.length()) {
-                    val c = catArr.getJSONObject(i)
-                    add(Category(c.getString("name"), c.optInt("count", 0)))
-                }
-            }
-        } else {
-            channels.groupBy { it.group }.map { Category(it.key, it.value.size) }
-        }
-
-        Pair(channels, categories)
-    } catch (e: Exception) {
-        throw e
     }
+
+    val catArr = json.optJSONArray("categories")
+    val categories = if (catArr != null) {
+        buildList {
+            for (i in 0 until catArr.length()) {
+                val c = catArr.getJSONObject(i)
+                add(Category(c.getString("name"), c.optInt("count", 0)))
+            }
+        }
+    } else {
+        channels.groupBy { it.group }.map { Category(it.key, it.value.size) }
+    }
+
+    Pair(channels, categories)
 }
