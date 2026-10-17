@@ -13,6 +13,18 @@ class CatalogRepository(private val context: Context) {
     private val db = HugoDatabase.get(context)
     private val dao = db.channelDao()
 
+    companion object {
+        @Volatile private var instance: CatalogRepository? = null
+        fun init(context: Context) {
+            if (instance == null) instance = CatalogRepository(context)
+        }
+        fun get(context: Context): CatalogRepository =
+            instance ?: CatalogRepository(context).also { instance = it }
+        fun clearAll() {
+            // Clear is handled per-playlist in sync
+        }
+    }
+
     suspend fun syncPlaylist(playlistId: String, playlistUrl: String, onProgress: (String) -> Unit = {}) = withContext(Dispatchers.IO) {
         onProgress("Baixando lista...")
         val encoded = java.net.URLEncoder.encode(playlistUrl, "UTF-8")
