@@ -1,11 +1,14 @@
 package com.hugo.player.ui
 
 import android.content.Context
+import android.net.Uri
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.platform.LocalContext
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import com.hugo.player.data.AppSettings
 import com.hugo.player.data.CatalogRepository
 import com.hugo.player.player.PlaybackSession
 import java.net.URLEncoder
@@ -23,6 +26,8 @@ fun AppNavigation() {
     val hasActivation = !savedDeviceId.isNullOrEmpty() && !savedDeviceKey.isNullOrEmpty()
 
     val startDest = if (hasActivation) "playlists/$savedDeviceId/$savedDeviceKey" else "activation"
+    // Abre a última playlist automaticamente se houver cache salvo (uma vez por sessão)
+    var autoOpened by rememberSaveable { mutableStateOf(false) }
 
     NavHost(navController = nav, startDestination = startDest) {
         composable("activation") {
@@ -39,6 +44,15 @@ fun AppNavigation() {
         composable("playlists/{deviceId}/{deviceKey}") { backStack ->
             val deviceId = backStack.arguments?.getString("deviceId") ?: ""
             val deviceKey = backStack.arguments?.getString("deviceKey") ?: ""
+            LaunchedEffect(Unit) {
+                if (autoOpened) return@LaunchedEffect
+                autoOpened = true
+                val lastId = AppSettings.lastPlaylistId
+                if (AppSettings.autoOpenLastPlaylist && lastId != null && CatalogRepository.hasDiskCache(lastId)) {
+                    val name = Uri.encode(AppSettings.lastPlaylistName ?: "Playlist")
+                    nav.navigate("loading/$deviceId/$deviceKey/$lastId/$name")
+                }
+            }
             PlaylistScreen(
                 deviceId = deviceId,
                 deviceKey = deviceKey,
@@ -47,7 +61,7 @@ fun AppNavigation() {
                     if (CatalogRepository.cached(playlistId) != null) {
                         nav.navigate("home/$deviceId/$deviceKey/$playlistId")
                     } else {
-                        nav.navigate("loading/$deviceId/$deviceKey/$playlistId/$playlistName")
+                        nav.navigate("loading/$deviceId/$deviceKey/$playlistId/${Uri.encode(playlistName)}")
                     }
                 },
                 onAddNew = { }
@@ -106,7 +120,13 @@ fun AppNavigation() {
                 )
             }
         }
-        composable("settings") { SettingsScreen(onBack = { nav.popBackStack() }) }
+        composable("settings") {
+            SettingsScreen(
+                deviceId = savedDeviceId,
+                deviceKey = savedDeviceKey,
+                onBack = { nav.popBackStack() }
+            )
+        }
         composable("player") {
             val request = PlaybackSession.current
             if (request == null) {

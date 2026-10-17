@@ -82,6 +82,10 @@ fun BrowseScreen(
             Column {
                 Text("Hugo Player", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
                 Text(CatalogRepository.playlistName ?: LiveTvCache.playlistName ?: "Playlist", color = HugoColors.TextMuted, fontSize = 11.sp, maxLines = 1)
+                if (catalog != null) {
+                    val (label, color) = cacheLabel()
+                    Text(label, color = color, fontSize = 10.sp, maxLines = 1)
+                }
             }
             Spacer(Modifier.width(20.dp))
             BrowseTab.entries.forEach { t ->
@@ -157,6 +161,21 @@ fun BrowseScreen(
                 }
             }
         }
+    }
+}
+
+private fun cacheLabel(): Pair<String, Color> {
+    val mins = ((System.currentTimeMillis() - CatalogRepository.savedAt) / 60_000).coerceAtLeast(0)
+    val ago = when {
+        mins < 1 -> "agora"
+        mins < 60 -> "há $mins min"
+        mins < 48 * 60 -> "há ${mins / 60} h"
+        else -> "há ${mins / 1440} dias"
+    }
+    return when (CatalogRepository.origin) {
+        CatalogRepository.Origin.STALE_DISK -> "Offline · lista salva $ago" to Color(0xFFFBBF24)
+        CatalogRepository.Origin.DISK, CatalogRepository.Origin.MEMORY -> "Atualizada $ago" to HugoColors.TextDim
+        CatalogRepository.Origin.NETWORK -> "Atualizada $ago" to HugoColors.TextDim
     }
 }
 

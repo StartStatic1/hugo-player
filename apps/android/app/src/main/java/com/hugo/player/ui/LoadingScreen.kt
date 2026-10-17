@@ -13,6 +13,7 @@ import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import com.hugo.player.data.AppSettings
 import com.hugo.player.data.CatalogRepository
 import org.json.JSONObject
 import java.net.URL
@@ -33,7 +34,9 @@ fun LoadingScreen(
         try {
             status = "Buscando lista..."
             progress = 0.2f
-            val playlistUrl = withTimeoutOrNull(15000) {
+            // Com cache em disco não precisa checar a lista na rede (abre offline também)
+            val hasCache = CatalogRepository.hasDiskCache(playlistId)
+            val playlistUrl = if (hasCache) "cache" else withTimeoutOrNull(15000) {
                 getPlaylistUrlForLoading(playlistId, deviceId, deviceKey)
             }
             if (playlistUrl == null) {
@@ -43,8 +46,9 @@ fun LoadingScreen(
                 return@LaunchedEffect
             }
 
-            status = "Carregando conteúdo de $playlistName..."
+            status = if (CatalogRepository.hasFreshDiskCache(playlistId)) "Abrindo do cache..." else "Carregando conteúdo de $playlistName..."
             progress = 0.5f
+            CatalogRepository.playlistName = playlistName
             // Catálogo separado (live / filmes / séries) pelo backend
             val catalog = try {
                 withTimeoutOrNull(120_000) {
@@ -63,6 +67,8 @@ fun LoadingScreen(
                 return@LaunchedEffect
             }
             CatalogRepository.playlistName = playlistName
+            AppSettings.lastPlaylistId = playlistId
+            AppSettings.lastPlaylistName = playlistName
 
             // Mantém o cache antigo preenchido (compatibilidade)
             LiveTvCache.channels = catalog.live.items.map { Channel(it.name, it.url, it.logo, it.group) }
@@ -71,6 +77,10 @@ fun LoadingScreen(
             LiveTvCache.playlistId = playlistId
             LiveTvCache.playlistName = playlistName
 
+            if (CatalogRepository.origin == CatalogRepository.Origin.STALE_DISK) {
+                status = "Sem conexão com o servidor — usando a lista salva"
+                kotlinx.coroutines.delay(1500)
+            }
             status = "Pronto! ${catalog.live.items.size} canais · ${catalog.movies.items.size} filmes · ${catalog.series.items.size} séries"
             progress = 1f
             kotlinx.coroutines.delay(700)

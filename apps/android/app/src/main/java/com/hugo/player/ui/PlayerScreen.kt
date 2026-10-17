@@ -63,6 +63,7 @@ import kotlinx.coroutines.delay
 private val Accent = Color(0xFF8B5CF6)
 private const val MAX_AUTO_RETRIES = 3
 
+@OptIn(UnstableApi::class)
 private val resizeModes = listOf(
     AspectRatioFrameLayout.RESIZE_MODE_FIT to "Ajustar",
     AspectRatioFrameLayout.RESIZE_MODE_FILL to "Esticar",

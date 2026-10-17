@@ -6,6 +6,7 @@ import androidx.activity.compose.setContent
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.ui.graphics.Color
+import com.hugo.player.data.CatalogRepository
 import com.hugo.player.ui.AppNavigation
 
 private val HugoColors = darkColorScheme(
@@ -23,6 +24,8 @@ private val HugoColors = darkColorScheme(
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Configurações + cache em disco do catálogo
+        CatalogRepository.init(applicationContext)
         setContent {
             MaterialTheme(colorScheme = HugoColors) {
                 AppNavigation()
