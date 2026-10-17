@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="nex_background">#FF0B0D17</color>
+    <color name="nex_primary">#FF7C5CFF</color>
+    <color name="nex_accent">#FF22D3EE</color>
+    <color name="white">#FFFFFFFF</color>
+</resources>

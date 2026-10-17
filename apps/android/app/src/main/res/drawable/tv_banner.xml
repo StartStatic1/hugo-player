@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="320dp"
+    android:height="180dp"
+    android:viewportWidth="320"
+    android:viewportHeight="180">
+    <path
+        android:fillColor="#0B0D17"
+        android:pathData="M0,0h320v180h-320z" />
+    <path
+        android:fillColor="#7C5CFF"
+        android:pathData="M60,60L110,90L60,120Z" />
+    <path
+        android:fillColor="#22D3EE"
+        android:pathData="M50,60h6v60h-6z" />
+    <!-- Stylised "NEX" wordmark built from simple bars -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M135,70h8v40h-8zM143,70l22,40h-8l-22,-40zM157,70h8v40h-8zM175,70h26v8h-26zM175,86h22v8h-22zM175,102h26v8h-26zM175,70h8v40h-8zM211,70h9l25,40h-9zM236,70h9l-25,40h-9z" />
+</vector>

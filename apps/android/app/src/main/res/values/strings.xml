@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Hugo Player</string>
+    <string name="activation_title">Activate this device</string>
+    <string name="activation_subtitle">Go to the Hugo Player portal and sign in with the credentials below to add your playlists.</string>
+    <string name="label_device_id">Device ID</string>
+    <string name="label_device_key">Device Key</string>
+    <string name="label_status">Status</string>
+    <string name="action_refresh">Check status</string>
+    <string name="status_connecting">Connecting to server…</string>
+    <string name="status_error">Server unreachable: %1$s</string>
+    <string name="tagline">Premium IPTV &amp; OTT player</string>
+    <string name="action_copy">Copy</string>
+    <string name="copied">%1$s copied</string>
+    <string name="label_license">License</string>
+    <string name="status_registered">Registered</string>
+    <string name="status_failed">Not registered</string>
+    <string name="tv_hint">Use the D-pad to navigate · OK to select</string>
+</resources>
