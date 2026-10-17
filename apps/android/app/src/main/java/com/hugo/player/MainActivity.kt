@@ -3,32 +3,24 @@ package com.hugo.player
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.darkColorScheme
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import com.hugo.player.data.CatalogRepository
 import com.hugo.player.ui.AppNavigation
-
-private val HugoColors = darkColorScheme(
-    primary = Color(0xFF7C5CFF),
-    secondary = Color(0xFF22D3EE),
-    background = Color(0xFF0B0D17),
-    surface = Color(0xFF151827),
-    surfaceVariant = Color(0xFF1E2236),
-    onPrimary = Color.White,
-    onBackground = Color(0xFFE6E8F2),
-    onSurface = Color(0xFFE6E8F2),
-    onSurfaceVariant = Color(0xFF9CA3C4)
-)
+import com.hugo.player.ui.LiveTvCache
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        // Configurações + cache em disco do catálogo
-        CatalogRepository.init(applicationContext)
+        LiveTvCache.load(this)
         setContent {
-            MaterialTheme(colorScheme = HugoColors) {
-                AppNavigation()
+            MaterialTheme(colorScheme = darkColorScheme(background = Color(0xFF07080F))) {
+                Surface(Modifier.fillMaxSize()) {
+                    AppNavigation()
+                }
             }
         }
     }
