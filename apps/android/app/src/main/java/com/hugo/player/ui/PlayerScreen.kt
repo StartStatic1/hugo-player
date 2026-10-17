@@ -1,163 +1,584 @@
 package com.hugo.player.ui
 
+import android.content.Context
 import android.net.Uri
+import android.view.KeyEvent as AndroidKeyEvent
+import androidx.activity.compose.BackHandler
+import androidx.annotation.OptIn
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.AspectRatio
+import androidx.compose.material.icons.filled.Forward10
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Replay10
+import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.nativeKeyCode
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.media3.common.C
 import androidx.media3.common.MediaItem
+import androidx.media3.common.MimeTypes
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
+import androidx.media3.common.util.UnstableApi
+import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.DefaultHttpDataSource
+import androidx.media3.datasource.HttpDataSource
+import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import androidx.media3.extractor.DefaultExtractorsFactory
+import androidx.media3.extractor.ts.DefaultTsPayloadReaderFactory
+import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
+import com.hugo.player.player.PlaybackRequest
+import com.hugo.player.player.StreamTypes
 import kotlinx.coroutines.delay
 
+private val Accent = Color(0xFF8B5CF6)
+private const val MAX_AUTO_RETRIES = 3
+
+private val resizeModes = listOf(
+    AspectRatioFrameLayout.RESIZE_MODE_FIT to "Ajustar",
+    AspectRatioFrameLayout.RESIZE_MODE_FILL to "Esticar",
+    AspectRatioFrameLayout.RESIZE_MODE_ZOOM to "Zoom",
+)
+
+/** Compatível com a assinatura antiga: PlayerScreen(url, título, onBack). */
 @Composable
 fun PlayerScreen(streamUrl: String, title: String, onBack: () -> Unit) {
+    PlayerScreen(PlaybackRequest(url = streamUrl, title = title), onBack)
+}
+
+@OptIn(UnstableApi::class)
+@Composable
+fun PlayerScreen(request: PlaybackRequest, onBack: () -> Unit) {
     val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
+
+    // Item atual + fila (episódios seguintes)
+    var current by remember { mutableStateOf(request) }
+    var queue by remember { mutableStateOf(request.queue) }
+
     var isPlaying by remember { mutableStateOf(true) }
     var errorMsg by remember { mutableStateOf<String?>(null) }
+    var errorDetail by remember { mutableStateOf<String?>(null) }
     var loading by remember { mutableStateOf(true) }
     var showControls by remember { mutableStateOf(true) }
+    var lastInteraction by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    var retryCount by remember { mutableIntStateOf(0) }
+    var retryTick by remember { mutableIntStateOf(0) }
+    var forceHls by remember { mutableStateOf(false) }
+    var resizeIndex by remember { mutableIntStateOf(0) }
+    var positionMs by remember { mutableLongStateOf(0L) }
+    var durationMs by remember { mutableLongStateOf(C.TIME_UNSET) }
+    var isLive by remember { mutableStateOf(current.isLive ?: true) }
 
-    // Auto-hide controls after 4 seconds
-    LaunchedEffect(showControls) {
-        if (showControls && errorMsg == null) {
-            delay(4000)
+    val rootFocus = remember { FocusRequester() }
+    val playFocus = remember { FocusRequester() }
+
+    fun touch() {
+        lastInteraction = System.currentTimeMillis()
+        showControls = true
+    }
+
+    val userAgent = remember(current) { current.userAgent ?: playerUserAgent(context) }
+
+    val exoPlayer = remember(userAgent) {
+        val http = DefaultHttpDataSource.Factory()
+            .setUserAgent(userAgent)
+            .setAllowCrossProtocolRedirects(true)
+            .setConnectTimeoutMs(15_000)
+            .setReadTimeoutMs(20_000)
+        val dataSource = DefaultDataSource.Factory(context, http)
+        val extractors = DefaultExtractorsFactory()
+            .setConstantBitrateSeekingEnabled(true)
+            .setTsExtractorFlags(DefaultTsPayloadReaderFactory.FLAG_ALLOW_NON_IDR_KEYFRAMES)
+        val loadControl = DefaultLoadControl.Builder()
+            // buffers pensados para IPTV: começa rápido, segura oscilações
+            .setBufferDurationsMs(15_000, 50_000, 2_000, 4_000)
+            .build()
+        ExoPlayer.Builder(context)
+            .setMediaSourceFactory(DefaultMediaSourceFactory(dataSource, extractors))
+            .setLoadControl(loadControl)
+            .build()
+    }
+
+    // (Re)carrega a mídia quando o item atual ou o modo HLS forçado muda
+    LaunchedEffect(exoPlayer, current, forceHls) {
+        errorMsg = null
+        errorDetail = null
+        loading = true
+        exoPlayer.setMediaItem(buildMediaItem(current.url, forceHls))
+        exoPlayer.prepare()
+        exoPlayer.playWhenReady = true
+    }
+
+    DisposableEffect(exoPlayer) {
+        val listener = object : Player.Listener {
+            override fun onPlayerError(error: PlaybackException) {
+                // Live: caiu fora da janela do HLS -> volta pro ponto ao vivo
+                if (error.errorCode == PlaybackException.ERROR_CODE_BEHIND_LIVE_WINDOW) {
+                    exoPlayer.seekToDefaultPosition()
+                    exoPlayer.prepare()
+                    return
+                }
+                // URL sem extensão que na verdade é HLS: tenta de novo forçando m3u8
+                val parsingError = error.errorCode == PlaybackException.ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED ||
+                    error.errorCode == PlaybackException.ERROR_CODE_PARSING_CONTAINER_MALFORMED
+                if (parsingError && !forceHls && StreamTypes.detect(current.url) != StreamTypes.Kind.HLS) {
+                    forceHls = true
+                    return
+                }
+                if (isRetryable(error) && retryCount < MAX_AUTO_RETRIES) {
+                    retryCount++
+                    retryTick++
+                    return
+                }
+                errorMsg = friendlyError(error)
+                errorDetail = "${error.errorCodeName} · ${error.message ?: ""}".trim()
+                loading = false
+                showControls = true
+            }
+
+            override fun onPlaybackStateChanged(state: Int) {
+                loading = state == Player.STATE_BUFFERING
+                if (state == Player.STATE_READY) {
+                    errorMsg = null
+                    retryCount = 0
+                    isLive = exoPlayer.isCurrentMediaItemLive || (current.isLive ?: false)
+                }
+                if (state == Player.STATE_ENDED && queue.isNotEmpty()) {
+                    val next = queue.first()
+                    queue = queue.drop(1)
+                    forceHls = false
+                    current = next
+                }
+            }
+
+            override fun onIsPlayingChanged(playing: Boolean) {
+                isPlaying = playing || (exoPlayer.playWhenReady && exoPlayer.playbackState == Player.STATE_BUFFERING)
+            }
+        }
+        exoPlayer.addListener(listener)
+        onDispose {
+            exoPlayer.removeListener(listener)
+            exoPlayer.release()
+        }
+    }
+
+    // Re-tentativa automática com espera progressiva
+    LaunchedEffect(retryTick) {
+        if (retryTick == 0) return@LaunchedEffect
+        delay(1_500L * retryCount)
+        exoPlayer.prepare()
+        exoPlayer.play()
+    }
+
+    // Pausa ao sair do app, retoma ao voltar
+    DisposableEffect(lifecycleOwner, exoPlayer) {
+        var wasPlaying = false
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_STOP -> {
+                    wasPlaying = exoPlayer.playWhenReady
+                    exoPlayer.pause()
+                }
+                Lifecycle.Event.ON_START -> if (wasPlaying) {
+                    // Live: volta ao ponto ao vivo
+                    if (exoPlayer.isCurrentMediaItemLive) exoPlayer.seekToDefaultPosition()
+                    exoPlayer.play()
+                }
+                else -> Unit
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    // Posição / duração
+    LaunchedEffect(exoPlayer) {
+        while (true) {
+            positionMs = exoPlayer.currentPosition
+            durationMs = exoPlayer.duration
+            delay(500)
+        }
+    }
+
+    // Esconde os controles após 5 s sem interação
+    LaunchedEffect(showControls, lastInteraction, errorMsg, isPlaying) {
+        if (showControls && errorMsg == null && isPlaying) {
+            delay(5_000)
             showControls = false
         }
     }
 
-    val exoPlayer = remember {
-        val httpDataSourceFactory = DefaultHttpDataSource.Factory()
-            .setUserAgent("TiviMate/4.7.0 (Android 11; NVIDIA SHIELD TV Pro)")
-            .setAllowCrossProtocolRedirects(true)
-            .setConnectTimeoutMs(20000)
-            .setReadTimeoutMs(20000)
-
-        val mediaSourceFactory = DefaultMediaSourceFactory(context)
-            .setDataSourceFactory(httpDataSourceFactory)
-
-        ExoPlayer.Builder(context)
-            .setMediaSourceFactory(mediaSourceFactory)
-            .build().apply {
-                addListener(object : Player.Listener {
-                    override fun onPlayerError(error: PlaybackException) {
-                        errorMsg = error.message ?: "Erro ao reproduzir"
-                        loading = false
-                        showControls = true
-                    }
-                    override fun onPlaybackStateChanged(state: Int) {
-                        loading = state == Player.STATE_BUFFERING
-                        if (state == Player.STATE_READY) errorMsg = null
-                    }
-                })
-                val mediaItem = MediaItem.Builder()
-                    .setUri(Uri.parse(streamUrl))
-                    .build()
-                setMediaItem(mediaItem)
-                prepare()
-                playWhenReady = true
-            }
+    // Foco: botão play quando os controles aparecem, raiz quando somem
+    LaunchedEffect(showControls, errorMsg) {
+        delay(50)
+        runCatching { if (showControls) playFocus.requestFocus() else rootFocus.requestFocus() }
     }
 
-    DisposableEffect(Unit) {
-        onDispose { exoPlayer.release() }
+    BackHandler {
+        if (showControls && errorMsg == null) showControls = false else onBack()
+    }
+
+    val canSeek = !isLive && durationMs != C.TIME_UNSET && durationMs > 0
+
+    fun togglePlay() {
+        if (exoPlayer.isPlaying) exoPlayer.pause() else {
+            if (exoPlayer.playbackState == Player.STATE_IDLE) exoPlayer.prepare()
+            exoPlayer.play()
+        }
+        touch()
+    }
+
+    fun seekBy(deltaMs: Long) {
+        if (!canSeek) return
+        exoPlayer.seekTo((exoPlayer.currentPosition + deltaMs).coerceIn(0, durationMs))
+        touch()
+    }
+
+    fun manualRetry() {
+        retryCount = 0
+        errorMsg = null
+        errorDetail = null
+        loading = true
+        if (isLive) exoPlayer.seekToDefaultPosition()
+        exoPlayer.prepare()
+        exoPlayer.play()
+        touch()
     }
 
     Box(
-        Modifier.fillMaxSize().background(Color.Black).clickable { showControls = !showControls }
+        Modifier
+            .fillMaxSize()
+            .background(Color.Black)
+            .focusRequester(rootFocus)
+            .focusable()
+            .onPreviewKeyEvent { ev ->
+                if (ev.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                when (ev.key.nativeKeyCode) {
+                    AndroidKeyEvent.KEYCODE_MEDIA_PLAY_PAUSE, AndroidKeyEvent.KEYCODE_SPACE -> { togglePlay(); true }
+                    AndroidKeyEvent.KEYCODE_MEDIA_PLAY -> { exoPlayer.play(); touch(); true }
+                    AndroidKeyEvent.KEYCODE_MEDIA_PAUSE -> { exoPlayer.pause(); touch(); true }
+                    AndroidKeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> { seekBy(30_000); true }
+                    AndroidKeyEvent.KEYCODE_MEDIA_REWIND -> { seekBy(-30_000); true }
+                    AndroidKeyEvent.KEYCODE_BACK -> false
+                    else -> {
+                        if (!showControls && errorMsg == null) {
+                            // Controles escondidos: setas laterais fazem seek (VOD), resto só mostra os controles
+                            when (ev.key.nativeKeyCode) {
+                                AndroidKeyEvent.KEYCODE_DPAD_LEFT -> if (canSeek) seekBy(-10_000) else touch()
+                                AndroidKeyEvent.KEYCODE_DPAD_RIGHT -> if (canSeek) seekBy(10_000) else touch()
+                                else -> touch()
+                            }
+                            true
+                        } else {
+                            lastInteraction = System.currentTimeMillis()
+                            false
+                        }
+                    }
+                }
+            }
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null
+            ) { if (showControls) showControls = false else touch() }
     ) {
         AndroidView(
             factory = {
                 PlayerView(it).apply {
                     player = exoPlayer
                     useController = false
+                    keepScreenOn = true
+                    setShowBuffering(PlayerView.SHOW_BUFFERING_NEVER)
+                    isFocusable = false
                 }
+            },
+            update = {
+                it.player = exoPlayer
+                it.resizeMode = resizeModes[resizeIndex].first
             },
             modifier = Modifier.fillMaxSize()
         )
 
         if (loading && errorMsg == null) {
-            CircularProgressIndicator(
-                modifier = Modifier.align(Alignment.Center),
-                color = Color(0xFF8B5CF6)
-            )
-        }
-
-        errorMsg?.let { msg ->
-            Column(
-                Modifier.align(Alignment.Center).padding(24.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Text("N\u00e3o foi poss\u00edvel reproduzir", color = Color.White, fontSize = 16.sp)
-                Spacer(Modifier.height(8.dp))
-                Text(msg, color = Color(0xFF94A3B8), fontSize = 12.sp)
-                Spacer(Modifier.height(16.dp))
-                Button(onClick = {
-                    errorMsg = null
-                    loading = true
-                    exoPlayer.prepare()
-                    exoPlayer.play()
-                }) { Text("Tentar novamente") }
+            Column(Modifier.align(Alignment.Center), horizontalAlignment = Alignment.CenterHorizontally) {
+                CircularProgressIndicator(color = Accent, modifier = Modifier.size(52.dp))
+                if (retryCount > 0) {
+                    Spacer(Modifier.height(12.dp))
+                    Text("Reconectando… ($retryCount/$MAX_AUTO_RETRIES)", color = Color.White, fontSize = 13.sp)
+                }
             }
         }
 
-        // Controls overlay (auto-hide)
+        errorMsg?.let { msg ->
+            ErrorPanel(
+                message = msg,
+                detail = errorDetail,
+                onRetry = { manualRetry() },
+                onBack = onBack,
+                retryFocus = playFocus,
+                modifier = Modifier.align(Alignment.Center)
+            )
+        }
+
         AnimatedVisibility(
-            visible = showControls || errorMsg != null,
+            visible = showControls && errorMsg == null,
             enter = fadeIn(),
-            exit = fadeOut()
+            exit = fadeOut(),
+            modifier = Modifier.fillMaxSize()
         ) {
             Box(Modifier.fillMaxSize()) {
+                // Topo: voltar + título
                 Row(
-                    Modifier.fillMaxWidth().padding(16.dp).align(Alignment.TopStart),
+                    Modifier
+                        .fillMaxWidth()
+                        .background(Brush.verticalGradient(listOf(Color(0xCC000000), Color.Transparent)))
+                        .padding(horizontal = 20.dp, vertical = 16.dp)
+                        .align(Alignment.TopStart),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Voltar", tint = Color.White)
+                    ControlButton(Icons.AutoMirrored.Filled.ArrowBack, "Voltar", onClick = onBack)
+                    Spacer(Modifier.width(12.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(current.title, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        current.subtitle?.let { Text(it, color = Color(0xFFCBD5E1), fontSize = 13.sp, maxLines = 1) }
                     }
-                    Spacer(Modifier.width(8.dp))
-                    Text(title, color = Color.White, fontSize = 18.sp)
+                    if (isLive) {
+                        Text(
+                            "AO VIVO",
+                            color = Color.White,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.background(Color(0xFFDC2626), RoundedCornerShape(4.dp)).padding(horizontal = 8.dp, vertical = 3.dp)
+                        )
+                    }
                 }
 
-                if (errorMsg == null) {
+                // Base: progresso + botões
+                Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .align(Alignment.BottomCenter)
+                        .background(Brush.verticalGradient(listOf(Color.Transparent, Color(0xDD000000))))
+                        .padding(horizontal = 24.dp, vertical = 18.dp)
+                ) {
+                    if (canSeek) {
+                        LinearProgressIndicator(
+                            progress = { (positionMs.toFloat() / durationMs.toFloat()).coerceIn(0f, 1f) },
+                            color = Accent,
+                            trackColor = Color(0x55FFFFFF),
+                            modifier = Modifier.fillMaxWidth().height(4.dp)
+                        )
+                        Row(Modifier.fillMaxWidth().padding(top = 6.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text(formatTime(positionMs), color = Color.White, fontSize = 12.sp)
+                            Text(formatTime(durationMs), color = Color.White, fontSize = 12.sp)
+                        }
+                        Spacer(Modifier.height(8.dp))
+                    }
                     Row(
-                        Modifier.align(Alignment.BottomCenter).padding(bottom = 32.dp),
-                        horizontalArrangement = Arrangement.spacedBy(24.dp)
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        IconButton(onClick = {
-                            if (isPlaying) exoPlayer.pause() else exoPlayer.play()
-                            isPlaying = !isPlaying
-                            showControls = true
-                        }) {
-                            Icon(
-                                if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                                contentDescription = null,
-                                tint = Color.White,
-                                modifier = Modifier.size(48.dp)
-                            )
+                        if (canSeek) {
+                            ControlButton(Icons.Default.Replay10, "Voltar 10 segundos") { seekBy(-10_000) }
+                            Spacer(Modifier.width(16.dp))
+                        }
+                        ControlButton(
+                            if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                            if (isPlaying) "Pausar" else "Reproduzir",
+                            big = true,
+                            modifier = Modifier.focusRequester(playFocus)
+                        ) { togglePlay() }
+                        if (canSeek) {
+                            Spacer(Modifier.width(16.dp))
+                            ControlButton(Icons.Default.Forward10, "Avançar 10 segundos") { seekBy(10_000) }
+                        }
+                        Spacer(Modifier.width(16.dp))
+                        ControlButton(Icons.Default.Refresh, "Recarregar") { manualRetry() }
+                        Spacer(Modifier.width(16.dp))
+                        ControlButton(Icons.Default.AspectRatio, "Tela: ${resizeModes[resizeIndex].second}") {
+                            resizeIndex = (resizeIndex + 1) % resizeModes.size
+                            touch()
+                        }
+                        if (queue.isNotEmpty()) {
+                            Spacer(Modifier.width(16.dp))
+                            ControlButton(Icons.Default.SkipNext, "Próximo: ${queue.first().title}") {
+                                val next = queue.first()
+                                queue = queue.drop(1)
+                                forceHls = false
+                                current = next
+                                touch()
+                            }
                         }
                     }
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        "Tela: ${resizeModes[resizeIndex].second}" + if (canSeek) "  ·  ◀ ▶ avança/volta 10 s" else "",
+                        color = Color(0xFF94A3B8),
+                        fontSize = 11.sp,
+                        modifier = Modifier.align(Alignment.CenterHorizontally)
+                    )
                 }
             }
         }
     }
 }
+
+@Composable
+private fun ControlButton(
+    icon: ImageVector,
+    description: String,
+    modifier: Modifier = Modifier,
+    big: Boolean = false,
+    onClick: () -> Unit,
+) {
+    val interaction = remember { MutableInteractionSource() }
+    val focused by interaction.collectIsFocusedAsState()
+    val size = if (big) 64.dp else 48.dp
+    Box(
+        modifier
+            .size(size)
+            .background(if (focused) Accent else Color(0x66000000), CircleShape)
+            .border(2.dp, if (focused) Color.White else Color(0x33FFFFFF), CircleShape)
+            .clickable(interactionSource = interaction, indication = null, onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(icon, contentDescription = description, tint = Color.White, modifier = Modifier.size(if (big) 36.dp else 26.dp))
+    }
+}
+
+@Composable
+private fun ErrorPanel(
+    message: String,
+    detail: String?,
+    onRetry: () -> Unit,
+    onBack: () -> Unit,
+    retryFocus: FocusRequester,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier
+            .padding(24.dp)
+            .background(Color(0xEE151827), RoundedCornerShape(16.dp))
+            .padding(28.dp)
+            .widthIn(max = 460.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text("Não foi possível reproduzir", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(8.dp))
+        Text(message, color = Color(0xFFE2E8F0), fontSize = 14.sp)
+        detail?.let {
+            Spacer(Modifier.height(6.dp))
+            Text(it, color = Color(0xFF64748B), fontSize = 11.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        }
+        Spacer(Modifier.height(20.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Button(
+                onClick = onRetry,
+                colors = ButtonDefaults.buttonColors(containerColor = Accent),
+                modifier = Modifier.focusRequester(retryFocus)
+            ) { Text("Tentar novamente") }
+            OutlinedButton(onClick = onBack) { Text("Voltar", color = Color.White) }
+        }
+    }
+}
+
+@OptIn(UnstableApi::class)
+private fun buildMediaItem(url: String, forceHls: Boolean): MediaItem {
+    val builder = MediaItem.Builder().setUri(Uri.parse(url))
+    when {
+        forceHls || StreamTypes.detect(url) == StreamTypes.Kind.HLS -> builder.setMimeType(MimeTypes.APPLICATION_M3U8)
+        StreamTypes.detect(url) == StreamTypes.Kind.TS -> builder.setMimeType(MimeTypes.VIDEO_MP2T)
+    }
+    return builder.build()
+}
+
+private fun isRetryable(e: PlaybackException): Boolean = when (e.errorCode) {
+    PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED,
+    PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT,
+    PlaybackException.ERROR_CODE_IO_UNSPECIFIED,
+    PlaybackException.ERROR_CODE_TIMEOUT,
+    PlaybackException.ERROR_CODE_UNSPECIFIED -> true
+    PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS -> httpStatus(e).let { it == null || it >= 500 }
+    else -> false
+}
+
+@OptIn(UnstableApi::class)
+private fun httpStatus(e: PlaybackException): Int? =
+    (e.cause as? HttpDataSource.InvalidResponseCodeException)?.responseCode
+
+private fun friendlyError(e: PlaybackException): String = when (e.errorCode) {
+    PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS -> when (val code = httpStatus(e)) {
+        401, 403 -> "Acesso negado pelo servidor (HTTP $code). Verifique se sua lista está ativa."
+        404 -> "Canal ou arquivo não encontrado no servidor (HTTP 404)."
+        null -> "O servidor respondeu com erro."
+        else -> "O servidor respondeu com erro (HTTP $code)."
+    }
+    PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED -> "Sem conexão com o servidor do canal."
+    PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT, PlaybackException.ERROR_CODE_TIMEOUT ->
+        "Tempo esgotado. O servidor demorou para responder."
+    PlaybackException.ERROR_CODE_IO_CLEARTEXT_NOT_PERMITTED -> "Conexão HTTP bloqueada pelo sistema."
+    PlaybackException.ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED,
+    PlaybackException.ERROR_CODE_PARSING_CONTAINER_MALFORMED,
+    PlaybackException.ERROR_CODE_PARSING_MANIFEST_MALFORMED,
+    PlaybackException.ERROR_CODE_PARSING_MANIFEST_UNSUPPORTED -> "Formato de stream não reconhecido."
+    PlaybackException.ERROR_CODE_DECODER_INIT_FAILED,
+    PlaybackException.ERROR_CODE_DECODER_QUERY_FAILED,
+    PlaybackException.ERROR_CODE_DECODING_FORMAT_UNSUPPORTED,
+    PlaybackException.ERROR_CODE_DECODING_FORMAT_EXCEEDS_CAPABILITIES -> "Este aparelho não suporta o formato de vídeo deste conteúdo."
+    else -> "Erro ao reproduzir o conteúdo."
+}
+
+private fun formatTime(ms: Long): String {
+    if (ms == C.TIME_UNSET || ms < 0) return "--:--"
+    val total = ms / 1000
+    val h = total / 3600
+    val m = (total % 3600) / 60
+    val s = total % 60
+    return if (h > 0) "%d:%02d:%02d".format(h, m, s) else "%02d:%02d".format(m, s)
+}
+
+/** User-Agent configurável (Configurações). */
+fun playerUserAgent(context: Context): String =
+    context.getSharedPreferences("hugo", Context.MODE_PRIVATE)
+        .getString("userAgent", null)
+        ?.takeIf { it.isNotBlank() }
+        ?: StreamTypes.DEFAULT_USER_AGENT

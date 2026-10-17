@@ -6,6 +6,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import com.hugo.player.player.PlaybackSession
 import java.net.URLEncoder
 import java.net.URLDecoder
 import java.nio.charset.StandardCharsets
@@ -119,6 +120,14 @@ fun AppNavigation() {
             SeriesScreen(onBack = { nav.popBackStack() })
         }
         composable("settings") { SettingsScreen(onBack = { nav.popBackStack() }) }
+        composable("player") {
+            val request = PlaybackSession.current
+            if (request == null) {
+                LaunchedEffect(Unit) { nav.popBackStack() }
+            } else {
+                PlayerScreen(request = request, onBack = { nav.popBackStack() })
+            }
+        }
         composable("player/{url}/{title}") { backStack ->
             val encUrl = backStack.arguments?.getString("url") ?: ""
             val encTitle = backStack.arguments?.getString("title") ?: "Canal"

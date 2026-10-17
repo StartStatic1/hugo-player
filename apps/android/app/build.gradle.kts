@@ -53,6 +53,7 @@ dependencies {
     implementation(libs.kotlinx.coroutines.android)
     implementation("io.coil-kt:coil-compose:2.7.0")
     implementation("androidx.media3:media3-exoplayer:1.4.1")
+    implementation("androidx.media3:media3-exoplayer-hls:1.4.1")
     implementation("androidx.media3:media3-ui:1.4.1")
     implementation("androidx.navigation:navigation-compose:2.8.3")
     debugImplementation(libs.androidx.compose.ui.tooling)
