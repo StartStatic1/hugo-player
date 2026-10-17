@@ -3,6 +3,8 @@ package com.hugo.player.ui
 import androidx.compose.runtime.*
 import androidx.compose.ui.platform.LocalContext
 import androidx.navigation.NavHostController
+import androidx.navigation.NavType
+import androidx.navigation.navArgument
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
@@ -13,6 +15,14 @@ import java.nio.charset.StandardCharsets
 
 private fun enc(s: String) = URLEncoder.encode(s, StandardCharsets.UTF_8.toString())
 private fun dec(s: String) = URLDecoder.decode(s, StandardCharsets.UTF_8.toString())
+
+/** Volta para a tela de Playlists (limpando a pilha), opcionalmente com ação automática. */
+fun NavHostController.goToPlaylists(query: String = "open=&refresh=") {
+    navigate("playlists?$query") {
+        popUpTo(graph.id) { inclusive = true }
+        launchSingleTop = false
+    }
+}
 
 fun NavHostController.openPlayer(url: String, title: String) = navigate("player/${enc(url)}/${enc(title)}")
 
@@ -25,30 +35,46 @@ fun AppNavigation() {
     val context = LocalContext.current
     val nav = rememberNavController()
     val identity = remember { DeviceIdentity.get(context) }
-    val startDest = remember { if (DeviceIdentity.isActivationDone(context)) "playlists" else "activation" }
+    val startDest = remember { if (DeviceIdentity.isActivationDone(context)) "playlists?open={open}&refresh={refresh}" else "activation" }
 
     NavHost(navController = nav, startDestination = startDest) {
         composable("activation") {
             ActivationScreen(onActivated = { _, _ ->
-                nav.navigate("playlists") { popUpTo("activation") { inclusive = true } }
+                nav.navigate("playlists?open=&refresh=") { popUpTo("activation") { inclusive = true } }
             })
         }
-        composable("playlists") {
+        composable(
+            "playlists?open={open}&refresh={refresh}",
+            arguments = listOf(
+                navArgument("open") { type = NavType.StringType; nullable = true; defaultValue = null },
+                navArgument("refresh") { type = NavType.StringType; nullable = true; defaultValue = null },
+            ),
+        ) { backStack ->
             PlaylistScreen(
-                onOpen = { _, _ -> nav.navigate("home") { launchSingleTop = true } },
+                onOpen = { _, _ ->
+                    nav.navigate("home") {
+                        popUpTo("playlists?open={open}&refresh={refresh}") { inclusive = false }
+                        launchSingleTop = true
+                    }
+                },
                 onSettings = { nav.navigate("settings") },
+                autoOpenId = backStack.arguments?.getString("open")?.takeIf { it.isNotBlank() && it != "null" },
+                autoRefresh = backStack.arguments?.getString("refresh") == "1",
             )
         }
         composable("home") {
             val playlistId = LiveTvCache.playlistId ?: ""
             HomeScreen(
+                playlistId = playlistId,
                 playlistName = LiveTvCache.playlistName ?: "Playlist",
                 onNavigate = { route ->
-                    when (route) {
-                        "live" -> nav.navigate("live/$playlistId")
-                        "movies" -> nav.navigate("movies/$playlistId")
-                        "series" -> nav.navigate("series/$playlistId")
-                        "playlists" -> if (!nav.popBackStack("playlists", false)) nav.navigate("playlists")
+                    when {
+                        route == "live" -> nav.navigate("live/$playlistId")
+                        route == "movies" -> nav.navigate("movies/$playlistId")
+                        route == "series" -> nav.navigate("series/$playlistId")
+                        route == "playlists" -> nav.goToPlaylists()
+                        route == "refresh" -> nav.goToPlaylists("refresh=1&open=${enc(playlistId)}")
+                        route.startsWith("recent:") -> nav.goToPlaylists("open=${enc(route.removePrefix("recent:"))}&refresh=")
                         else -> nav.navigate(route)
                     }
                 }

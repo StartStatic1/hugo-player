@@ -23,6 +23,7 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -61,6 +62,8 @@ private sealed interface PendingAction {
     val playlist: RemotePlaylist
     data class Open(override val playlist: RemotePlaylist) : PendingAction
     data class Refresh(override val playlist: RemotePlaylist) : PendingAction
+    /** Recarrega o conteúdo e já entra na playlist (atalho "Atualizar" da Home). */
+    data class RefreshAndOpen(override val playlist: RemotePlaylist) : PendingAction
 }
 
 private val cardBrushes = listOf(
@@ -79,6 +82,8 @@ private val cardBrushes = listOf(
 fun PlaylistScreen(
     onOpen: (playlistId: String, playlistName: String) -> Unit,
     onSettings: () -> Unit,
+    autoOpenId: String? = null,
+    autoRefresh: Boolean = false,
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -113,6 +118,7 @@ fun PlaylistScreen(
         }
     }
 
+    var autoHandled by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(Unit) { reload() }
     LaunchedEffect(playlists?.size) {
         if (!playlists.isNullOrEmpty()) runCatching { firstCardFocus.requestFocus() }
@@ -152,6 +158,7 @@ fun PlaylistScreen(
         val pl = action.playlist
         when (action) {
             is PendingAction.Refresh -> sync(pl, url, navigateAfter = false)
+            is PendingAction.RefreshAndOpen -> sync(pl, url, navigateAfter = true)
             is PendingAction.Open -> {
                 val s = summaries[pl.id]
                 val ttlMs = AppSettings.catalogTtlHours * 3_600_000L
@@ -176,6 +183,14 @@ fun PlaylistScreen(
             }
             pl.isProtected -> pinTarget = action
             else -> loads[pl.id] = CardLoad("Playlist sem URL", null, error = true)
+        }
+    }
+
+    LaunchedEffect(playlists) {
+        val target = autoOpenId?.let { id -> playlists?.firstOrNull { it.id == id } }
+        if (!autoHandled && target != null) {
+            autoHandled = true
+            request(if (autoRefresh) PendingAction.RefreshAndOpen(target) else PendingAction.Open(target))
         }
     }
 
