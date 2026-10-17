@@ -1,31 +1,33 @@
 package com.hugo.player.ui
 
+import android.net.Uri
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.media3.common.MediaItem
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
-import androidx.compose.ui.viewinterop.AndroidView
-import android.view.ViewGroup
 
 @Composable
-fun PlayerScreen(
-    streamUrl: String,
-    title: String,
-    onBack: () -> Unit
-) {
-    val context = androidx.compose.ui.platform.LocalContext.current
+fun PlayerScreen(streamUrl: String, title: String, onBack: () -> Unit) {
+    val context = LocalContext.current
+    var isPlaying by remember { mutableStateOf(true) }
+
     val exoPlayer = remember {
         ExoPlayer.Builder(context).build().apply {
-            setMediaItem(MediaItem.fromUri(streamUrl))
+            setMediaItem(MediaItem.fromUri(Uri.parse(streamUrl)))
             prepare()
             playWhenReady = true
         }
@@ -38,58 +40,42 @@ fun PlayerScreen(
     Box(Modifier.fillMaxSize().background(Color.Black)) {
         AndroidView(
             factory = {
-                PlayerView(context).apply {
+                PlayerView(it).apply {
                     player = exoPlayer
                     useController = false
-                    layoutParams = ViewGroup.LayoutParams(
-                        ViewGroup.LayoutParams.MATCH_PARENT,
-                        ViewGroup.LayoutParams.MATCH_PARENT
-                    )
                 }
             },
             modifier = Modifier.fillMaxSize()
         )
 
-        // Custom overlay controls
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.SpaceBetween
+        // Top bar
+        Row(
+            Modifier.fillMaxWidth().padding(16.dp).align(Alignment.TopStart),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = onBack) {
-                    Icon(Icons.Default.ArrowBack, contentDescription = "Voltar", tint = Color.White)
-                }
-                Text(title, color = Color.White, style = MaterialTheme.typography.titleMedium)
+            IconButton(onClick = onBack) {
+                Icon(Icons.Default.ArrowBack, contentDescription = "Voltar", tint = Color.White)
             }
+            Spacer(Modifier.width(8.dp))
+            Text(title, color = Color.White, fontSize = 18.sp)
+        }
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.Center,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                IconButton(onClick = { exoPlayer.seekBack() }) {
-                    Icon(Icons.Default.Replay10, contentDescription = "-10s", tint = Color.White, modifier = Modifier.size(48.dp))
-                }
-                Spacer(Modifier.width(32.dp))
-                IconButton(onClick = {
-                    if (exoPlayer.isPlaying) exoPlayer.pause() else exoPlayer.play()
-                }) {
-                    Icon(
-                        if (exoPlayer.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                        contentDescription = "Play/Pause",
-                        tint = Color.White,
-                        modifier = Modifier.size(64.dp)
-                    )
-                }
-                Spacer(Modifier.width(32.dp))
-                IconButton(onClick = { exoPlayer.seekForward() }) {
-                    Icon(Icons.Default.Forward10, contentDescription = "+10s", tint = Color.White, modifier = Modifier.size(48.dp))
-                }
+        // Simple controls
+        Row(
+            Modifier.align(Alignment.BottomCenter).padding(bottom = 32.dp),
+            horizontalArrangement = Arrangement.spacedBy(24.dp)
+        ) {
+            IconButton(onClick = {
+                if (isPlaying) exoPlayer.pause() else exoPlayer.play()
+                isPlaying = !isPlaying
+            }) {
+                Icon(
+                    if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier = Modifier.size(40.dp)
+                )
             }
-
-            Spacer(Modifier.height(48.dp))
         }
     }
 }
