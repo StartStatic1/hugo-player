@@ -1,264 +1,102 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="pt-BR">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Hugo Player — Premium IPTV & OTT Player</title>
-<meta name="description" content="Hugo Player: a premium media player for Android, Android TV and the web. Activate your device and manage your playlists." />
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hugo Player - Ativação</title>
 <style>
-  :root {
-    --bg: #0b0d17; --surface: #151827; --surface-2: #1d2135; --text: #e6e8f2; --muted: #9aa0b8;
-    --primary: #7c5cff; --accent: #22d3ee; --ok: #34d399; --err: #f87171; --radius: 16px;
-  }
-  * { box-sizing: border-box; }
-  body { margin: 0; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); line-height: 1.55; }
-  a { color: var(--accent); text-decoration: none; }
-  .wrap { max-width: 1120px; margin: 0 auto; padding: 0 24px; }
-  header { position: sticky; top: 0; backdrop-filter: blur(10px); background: rgba(11,13,23,.8); border-bottom: 1px solid #ffffff10; z-index: 10; }
-  nav { display: flex; align-items: center; justify-content: space-between; height: 64px; }
-  .logo { font-weight: 800; font-size: 20px; letter-spacing: .5px; }
-  .logo span { background: linear-gradient(90deg, var(--primary), var(--accent)); -webkit-background-clip: text; background-clip: text; color: transparent; }
-  nav .links a { margin-left: 24px; color: var(--muted); }
-  nav .links a:hover { color: var(--text); }
-  .hero { padding: 96px 0 72px; text-align: center; background: radial-gradient(900px 400px at 50% -10%, #7c5cff33, transparent); }
-  .hero h1 { font-size: clamp(34px, 6vw, 60px); margin: 0 0 16px; line-height: 1.1; }
-  .hero p { color: var(--muted); font-size: 18px; max-width: 640px; margin: 0 auto 32px; }
-  .btn { display: inline-block; border: 0; cursor: pointer; padding: 12px 22px; border-radius: 12px; font-weight: 600; font-size: 15px; color: #fff; background: linear-gradient(90deg, var(--primary), #5b8cff); }
-  .btn.ghost { background: var(--surface-2); }
-  .btn:disabled { opacity: .6; cursor: progress; }
-  .features { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 18px; padding: 24px 0 72px; }
-  .card { background: var(--surface); border: 1px solid #ffffff0d; border-radius: var(--radius); padding: 24px; }
-  .card h3 { margin: 0 0 8px; }
-  .card p { margin: 0; color: var(--muted); }
-  section h2 { font-size: 30px; margin: 0 0 8px; }
-  .sub { color: var(--muted); margin: 0 0 24px; }
-  .portal { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; padding-bottom: 72px; }
-  @media (max-width: 820px) { .portal { grid-template-columns: 1fr; } }
-  label { display: block; font-size: 13px; color: var(--muted); margin: 14px 0 6px; }
-  input, select { width: 100%; padding: 12px 14px; border-radius: 10px; border: 1px solid #ffffff1a; background: var(--bg); color: var(--text); font-size: 15px; }
-  input.mono { font-family: ui-monospace, Menlo, monospace; text-transform: uppercase; letter-spacing: 1px; }
-  .row { display: flex; gap: 10px; margin-top: 18px; flex-wrap: wrap; }
-  .msg { margin-top: 14px; font-size: 14px; min-height: 20px; }
-  .msg.ok { color: var(--ok); } .msg.err { color: var(--err); }
-  .badge { display: inline-block; padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; background: var(--surface-2); }
-  .badge.active { background: #34d39922; color: var(--ok); } .badge.inactive { background: #f8717122; color: var(--err); }
-  ul.list { list-style: none; padding: 0; margin: 16px 0 0; }
-  ul.list li { background: var(--bg); border: 1px solid #ffffff10; border-radius: 10px; padding: 12px 14px; margin-bottom: 8px; word-break: break-all; }
-  ul.list small { color: var(--muted); }
-  .hidden { display: none; }
-  details { margin-top: 18px; color: var(--muted); font-size: 13px; }
-  footer { border-top: 1px solid #ffffff10; padding: 28px 0; color: var(--muted); font-size: 14px; text-align: center; }
+:root { --bg:#0b0d17; --card:#151827; --primary:#7c5cff; --text:#e6e8f2; --muted:#9aa0b8; }
+*{box-sizing:border-box}
+body{margin:0;font-family:system-ui,sans-serif;background:var(--bg);color:var(--text);display:flex;min-height:100vh;align-items:center;justify-content:center;padding:20px}
+.card{background:var(--card);padding:32px;border-radius:16px;width:100%;max-width:440px;border:1px solid #ffffff12}
+h1{margin:0 0 8px;text-align:center;font-size:28px}
+.subtitle{color:var(--muted);text-align:center;margin:0 0 28px;font-size:14px}
+label{display:block;font-size:13px;color:var(--muted);margin:16px 0 6px}
+input,select,button{width:100%;padding:12px 14px;border-radius:10px;border:1px solid #ffffff1a;background:#0b0d17;color:var(--text);font-size:15px}
+button{background:var(--primary);border:none;font-weight:600;cursor:pointer;margin-top:20px}
+button:hover{opacity:.9}
+.status{margin-top:16px;padding:12px;border-radius:8px;font-size:14px;display:none}
+.status.ok{background:#34d39922;color:#34d399;display:block}
+.status.err{background:#f8717122;color:#f87171;display:block}
+.mono{font-family:ui-monospace,monospace;letter-spacing:1px}
 </style>
 </head>
 <body>
-<header>
-  <div class="wrap"><nav>
-    <div class="logo">Nex<span>Stream</span></div>
-    <div class="links"><a href="#features">Features</a><a href="#activate">Activate</a></div>
-  </nav></div>
-</header>
+<div class="card">
+  <h1>Hugo Player</h1>
+  <p class="subtitle">Ative seu dispositivo</p>
 
-<main>
-  <section class="hero">
-    <div class="wrap">
-      <h1>Your content.<br />One premium player.</h1>
-      <p>Hugo Player brings your own M3U and Xtream playlists to Android phones, tablets and Android TV with a fast, elegant interface. Hugo does not provide any content.</p>
-      <a class="btn" href="#activate">Activate your device</a>
-    </div>
-  </section>
+  <label>Device ID</label>
+  <input id="deviceId" class="mono" placeholder="AA:BB:CC:DD:EE:FF" autocomplete="off">
 
-  <div class="wrap">
-    <div class="features" id="features">
-      <div class="card"><h3>Android &amp; Android TV</h3><p>Native Kotlin + Jetpack Compose app, built for touch and remote control.</p></div>
-      <div class="card"><h3>Simple activation</h3><p>Open the app, note your Device ID and Device Key, and sign in here.</p></div>
-      <div class="card"><h3>Your playlists</h3><p>Add M3U links or Xtream credentials remotely; they sync to your device.</p></div>
-      <div class="card"><h3>Free trial</h3><p>Every new device starts with a free trial before upgrading to Premium.</p></div>
-    </div>
+  <label>Device Key</label>
+  <input id="deviceKey" class="mono" placeholder="8 caracteres" maxlength="8" autocomplete="off">
 
-    <section id="activate">
-      <h2>Device portal</h2>
-      <p class="sub">Sign in with the Device ID and Device Key shown on your Hugo Player screen.</p>
-      <div class="portal">
-        <div class="card">
-          <form id="loginForm" autocomplete="off">
-            <label for="deviceId">Device ID</label>
-            <input id="deviceId" class="mono" placeholder="02:1A:2B:3C:4D:5E" maxlength="17" required />
-            <label for="deviceKey">Device Key</label>
-            <input id="deviceKey" class="mono" placeholder="ABCD2345" maxlength="8" required />
-            <div class="row">
-              <button class="btn" type="submit" id="loginBtn">Sign in</button>
-              <button class="btn ghost hidden" type="button" id="logoutBtn">Sign out</button>
-            </div>
-            <div class="msg" id="loginMsg"></div>
-            <details>
-              <summary>Server settings</summary>
-              <label for="apiBase">API base URL</label>
-              <input id="apiBase" />
-            </details>
-          </form>
-          <div id="statusBox" class="hidden" style="margin-top:18px">
-            <div>License: <span class="badge" id="licBadge"></span></div>
-            <div style="margin-top:8px;color:var(--muted);font-size:14px" id="licInfo"></div>
-          </div>
-        </div>
+  <label>Playlist (M3U ou Xtream)</label>
+  <input id="playlistUrl" placeholder="https://...">
 
-        <div class="card" id="playlistCard">
-          <h3>Playlists</h3>
-          <p class="sub" id="playlistHint" style="margin:0">Sign in to manage your playlists.</p>
-          <form id="playlistForm" class="hidden" autocomplete="off">
-            <label for="plName">Name</label>
-            <input id="plName" maxlength="80" placeholder="My playlist" required />
-            <label for="plType">Type</label>
-            <select id="plType"><option value="m3u">M3U URL</option><option value="xtream">Xtream Codes</option></select>
-            <label for="plUrl" id="plUrlLabel">Playlist URL</label>
-            <input id="plUrl" type="url" placeholder="https://provider.example/list.m3u" required />
-            <div id="xtreamFields" class="hidden">
-              <label for="plUser">Username</label><input id="plUser" maxlength="128" />
-              <label for="plPass">Password</label><input id="plPass" type="password" maxlength="128" />
-            </div>
-            <div class="row"><button class="btn" type="submit" id="addBtn">Add playlist</button></div>
-            <div class="msg" id="plMsg"></div>
-          </form>
-          <ul class="list" id="plList"></ul>
-        </div>
-      </div>
-    </section>
-  </div>
-</main>
+  <label>Nome da playlist</label>
+  <input id="playlistName" placeholder="Minha Lista" value="Principal">
 
-<footer>&copy; <span id="year"></span> Hugo Player. Hugo is a media player and does not sell or distribute content.</footer>
+  <button onclick="activate()">Ativar Dispositivo</button>
+
+  <div id="status" class="status"></div>
+</div>
 
 <script>
-(() => {
-  const $ = (id) => document.getElementById(id);
-  const DEFAULT_API = location.protocol.startsWith("http") && location.port !== "8080"
-    ? `${location.protocol}//${location.hostname}:8080` : "http://localhost:8080";
-  const params = new URLSearchParams(location.search);
-  if (params.get("api")) localStorage.setItem("nex_api", params.get("api"));
-  const state = {
-    api: localStorage.getItem("nex_api") || DEFAULT_API,
-    creds: JSON.parse(sessionStorage.getItem("nex_creds") || "null"),
-  };
-  $("apiBase").value = state.api;
-  $("year").textContent = new Date().getFullYear();
-  $("apiBase").addEventListener("change", (e) => {
-    state.api = e.target.value.trim().replace(/\/+$/, "");
-    localStorage.setItem("nex_api", state.api);
-  });
+const API = "http://65.21.48.50:8080";
 
-  const setMsg = (el, text, ok) => { el.textContent = text; el.className = "msg " + (ok ? "ok" : "err"); };
-  const errText = (body, status) => {
-    const map = {
-      invalid_credentials: "Invalid Device ID or Device Key.",
-      license_expired: "Your license has expired.",
-      validation_error: "Please check the fields.",
-      playlist_limit_reached: "Playlist limit reached.",
-    };
-    const details = body && body.details ? Object.values(body.details.fieldErrors || {}).flat().concat(body.details.formErrors || []) : [];
-    return (map[body && body.error] || `Request failed (${status}).`) + (details.length ? " " + details.join(" ") : "");
-  };
+async function activate() {
+  const deviceId = document.getElementById("deviceId").value.trim().toUpperCase();
+  const deviceKey = document.getElementById("deviceKey").value.trim().toUpperCase();
+  const url = document.getElementById("playlistUrl").value.trim();
+  const name = document.getElementById("playlistName").value.trim() || "Principal";
+  const status = document.getElementById("status");
 
-  async function api(path, options = {}) {
-    const headers = { "Content-Type": "application/json" };
-    if (state.creds) { headers["x-device-id"] = state.creds.deviceId; headers["x-device-key"] = state.creds.deviceKey; }
-    const res = await fetch(state.api + path, { ...options, headers });
-    const body = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(errText(body, res.status));
-    return body;
+  if (!deviceId || !deviceKey || !url) {
+    show("Preencha Device ID, Key e URL da playlist", "err");
+    return;
   }
 
-  function el(tag, text, cls) { const n = document.createElement(tag); if (text) n.textContent = text; if (cls) n.className = cls; return n; }
-
-  function renderStatus(device) {
-    const lic = device.license;
-    $("statusBox").classList.remove("hidden");
-    const badge = $("licBadge");
-    badge.textContent = lic.type.toUpperCase();
-    badge.className = "badge " + (lic.active ? "active" : "inactive");
-    $("licInfo").textContent = lic.expiresAt
-      ? `${lic.active ? "Expires" : "Expired"} ${new Date(lic.expiresAt).toLocaleString()}${lic.daysLeft !== null ? ` · ${lic.daysLeft} day(s) left` : ""}`
-      : "Lifetime license";
-  }
-
-  function renderPlaylists(items) {
-    const list = $("plList");
-    list.replaceChildren();
-    if (!items.length) { list.appendChild(el("li", "No playlists yet.")); return; }
-    for (const p of items) {
-      const li = el("li");
-      li.appendChild(el("strong", p.name));
-      li.appendChild(document.createTextNode(" "));
-      li.appendChild(el("span", p.type.toUpperCase(), "badge"));
-      li.appendChild(document.createElement("br"));
-      li.appendChild(el("small", p.url));
-      list.appendChild(li);
+  try {
+    // 1. Register / check device
+    const reg = await fetch(API + "/devices/register", {
+      method: "POST",
+      headers: {"Content-Type":"application/json"},
+      body: JSON.stringify({ deviceId, deviceKey, platform:"web" })
+    });
+    if (!reg.ok) {
+      const err = await reg.json();
+      throw new Error(err.error || "Erro no registro");
     }
+
+    // 2. Add playlist
+    const pl = await fetch(API + "/playlists", {
+      method: "POST",
+      headers: {
+        "Content-Type":"application/json",
+        "x-device-id": deviceId,
+        "x-device-key": deviceKey
+      },
+      body: JSON.stringify({ name, type:"m3u", url })
+    });
+
+    if (!pl.ok) {
+      const err = await pl.json();
+      throw new Error(err.error || "Erro ao adicionar playlist");
+    }
+
+    show("Dispositivo ativado com sucesso! Abra o app e atualize.", "ok");
+  } catch (e) {
+    show(e.message, "err");
   }
+}
 
-  async function refresh() {
-    const [status, playlists] = await Promise.all([api("/devices/status"), api("/playlists")]);
-    renderStatus(status.device);
-    renderPlaylists(playlists.playlists);
-  }
-
-  function setLoggedIn(on) {
-    $("logoutBtn").classList.toggle("hidden", !on);
-    $("playlistForm").classList.toggle("hidden", !on);
-    $("playlistHint").classList.toggle("hidden", on);
-    $("deviceId").disabled = on; $("deviceKey").disabled = on;
-    if (!on) { $("statusBox").classList.add("hidden"); $("plList").replaceChildren(); }
-  }
-
-  $("loginForm").addEventListener("submit", async (e) => {
-    e.preventDefault();
-    const deviceId = $("deviceId").value.trim().toUpperCase();
-    const deviceKey = $("deviceKey").value.trim().toUpperCase();
-    if (!/^([0-9A-F]{2}:){5}[0-9A-F]{2}$/.test(deviceId)) return setMsg($("loginMsg"), "Device ID must look like 02:1A:2B:3C:4D:5E.", false);
-    if (!/^[A-HJ-NP-Z2-9]{8}$/.test(deviceKey)) return setMsg($("loginMsg"), "Device Key must have 8 characters.", false);
-    state.creds = { deviceId, deviceKey };
-    $("loginBtn").disabled = true;
-    try {
-      await refresh();
-      sessionStorage.setItem("nex_creds", JSON.stringify(state.creds));
-      setLoggedIn(true);
-      setMsg($("loginMsg"), "Signed in.", true);
-    } catch (err) {
-      state.creds = null;
-      setMsg($("loginMsg"), err.message || "Could not reach the server.", false);
-    } finally { $("loginBtn").disabled = false; }
-  });
-
-  $("logoutBtn").addEventListener("click", () => {
-    state.creds = null; sessionStorage.removeItem("nex_creds");
-    setLoggedIn(false); setMsg($("loginMsg"), "Signed out.", true);
-  });
-
-  $("plType").addEventListener("change", (e) => {
-    const xt = e.target.value === "xtream";
-    $("xtreamFields").classList.toggle("hidden", !xt);
-    $("plUrlLabel").textContent = xt ? "Server URL" : "Playlist URL";
-    $("plUrl").placeholder = xt ? "http://provider.example:8080" : "https://provider.example/list.m3u";
-  });
-
-  $("playlistForm").addEventListener("submit", async (e) => {
-    e.preventDefault();
-    const body = { name: $("plName").value.trim(), type: $("plType").value, url: $("plUrl").value.trim() };
-    if (body.type === "xtream") { body.username = $("plUser").value; body.password = $("plPass").value; }
-    $("addBtn").disabled = true;
-    try {
-      await api("/playlists", { method: "POST", body: JSON.stringify(body) });
-      e.target.reset(); $("xtreamFields").classList.add("hidden");
-      setMsg($("plMsg"), "Playlist added.", true);
-      await refresh();
-    } catch (err) { setMsg($("plMsg"), err.message, false); }
-    finally { $("addBtn").disabled = false; }
-  });
-
-  if (state.creds) {
-    $("deviceId").value = state.creds.deviceId; $("deviceKey").value = state.creds.deviceKey;
-    refresh().then(() => setLoggedIn(true)).catch(() => { state.creds = null; sessionStorage.removeItem("nex_creds"); });
-  }
-})();
+function show(msg, type) {
+  const el = document.getElementById("status");
+  el.textContent = msg;
+  el.className = "status " + type;
+}
 </script>
 </body>
 </html>
