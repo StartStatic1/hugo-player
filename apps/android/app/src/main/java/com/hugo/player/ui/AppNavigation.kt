@@ -82,11 +82,11 @@ fun AppNavigation() {
         }
         composable("live/{playlistId}") { backStack ->
             val playlistId = backStack.arguments?.getString("playlistId") ?: ""
-            LiveTvScreen(playlistId, identity.deviceId, identity.deviceKey, onPlay = { url, title -> nav.openPlayer(url, title) }, onBack = { nav.popBackStack() })
+            BrowseScreen(playlistId, BrowseType.LIVE, onPlay = { url, title -> nav.openPlayer(url, title) }, onOpenSeries = {}, onBack = { nav.popBackStack() })
         }
         composable("movies/{playlistId}") { backStack ->
             val playlistId = backStack.arguments?.getString("playlistId") ?: ""
-            MoviesScreen(playlistId, onPlay = { url, title -> nav.openPlayer(url, title) }, onBack = { nav.popBackStack() })
+            BrowseScreen(playlistId, BrowseType.MOVIES, onPlay = { url, title -> nav.openPlayer(url, title) }, onOpenSeries = {}, onBack = { nav.popBackStack() })
         }
         composable("series/{playlistId}") { backStack ->
             val playlistId = backStack.arguments?.getString("playlistId") ?: ""
