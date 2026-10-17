@@ -1,6 +1,5 @@
 package com.hugo.player.ui
 
-import android.content.Context
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -13,13 +12,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeoutOrNull
-import org.json.JSONObject
-import java.net.URL
+import com.hugo.player.data.CatalogRepository
+import com.hugo.player.data.db.CategoryEntity
+import com.hugo.player.data.db.ChannelEntity
 
 @Composable
 fun LiveTvScreen(
@@ -30,42 +28,23 @@ fun LiveTvScreen(
     onBack: () -> Unit
 ) {
     val context = LocalContext.current
-    var allChannels by remember { mutableStateOf(LiveTvCache.channels.filter { it.type == "live" || it.type == "other" }) }
-    var categories by remember { mutableStateOf(LiveTvCache.categories.filter { it.type == "live" || it.type == "other" }) }
-    var selectedCategory by remember { mutableStateOf(categories.firstOrNull()?.name) }
-    var loading by remember { mutableStateOf(allChannels.isEmpty()) }
-    var error by remember { mutableStateOf<String?>(null) }
+    val repo = remember { CatalogRepository(context) }
+    var categories by remember { mutableStateOf<List<CategoryEntity>>(emptyList()) }
+    var channels by remember { mutableStateOf<List<ChannelEntity>>(emptyList()) }
+    var selectedCat by remember { mutableStateOf<String?>(null) }
+    var loading by remember { mutableStateOf(true) }
 
     LaunchedEffect(playlistId) {
-        if (LiveTvCache.playlistId == playlistId && LiveTvCache.channels.isNotEmpty()) {
-            allChannels = LiveTvCache.channels.filter { it.type == "live" || it.type == "other" }
-            categories = LiveTvCache.categories.filter { it.type == "live" || it.type == "other" }
-            selectedCategory = categories.firstOrNull()?.name
-            loading = false
-            return@LaunchedEffect
-        }
-        loading = true
-        error = null
-        try {
-            val playlistUrl = withTimeoutOrNull(15000) { getPlaylistUrl(playlistId, deviceId, deviceKey) }
-            if (playlistUrl != null) {
-                val result = withTimeoutOrNull(45000) { loadChannelsFromUrl(playlistUrl, limit = 500) }
-                if (result != null) {
-                    LiveTvCache.channels = result.first
-                    LiveTvCache.categories = result.second
-                    LiveTvCache.playlistId = playlistId
-                    LiveTvCache.save(context)
-                    allChannels = result.first.filter { it.type == "live" || it.type == "other" }
-                    categories = result.second.filter { it.type == "live" || it.type == "other" }
-                    selectedCategory = categories.firstOrNull()?.name
-                } else error = "Timeout"
-            } else error = "Playlist não encontrada"
-        } catch (e: Exception) { error = e.message ?: "Erro" }
+        categories = repo.getCategories(playlistId, "live")
+        selectedCat = categories.firstOrNull()?.name
+        channels = if (selectedCat != null) repo.getChannels(playlistId, "live", selectedCat, 0, 100) else emptyList()
         loading = false
     }
 
-    val filtered = remember(allChannels, selectedCategory) {
-        if (selectedCategory == null) allChannels else allChannels.filter { it.group == selectedCategory }
+    LaunchedEffect(selectedCat) {
+        if (selectedCat != null) {
+            channels = repo.getChannels(playlistId, "live", selectedCat, 0, 100)
+        }
     }
 
     Column(Modifier.fillMaxSize().background(Color(0xFF07080F))) {
@@ -78,25 +57,23 @@ fun LiveTvScreen(
         }
         if (loading) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = Color(0xFF8B5CF6)) }
-        } else if (error != null) {
-            Box(Modifier.fillMaxSize().padding(16.dp), contentAlignment = Alignment.Center) { Text("Erro: $error", color = Color.Red) }
-        } else if (allChannels.isEmpty()) {
+        } else if (categories.isEmpty()) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("Nenhum canal ao vivo", color = Color(0xFF94A3B8)) }
         } else {
             Row(Modifier.fillMaxSize()) {
                 LazyColumn(Modifier.width(190.dp).fillMaxHeight().background(Color(0xFF12141C)), contentPadding = PaddingValues(6.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                     items(categories) { cat ->
-                        val selected = cat.name == selectedCategory
-                        Card(onClick = { selectedCategory = cat.name }, colors = CardDefaults.cardColors(containerColor = if (selected) Color(0xFF8B5CF6) else Color(0xFF1E2236)), shape = RoundedCornerShape(6.dp), modifier = Modifier.height(44.dp)) {
+                        val selected = cat.name == selectedCat
+                        Card(onClick = { selectedCat = cat.name }, colors = CardDefaults.cardColors(containerColor = if (selected) Color(0xFF8B5CF6) else Color(0xFF1E2236)), shape = RoundedCornerShape(6.dp), modifier = Modifier.height(44.dp)) {
                             Row(Modifier.padding(horizontal = 8.dp).fillMaxSize(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                                Text(cat.name, color = Color.White, fontSize = 12.sp, maxLines = 1, modifier = Modifier.weight(1f))
+                                Text(cat.name, color = Color.White, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
                                 Text("${cat.count}", color = Color(0xFF94A3B8), fontSize = 10.sp)
                             }
                         }
                     }
                 }
                 LazyColumn(Modifier.weight(1f).fillMaxHeight(), contentPadding = PaddingValues(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    items(filtered) { ch ->
+                    items(channels) { ch ->
                         Card(onClick = { onPlay(ch.url, ch.name) }, colors = CardDefaults.cardColors(containerColor = Color(0xFF151827)), shape = RoundedCornerShape(6.dp), modifier = Modifier.height(48.dp)) {
                             Row(Modifier.padding(horizontal = 12.dp).fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
                                 Text(ch.name, color = Color.White, fontSize = 13.sp, maxLines = 1)
@@ -107,48 +84,4 @@ fun LiveTvScreen(
             }
         }
     }
-}
-
-suspend fun getPlaylistUrl(playlistId: String, deviceId: String, deviceKey: String): String? = withContext(Dispatchers.IO) {
-    try {
-        val url = URL("http://65.21.48.50:8080/playlists")
-        val conn = url.openConnection() as java.net.HttpURLConnection
-        conn.setRequestProperty("x-device-id", deviceId)
-        conn.setRequestProperty("x-device-key", deviceKey)
-        conn.connectTimeout = 10000
-        conn.readTimeout = 10000
-        if (conn.responseCode !in 200..299) return@withContext null
-        val text = conn.inputStream.bufferedReader().readText()
-        val json = JSONObject(text)
-        val arr = json.optJSONArray("playlists") ?: return@withContext null
-        for (i in 0 until arr.length()) {
-            val p = arr.getJSONObject(i)
-            if (p.getString("id") == playlistId) return@withContext p.getString("url")
-        }
-        null
-    } catch (e: Exception) { null }
-}
-
-suspend fun loadChannelsFromUrl(playlistUrl: String, limit: Int = 500): Pair<List<Channel>, List<Category>> = withContext(Dispatchers.IO) {
-    val encoded = java.net.URLEncoder.encode(playlistUrl, "UTF-8")
-    val endpoint = "http://65.21.48.50:8080/channels?url=$encoded&limit=$limit"
-    val url = URL(endpoint)
-    val conn = url.openConnection() as java.net.HttpURLConnection
-    conn.connectTimeout = 20000
-    conn.readTimeout = 60000
-    if (conn.responseCode !in 200..299) throw Exception("HTTP ${conn.responseCode}")
-    val text = conn.inputStream.bufferedReader().readText()
-    val json = JSONObject(text)
-    val chArr = json.optJSONArray("channels") ?: return@withContext Pair(emptyList(), emptyList())
-    val channels = buildList {
-        for (i in 0 until chArr.length()) {
-            val c = chArr.getJSONObject(i)
-            add(Channel(c.optString("name", "Canal"), c.getString("url"), c.optString("logo").takeIf { it.isNotEmpty() }, c.optString("group", "Outros"), c.optString("type", "other")))
-        }
-    }
-    val catArr = json.optJSONArray("categories")
-    val categories = if (catArr != null) {
-        buildList { for (i in 0 until catArr.length()) { val c = catArr.getJSONObject(i); add(Category(c.getString("name"), c.optInt("count", 0), c.optString("type", "other"))) } }
-    } else channels.groupBy { it.group }.map { Category(it.key, it.value.size, it.value.firstOrNull()?.type ?: "other") }
-    Pair(channels, categories)
 }
