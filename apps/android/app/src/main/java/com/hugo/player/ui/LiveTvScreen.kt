@@ -26,7 +26,7 @@ fun LiveTvScreen(
     var loading by remember { mutableStateOf(true) }
 
     LaunchedEffect(playlistId) {
-        channels = loadChannels(playlistId, deviceId, deviceKey)
+        channels = loadChannels(playlistId)
         loading = false
     }
 
@@ -37,7 +37,7 @@ fun LiveTvScreen(
         if (loading) {
             CircularProgressIndicator()
         } else if (channels.isEmpty()) {
-            Text("Nenhum canal encontrado nesta playlist")
+            Text("Nenhum canal encontrado")
         } else {
             LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 items(channels) { ch ->
@@ -55,11 +55,20 @@ fun LiveTvScreen(
     }
 }
 
-suspend fun loadChannels(playlistId: String, deviceId: String, deviceKey: String): List<Channel> = withContext(Dispatchers.IO) {
+suspend fun loadChannels(playlistId: String): List<Channel> = withContext(Dispatchers.IO) {
     try {
-        // Placeholder: in real implementation this would parse the M3U from the playlist URL stored on server
-        // For now returns empty until the backend exposes channel list endpoint
-        emptyList()
+        // For now expects the playlist URL to be passed or fetched. 
+        // In production the backend would resolve playlistId -> url
+        val url = "http://65.21.48.50:8080/channels?url=https://example.com/playlist.m3u"
+        val text = URL(url).readText()
+        val json = JSONObject(text)
+        val arr = json.optJSONArray("channels") ?: return@withContext emptyList()
+        buildList {
+            for (i in 0 until arr.length()) {
+                val c = arr.getJSONObject(i)
+                add(Channel(c.getString("name"), c.getString("url"), c.optString("logo")))
+            }
+        }
     } catch (e: Exception) {
         emptyList()
     }
