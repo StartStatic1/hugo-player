@@ -27,28 +27,32 @@ channelsRouter.get("/", async (req, res) => {
 
 function classify(name: string, group: string, url: string): "live" | "movie" | "series" {
   const g = (group || "").toLowerCase();
+  const n = (name || "").toLowerCase();
   const u = (url || "").toLowerCase();
 
-  // Parent prefixes (most reliable)
-  if (g.startsWith("filmes |") || g.startsWith("filmes|") || g.startsWith("filmes /")) return "movie";
-  if (g.startsWith("series |") || g.startsWith("series|") || g.startsWith("séries |") || g.startsWith("series /")) return "series";
-  if (g.startsWith("canais |") || g.startsWith("canais|") || g.startsWith("canais /")) return "live";
-
-  // URL path
+  // URL path is most reliable
   if (u.includes("/movie/") || u.includes("/movies/")) return "movie";
   if (u.includes("/series/") || u.includes("/serie/")) return "series";
   if (u.includes("/live/") || u.includes("/channel/")) return "live";
 
   // Extension
   if (u.includes(".mp4") || u.includes(".mkv") || u.includes(".avi")) return "movie";
-  if (u.includes(".ts")) return "live";
 
-  // Fallback by group keywords
-  if (g.includes("filme") || g.includes("movie")) return "movie";
-  if (g.includes("serie") || g.includes("série") || g.includes("dorama") || g.includes("novela")) return "series";
-  if (g.includes("canal") || g.includes("live") || g.includes("24h") || g.includes("globo ") || g.includes("record") || g.includes("sbt") || g.includes("band")) return "live";
+  // Parent prefixes
+  if (g.startsWith("filmes |") || g.startsWith("filmes|") || g.startsWith("filmes /") || g.startsWith("filmes")) return "movie";
+  if (g.startsWith("series |") || g.startsWith("series|") || g.startsWith("séries |") || g.startsWith("series") || g.startsWith("séries")) return "series";
+  if (g.startsWith("canais |") || g.startsWith("canais|") || g.startsWith("canais") || g.startsWith("tv ao vivo")) return "live";
 
-  return "live"; // default
+  // Series indicators
+  if (g.includes("serie") || g.includes("série") || g.includes("dorama") || g.includes("novela") || g.includes("temporada") || n.match(/s\d{1,2}e\d{1,2}/i)) return "series";
+
+  // Movie indicators (genres, streaming services)
+  if (g.includes("filme") || g.includes("movie") || g.includes("ação") || g.includes("comédia") || g.includes("drama") || g.includes("terror") || g.includes("romance") || g.includes("animação") || g.includes("suspense") || g.includes("lançamento") || g.includes("legendados") || g.includes("netflix") || g.includes("prime") || g.includes("disney") || g.includes("hbo") || g.includes("apple tv") || g.includes("crunchyroll") || g.includes("paramount") || g.includes("globoplay") || g.includes("look") || g.includes("directv")) return "movie";
+
+  // Live indicators
+  if (g.includes("canal") || g.includes("live") || g.includes("24h") || g.includes("globo ") || g.includes("record") || g.includes("sbt") || g.includes("band") || g.includes("sport") || g.includes("noticias") || g.includes("telecine") || u.includes(".ts")) return "live";
+
+  return "movie"; // default VOD
 }
 
 function parseM3U(content: string) {
@@ -82,7 +86,7 @@ function parseM3U(content: string) {
     .sort((a, b) => b.count - a.count);
 
   return {
-    channels: channels.slice(0, 1000),
+    channels: channels.slice(0, 1500),
     categories,
     total: channels.length,
     stats: {
