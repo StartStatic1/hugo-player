@@ -1,6 +1,8 @@
 package com.hugo.player.ui
 
-import androidx.compose.runtime.Composable
+import android.content.Context
+import androidx.compose.runtime.*
+import androidx.compose.ui.platform.LocalContext
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
@@ -10,11 +12,23 @@ import java.nio.charset.StandardCharsets
 
 @Composable
 fun AppNavigation() {
+    val context = LocalContext.current
     val nav = rememberNavController()
+    val prefs = remember { context.getSharedPreferences("hugo", Context.MODE_PRIVATE) }
 
-    NavHost(navController = nav, startDestination = "activation") {
+    val savedDeviceId = prefs.getString("deviceId", null)
+    val savedDeviceKey = prefs.getString("deviceKey", null)
+    val hasActivation = !savedDeviceId.isNullOrEmpty() && !savedDeviceKey.isNullOrEmpty()
+
+    val startDest = if (hasActivation) "playlists/$savedDeviceId/$savedDeviceKey" else "activation"
+
+    NavHost(navController = nav, startDestination = startDest) {
         composable("activation") {
             ActivationScreen(onActivated = { deviceId, deviceKey ->
+                prefs.edit()
+                    .putString("deviceId", deviceId)
+                    .putString("deviceKey", deviceKey)
+                    .apply()
                 nav.navigate("playlists/$deviceId/$deviceKey") {
                     popUpTo("activation") { inclusive = true }
                 }
@@ -27,7 +41,12 @@ fun AppNavigation() {
                 deviceId = deviceId,
                 deviceKey = deviceKey,
                 onSelect = { playlistId, playlistName ->
-                    nav.navigate("loading/$deviceId/$deviceKey/$playlistId/$playlistName")
+                    // Se já tem cache dessa playlist, vai direto pra home
+                    if (LiveTvCache.playlistId == playlistId && LiveTvCache.channels.isNotEmpty()) {
+                        nav.navigate("home/$deviceId/$deviceKey/$playlistId")
+                    } else {
+                        nav.navigate("loading/$deviceId/$deviceKey/$playlistId/$playlistName")
+                    }
                 },
                 onAddNew = { }
             )
@@ -54,14 +73,17 @@ fun AppNavigation() {
             val deviceId = backStack.arguments?.getString("deviceId") ?: ""
             val deviceKey = backStack.arguments?.getString("deviceKey") ?: ""
             val playlistId = backStack.arguments?.getString("playlistId") ?: ""
-            HomeScreen(onNavigate = { route ->
-                when (route) {
-                    "live" -> nav.navigate("live/$deviceId/$deviceKey/$playlistId")
-                    "movies" -> nav.navigate("movies")
-                    "series" -> nav.navigate("series")
-                    else -> nav.navigate(route)
+            HomeScreen(
+                playlistName = LiveTvCache.playlistName ?: "Playlist",
+                onNavigate = { route ->
+                    when (route) {
+                        "live" -> nav.navigate("live/$deviceId/$deviceKey/$playlistId")
+                        "movies" -> nav.navigate("movies/$deviceId/$deviceKey/$playlistId")
+                        "series" -> nav.navigate("series/$deviceId/$deviceKey/$playlistId")
+                        else -> nav.navigate(route)
+                    }
                 }
-            })
+            )
         }
         composable("live/{deviceId}/{deviceKey}/{playlistId}") { backStack ->
             val deviceId = backStack.arguments?.getString("deviceId") ?: ""
@@ -79,8 +101,23 @@ fun AppNavigation() {
                 onBack = { nav.popBackStack() }
             )
         }
-        composable("movies") { MoviesScreen(onBack = { nav.popBackStack() }) }
-        composable("series") { SeriesScreen(onBack = { nav.popBackStack() }) }
+        composable("movies/{deviceId}/{deviceKey}/{playlistId}") { backStack ->
+            val deviceId = backStack.arguments?.getString("deviceId") ?: ""
+            val deviceKey = backStack.arguments?.getString("deviceKey") ?: ""
+            val playlistId = backStack.arguments?.getString("playlistId") ?: ""
+            MoviesScreen(
+                playlistId = playlistId,
+                onPlay = { url, title ->
+                    val encUrl = URLEncoder.encode(url, StandardCharsets.UTF_8.toString())
+                    val encTitle = URLEncoder.encode(title, StandardCharsets.UTF_8.toString())
+                    nav.navigate("player/$encUrl/$encTitle")
+                },
+                onBack = { nav.popBackStack() }
+            )
+        }
+        composable("series/{deviceId}/{deviceKey}/{playlistId}") { backStack ->
+            SeriesScreen(onBack = { nav.popBackStack() })
+        }
         composable("settings") { SettingsScreen(onBack = { nav.popBackStack() }) }
         composable("player/{url}/{title}") { backStack ->
             val encUrl = backStack.arguments?.getString("url") ?: ""
