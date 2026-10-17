@@ -1,0 +1,14 @@
+{
+  "name": "hugo-player",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Hugo Player monorepo: Android app, backend API and web portal",
+  "workspaces": ["apps/backend"],
+  "scripts": {
+    "dev:backend": "npm run dev -w apps/backend",
+    "build:backend": "npm run build -w apps/backend",
+    "start:backend": "npm run start -w apps/backend",
+    "serve:web": "npx --yes serve apps/web -l 5173"
+  },
+  "engines": { "node": ">=20" }
+}
