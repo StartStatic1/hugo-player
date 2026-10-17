@@ -5,20 +5,10 @@ import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.net.URL
 
-// Modelos e funções da primeira versão (endpoint /channels). Mantidos por
+// Funções da primeira versão (endpoint /channels). Mantidos por
 // compatibilidade; as telas novas usam data/CatalogRepository (/catalog).
 
-data class Channel(val name: String, val url: String, val logo: String?, val group: String)
-data class Category(val name: String, val count: Int)
-
-// Cache compartilhado entre LoadingScreen e as telas
-object LiveTvCache {
-    var channels: List<Channel> = emptyList()
-    var categories: List<Category> = emptyList()
-    var selectedCategory: String? = null
-    var playlistId: String? = null
-    var playlistName: String? = null
-}
+// Channel, Category e LiveTvCache ficam em LiveTvCache.kt
 
 suspend fun getPlaylistUrl(playlistId: String, deviceId: String, deviceKey: String): String? = withContext(Dispatchers.IO) {
     try {

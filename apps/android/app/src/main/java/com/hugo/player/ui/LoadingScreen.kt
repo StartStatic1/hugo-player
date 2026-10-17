@@ -71,8 +71,8 @@ fun LoadingScreen(
             AppSettings.lastPlaylistName = playlistName
 
             // Mantém o cache antigo preenchido (compatibilidade)
-            LiveTvCache.channels = catalog.live.items.map { Channel(it.name, it.url, it.logo, it.group) }
-            LiveTvCache.categories = catalog.live.categories.map { Category(it.name, it.count) }
+            LiveTvCache.channels = catalog.live.items.map { Channel(it.name, it.url, it.logo, it.group, "live") }
+            LiveTvCache.categories = catalog.live.categories.map { Category(it.name, it.count, "live") }
             LiveTvCache.selectedCategory = LiveTvCache.categories.firstOrNull()?.name
             LiveTvCache.playlistId = playlistId
             LiveTvCache.playlistName = playlistName
