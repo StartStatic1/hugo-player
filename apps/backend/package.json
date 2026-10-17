@@ -8,7 +8,8 @@
     "build": "tsc -p tsconfig.json",
     "start": "node dist/main.js",
     "dev": "tsx watch src/main.ts",
-    "test": "tsc -p tsconfig.json && node --test dist/__tests__/"
+    "test": "tsc -p tsconfig.json && node --test dist/__tests__/",
+    "smoke": "node scripts/smoke.mjs"
   },
   "dependencies": {
     "compression": "^1.8.2",

@@ -159,13 +159,29 @@ Seasons and episodes of a series. Xtream ids (`x-series-123`) call `get_series_i
 ### `GET /catalog/category/:section/:categoryId`
 Only the items of one category (`section` = `live | movies | series`).
 
+### `POST /epg/now-next`  *(Part D — EPG)*
+Now/next for many channels at once. The XMLTV is read from `url-tvg` / `x-tvg-url` in the M3U header or Xtream `xmltv.php`, parsed in **streaming** (sax, `.gz` supported, malformed XML tolerated), keeping only −3 h…+36 h, and cached for 6 h (`EPG_TTL_HOURS`).
+
+```json
+// body (auth headers as in /catalog)
+{ "playlistId": "…", "ids": ["news.br", "Canal Sem tvg-id HD"], "epgUrl": "optional override" }
+// response
+{ "available": true, "epgUrl": "…", "channels": { "news.br": { "channelId": "news.br", "now": { "title", "start", "stop", "desc?" }, "next": { … } } } }
+```
+
+Keys are matched by XMLTV channel id (exact, then case-insensitive) and then by normalized `display-name` (accents, `HD/FHD/4K` and brackets ignored). `available: false` when the playlist has no EPG.
+
+- `GET /epg/channel/:key` — remaining programmes for one channel.
+- `GET /epg/short/:streamId` — Xtream `get_short_epg` (base64 decoded).
+
 ### `GET /channels?url=` *(legacy)*
 Flat list used by older app builds, now powered by the same parser/classifier (`type` per channel, `epgUrl`, `limit`, `type` filter).
 
 ### Tests
 
 ```bash
-npm test -w apps/backend   # tsc + node --test (synthetic fixtures, no real streams)
+npm test -w apps/backend         # tsc + node --test (synthetic fixtures, no real streams)
+npm run smoke -w apps/backend    # end-to-end: fake provider (M3U + XMLTV.gz + Xtream API) + real API
 ```
 
 ## Security notes

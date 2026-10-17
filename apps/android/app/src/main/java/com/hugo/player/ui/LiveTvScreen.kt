@@ -24,6 +24,8 @@ import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.ui.PlayerView
 import com.hugo.player.data.Catalog
+import com.hugo.player.data.EpgRepository
+import com.hugo.player.data.NowNext
 import com.hugo.player.data.LiveChannel
 import com.hugo.player.player.HugoPlayerFactory
 import com.hugo.player.player.PlaybackRequest
@@ -49,6 +51,29 @@ fun LiveContent(catalog: Catalog, query: String, onPlay: (PlaybackRequest) -> Un
         live.items.filter { (categoryId == ALL_CATEGORIES || it.categoryId == categoryId) && matchesQuery(it.name, query) }
     }
     val preview = remember(previewId, live.items) { live.items.firstOrNull { it.id == previewId } }
+
+    // EPG agora / a seguir dos canais da categoria atual (busca em segundo plano)
+    var epg by remember { mutableStateOf<Map<String, NowNext>>(emptyMap()) }
+    var tick by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(channels) {
+        val keys = channels.take(600).map { EpgRepository.key(it) }
+        epg = keys.mapNotNull { k -> EpgRepository.get(k)?.let { k to it } }.toMap()
+        try {
+            epg = EpgRepository.fetch(keys)
+        } catch (_: Exception) {
+            // EPG é opcional: sem guia, a lista continua funcionando
+        }
+    }
+    // Atualiza barras de progresso a cada 30 s e rebusca quando o programa termina
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(30_000)
+            tick = System.currentTimeMillis()
+            if (epg.values.any { it.now != null && it.now.stopMs < tick }) {
+                runCatching { epg = EpgRepository.fetch(channels.take(600).map { EpgRepository.key(it) }) }
+            }
+        }
+    }
 
     // Foco parado num canal por 900 ms -> troca a prévia (navegação por D-pad)
     LaunchedEffect(focusedId) {
@@ -97,6 +122,8 @@ fun LiveContent(catalog: Catalog, query: String, onPlay: (PlaybackRequest) -> Un
                     ChannelRow(
                         number = index + 1,
                         channel = ch,
+                        epg = epg[EpgRepository.key(ch)],
+                        nowMs = tick,
                         selected = ch.id == previewId,
                         onFocused = { focusedId = ch.id },
                         onClick = { if (previewId == ch.id) play(ch) else previewId = ch.id }
@@ -127,6 +154,14 @@ fun LiveContent(catalog: Catalog, query: String, onPlay: (PlaybackRequest) -> Un
                         Text(preview.group, color = HugoColors.TextMuted, fontSize = 12.sp, maxLines = 1)
                     }
                 }
+                val pe = epg[EpgRepository.key(preview)]
+                if (pe != null) {
+                    Spacer(Modifier.height(12.dp))
+                    EpgPanel(pe, tick)
+                } else if (EpgRepository.unavailable) {
+                    Spacer(Modifier.height(8.dp))
+                    Text("Esta lista não tem guia de programação (EPG).", color = HugoColors.TextDim, fontSize = 11.sp)
+                }
                 Spacer(Modifier.height(12.dp))
                 Button(
                     onClick = { play(preview) },
@@ -144,6 +179,8 @@ fun LiveContent(catalog: Catalog, query: String, onPlay: (PlaybackRequest) -> Un
 private fun ChannelRow(
     number: Int,
     channel: LiveChannel,
+    epg: NowNext?,
+    nowMs: Long,
     selected: Boolean,
     onFocused: () -> Unit,
     onClick: () -> Unit,
@@ -163,7 +200,18 @@ private fun ChannelRow(
             Spacer(Modifier.width(10.dp))
             Column(Modifier.weight(1f)) {
                 Text(channel.name, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text(channel.group, color = HugoColors.TextMuted, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                val now = epg?.now?.takeIf { it.stopMs > nowMs }
+                if (now != null) {
+                    Text("Agora: ${now.title}", color = Color(0xFFCBD5E1), fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    LinearProgressIndicator(
+                        progress = { now.progress(nowMs) },
+                        color = HugoColors.Accent,
+                        trackColor = Color(0x33FFFFFF),
+                        modifier = Modifier.padding(top = 3.dp).fillMaxWidth(0.6f).height(2.dp)
+                    )
+                } else {
+                    Text(channel.group, color = HugoColors.TextMuted, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
             }
             if (channel.catchup) {
                 Text("REPLAY", color = HugoColors.Cyan, fontSize = 9.sp, fontWeight = FontWeight.Bold)
@@ -209,5 +257,40 @@ private fun LivePreview(channel: LiveChannel, modifier: Modifier) {
         )
         if (buffering && error == null) CircularProgressIndicator(color = HugoColors.Accent, modifier = Modifier.size(32.dp))
         error?.let { Text(it, color = HugoColors.TextMuted, fontSize = 12.sp) }
+    }
+}
+
+private fun hhmm(ms: Long): String =
+    java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault()).format(java.util.Date(ms))
+
+@Composable
+private fun EpgPanel(nn: NowNext, nowMs: Long) {
+    Column(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(HugoColors.Card).padding(12.dp)
+    ) {
+        nn.now?.takeIf { it.stopMs > nowMs }?.let { p ->
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("AGORA", color = HugoColors.Accent, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.width(8.dp))
+                Text("${hhmm(p.startMs)} – ${hhmm(p.stopMs)}", color = HugoColors.TextMuted, fontSize = 11.sp)
+            }
+            Text(p.title, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            LinearProgressIndicator(
+                progress = { p.progress(nowMs) },
+                color = HugoColors.Accent,
+                trackColor = Color(0x33FFFFFF),
+                modifier = Modifier.padding(vertical = 6.dp).fillMaxWidth().height(3.dp)
+            )
+            p.desc?.let { Text(it, color = HugoColors.TextMuted, fontSize = 11.sp, maxLines = 3, overflow = TextOverflow.Ellipsis) }
+        }
+        nn.next?.let { p ->
+            Spacer(Modifier.height(8.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("A SEGUIR", color = HugoColors.Cyan, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.width(8.dp))
+                Text(hhmm(p.startMs), color = HugoColors.TextMuted, fontSize = 11.sp)
+            }
+            Text(p.title, color = Color(0xFFE2E8F0), fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
     }
 }
