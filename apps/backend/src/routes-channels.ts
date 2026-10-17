@@ -8,11 +8,11 @@ channelsRouter.get("/", async (req, res) => {
 
   try {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 25000);
+    const timeout = setTimeout(() => controller.abort(), 30000);
 
     const response = await fetch(playlistUrl, {
       signal: controller.signal,
-      headers: { "User-Agent": "HugoPlayer/1.0" }
+      headers: { "User-Agent": "TiviMate/4.7.0 (Android 11; NVIDIA SHIELD TV Pro)" }
     });
     clearTimeout(timeout);
 
@@ -35,18 +35,30 @@ channelsRouter.get("/", async (req, res) => {
   }
 });
 
-function classifyGroup(group: string): "live" | "movie" | "series" | "other" {
-  const g = group.toLowerCase();
-  if (g.includes("filme") || g.includes("movie") || g.includes("vod") || g.includes("cinema")) return "movie";
-  if (g.includes("serie") || g.includes("series") || g.includes("temporada") || g.includes("season")) return "series";
-  if (g.includes("live") || g.includes("tv") || g.includes("canal") || g.includes("sport") || g.includes("news") || g.includes("infantil") || g.includes("desenho")) return "live";
+function classify(name: string, group: string, url: string): "live" | "movie" | "series" | "other" {
+  const g = (group || "").toLowerCase();
+  const n = (name || "").toLowerCase();
+  const u = (url || "").toLowerCase();
+
+  // Series indicators
+  if (g.includes("serie") || g.includes("series") || g.includes("temporada") || g.includes("season") || g.includes("dorama") || n.includes("s0") || n.includes("e0")) return "series";
+
+  // Movie indicators
+  if (g.includes("filme") || g.includes("movie") || g.includes("vod") || g.includes("cinema") || g.includes("netflix") || g.includes("hbo") || g.includes("prime") || g.includes("disney") || g.includes("paramount") || g.includes("globoplay") || g.includes("telecine") || n.includes("(20") || n.includes("(19")) return "movie";
+
+  // Live indicators
+  if (g.includes("live") || g.includes("tv") || g.includes("canal") || g.includes("sport") || g.includes("news") || g.includes("infantil") || g.includes("desenho") || g.includes("aberto") || g.includes("globo") || g.includes("record") || g.includes("sbt") || g.includes("band") || u.includes(".ts") || u.includes("live")) return "live";
+
+  // Default: if URL looks like VOD (mp4, mkv) treat as movie
+  if (u.includes(".mp4") || u.includes(".mkv") || u.includes(".avi")) return "movie";
+
   return "other";
 }
 
 function parseM3U(content: string) {
   const lines = content.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
   const channels: { name: string; url: string; logo?: string; group?: string; type: string }[] = [];
-  const groups = new Map<string, number>();
+  const groups = new Map<string, { count: number; type: string }>();
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
@@ -58,24 +70,35 @@ function parseM3U(content: string) {
       const name = nameMatch ? nameMatch[1].trim() : "Canal";
       const logo = logoMatch ? logoMatch[1] : undefined;
       const group = groupMatch ? groupMatch[1].trim() : "Outros";
-      const type = classifyGroup(group);
 
       const next = lines[i + 1];
       if (next && !next.startsWith("#") && next.startsWith("http")) {
+        const type = classify(name, group, next);
         channels.push({ name, url: next, logo, group, type });
-        groups.set(group, (groups.get(group) || 0) + 1);
+
+        const existing = groups.get(group);
+        if (existing) {
+          existing.count++;
+        } else {
+          groups.set(group, { count: 1, type });
+        }
         i++;
       }
     }
   }
 
   const categories = Array.from(groups.entries())
-    .map(([name, count]) => ({ name, count, type: classifyGroup(name) }))
+    .map(([name, info]) => ({ name, count: info.count, type: info.type }))
     .sort((a, b) => b.count - a.count);
 
   return {
-    channels: channels.slice(0, 500),
+    channels: channels.slice(0, 1000),
     categories,
-    total: channels.length
+    total: channels.length,
+    stats: {
+      live: channels.filter(c => c.type === "live").length,
+      movies: channels.filter(c => c.type === "movie").length,
+      series: channels.filter(c => c.type === "series").length
+    }
   };
 }
