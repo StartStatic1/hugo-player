@@ -8,7 +8,7 @@ channelsRouter.get("/", async (req, res) => {
 
   try {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 60000);
+    const timeout = setTimeout(() => controller.abort(), 90000);
     const response = await fetch(playlistUrl, {
       signal: controller.signal,
       headers: { "User-Agent": "TiviMate/4.7.0 (Android 11; NVIDIA SHIELD TV Pro)" }
@@ -29,10 +29,14 @@ function classify(name: string, group: string, url: string): "live" | "movie" | 
   const g = (group || "").toLowerCase().trim();
   const u = (url || "").toLowerCase();
 
-  // Parent prefixes (case-insensitive)
-  if (g.startsWith("filmes") || g.startsWith("filme |")) return "movie";
-  if (g.startsWith("series") || g.startsWith("séries") || g.startsWith("serie |")) return "series";
-  if (g.startsWith("canais") || g.startsWith("tv ao vivo") || g.startsWith("live")) return "live";
+  // Live first (most specific)
+  if (g.startsWith("canais") || g.startsWith("tv ao vivo") || g.startsWith("live") || g.includes("[24h]") || g.includes("globo") || g.includes("record") || g.includes("sbt") || g.includes("band") || g.includes("sport") || g.includes("noticias") || g.includes("telecine")) return "live";
+
+  // Series
+  if (g.startsWith("series") || g.startsWith("séries") || g.startsWith("serie |") || g.includes("novela") || g.includes("dorama") || g.includes("temporada")) return "series";
+
+  // Movies
+  if (g.startsWith("filmes") || g.startsWith("filme |") || g.includes("filme")) return "movie";
 
   // URL path
   if (u.includes("/movie/") || u.includes("/movies/")) return "movie";
@@ -40,12 +44,7 @@ function classify(name: string, group: string, url: string): "live" | "movie" | 
 
   // Extension
   if (u.includes(".mp4") || u.includes(".mkv") || u.includes(".avi")) return "movie";
-
-  // Novelas = series
-  if (g.includes("novela")) return "series";
-
-  // Live indicators
-  if (g.includes("24h") || g.includes("globo") || g.includes("record") || g.includes("sbt") || g.includes("band") || g.includes("sport") || g.includes("noticias") || g.includes("telecine") || g.includes("hbo") || g.includes("a&e") || g.includes("amc") || u.includes(".ts")) return "live";
+  if (u.includes(".ts")) return "live";
 
   return "live";
 }
@@ -76,11 +75,11 @@ function parseM3U(content: string) {
     }
   }
 
-  // Balance: 600 of each type
-  const movies = allChannels.filter(c => c.type === "movie").slice(0, 600);
-  const series = allChannels.filter(c => c.type === "series").slice(0, 600);
-  const live = allChannels.filter(c => c.type === "live").slice(0, 600);
-  const channels = [...movies, ...series, ...live];
+  // Return all of each type (up to 1000)
+  const movies = allChannels.filter(c => c.type === "movie").slice(0, 1000);
+  const series = allChannels.filter(c => c.type === "series").slice(0, 1000);
+  const live = allChannels.filter(c => c.type === "live").slice(0, 1000);
+  const channels = [...live, ...movies, ...series]; // live first
 
   const categories = Array.from(groups.entries())
     .map(([name, info]) => ({ name, count: info.count, type: info.type }))
