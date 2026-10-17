@@ -20,18 +20,16 @@ class CatalogRepository(private val context: Context) {
         }
         fun get(context: Context): CatalogRepository =
             instance ?: CatalogRepository(context).also { instance = it }
-        fun clearAll() {
-            // Clear is handled per-playlist in sync
-        }
+        fun clearAll() {}
     }
 
     suspend fun syncPlaylist(playlistId: String, playlistUrl: String, onProgress: (String) -> Unit = {}) = withContext(Dispatchers.IO) {
         onProgress("Baixando lista...")
         val encoded = java.net.URLEncoder.encode(playlistUrl, "UTF-8")
-        val endpoint = "http://65.21.48.50:8080/channels?url=$encoded&limit=50000"
+        val endpoint = "http://65.21.48.50:8080/channels?url=$encoded&limit=100000"
         val conn = URL(endpoint).openConnection() as java.net.HttpURLConnection
         conn.connectTimeout = 30000
-        conn.readTimeout = 120000
+        conn.readTimeout = 180000
         if (conn.responseCode !in 200..299) throw Exception("HTTP ${conn.responseCode}")
         val text = conn.inputStream.bufferedReader().readText()
         val json = JSONObject(text)
@@ -52,9 +50,10 @@ class CatalogRepository(private val context: Context) {
                 type = c.optString("type", "live"),
                 playlistId = playlistId
             ))
-            if (channels.size >= 500) {
+            if (channels.size >= 1000) {
                 dao.insertChannels(channels.toList())
                 channels.clear()
+                onProgress("Salvando... ${i}/${chArr.length()}")
             }
         }
         if (channels.isNotEmpty()) dao.insertChannels(channels)
@@ -73,10 +72,10 @@ class CatalogRepository(private val context: Context) {
             }
             dao.insertCategories(categories)
         }
-        onProgress("Pronto!")
+        onProgress("Pronto! ${chArr.length()} itens")
     }
 
-    suspend fun getChannels(playlistId: String, type: String, group: String? = null, page: Int = 0, pageSize: Int = 50) =
+    suspend fun getChannels(playlistId: String, type: String, group: String? = null, page: Int = 0, pageSize: Int = 100) =
         withContext(Dispatchers.IO) {
             if (group != null) dao.getByTypeAndGroup(playlistId, type, group, pageSize, page * pageSize)
             else dao.getByType(playlistId, type, pageSize, page * pageSize)

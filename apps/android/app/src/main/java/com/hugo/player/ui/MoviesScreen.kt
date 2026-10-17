@@ -6,6 +6,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
@@ -37,25 +38,52 @@ fun MoviesScreen(
     var movies by remember { mutableStateOf<List<ChannelEntity>>(emptyList()) }
     var selectedCat by remember { mutableStateOf<String?>(null) }
     var loading by remember { mutableStateOf(true) }
+    var page by remember { mutableIntStateOf(0) }
+    var hasMore by remember { mutableStateOf(true) }
+    var loadingMore by remember { mutableStateOf(false) }
+    val gridState = rememberLazyGridState()
 
     LaunchedEffect(playlistId) {
         categories = repo.getCategories(playlistId, "movie")
         selectedCat = categories.firstOrNull()?.name
-        movies = if (selectedCat != null) repo.getChannels(playlistId, "movie", selectedCat, 0, 2000) else emptyList()
+        page = 0
+        movies = if (selectedCat != null) repo.getChannels(playlistId, "movie", selectedCat, 0, 100) else emptyList()
+        hasMore = movies.size >= 100
         loading = false
     }
 
     LaunchedEffect(selectedCat) {
         if (selectedCat != null) {
             loading = true
-            movies = repo.getChannels(playlistId, "movie", selectedCat, 0, 2000)
+            page = 0
+            movies = repo.getChannels(playlistId, "movie", selectedCat, 0, 100)
+            hasMore = movies.size >= 100
             loading = false
         }
     }
 
+    // Load more when scrolling near end
+    LaunchedEffect(gridState) {
+        snapshotFlow { gridState.layoutInfo.visibleItemsInfo.lastOrNull()?.index }
+            .collect { lastIndex ->
+                if (lastIndex != null && lastIndex >= movies.size - 10 && hasMore && !loadingMore && selectedCat != null) {
+                    loadingMore = true
+                    page++
+                    val more = repo.getChannels(playlistId, "movie", selectedCat, page, 100)
+                    if (more.isNotEmpty()) {
+                        movies = movies + more
+                        hasMore = more.size >= 100
+                    } else {
+                        hasMore = false
+                    }
+                    loadingMore = false
+                }
+            }
+    }
+
     Column(Modifier.fillMaxSize().background(Color(0xFF07080F))) {
         Row(Modifier.fillMaxWidth().padding(12.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-            Text("Filmes", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+            Text("Filmes (${movies.size}${if (hasMore) "+" else ""})", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
             Button(onClick = onBack, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEC4899))) { Text("Voltar") }
         }
         if (loading) {
@@ -77,6 +105,7 @@ fun MoviesScreen(
                 }
                 LazyVerticalGrid(
                     columns = GridCells.Fixed(5),
+                    state = gridState,
                     modifier = Modifier.weight(1f).fillMaxHeight(),
                     contentPadding = PaddingValues(6.dp),
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
