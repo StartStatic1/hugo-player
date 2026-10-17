@@ -44,8 +44,8 @@ fun LoadingScreen(
             }
             status = "Carregando de $playlistName..."
             progress = 0.5f
-            // Load more items (2000) - still safe for most devices
-            val result = withTimeoutOrNull(90000) { loadChannelsFromUrl(playlistUrl, limit = 2000) }
+            // Load first page only (200 items) - rest loads on demand
+            val result = withTimeoutOrNull(60000) { loadChannelsFromUrl(playlistUrl, limit = 200) }
             if (result == null) {
                 status = "Timeout ao carregar"
                 kotlinx.coroutines.delay(1500)
@@ -57,6 +57,7 @@ fun LoadingScreen(
             LiveTvCache.selectedCategory = result.second.firstOrNull()?.name
             LiveTvCache.playlistId = playlistId
             LiveTvCache.playlistName = playlistName
+            LiveTvCache.playlistUrl = playlistUrl
             LiveTvCache.save(context)
             val live = result.first.count { it.type == "live" }
             val movies = result.first.count { it.type == "movie" }
