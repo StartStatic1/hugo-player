@@ -44,21 +44,21 @@ fun SeriesScreen(
     LaunchedEffect(playlistId) {
         categories = repo.getCategories(playlistId, "series")
         selectedCat = categories.firstOrNull()?.name
-        episodes = if (selectedCat != null) repo.getChannels(playlistId, "series", selectedCat, 0, 500) else emptyList()
+        episodes = if (selectedCat != null) repo.getChannels(playlistId, "series", selectedCat, 0, 2000) else emptyList()
         loading = false
     }
 
     LaunchedEffect(selectedCat) {
         if (selectedCat != null) {
-            episodes = repo.getChannels(playlistId, "series", selectedCat, 0, 500)
+            loading = true
+            episodes = repo.getChannels(playlistId, "series", selectedCat, 0, 2000)
             selectedSeries = null
+            loading = false
         }
     }
 
-    // Group episodes into series
     val seriesList = remember(episodes) {
         episodes.groupBy { ep ->
-            // Extract series name from episode name
             val name = ep.name
             val patterns = listOf(
                 Regex("(.+?)\\s*[Ss](\\d+)\\s*[Ee](\\d+)"),
@@ -87,7 +87,6 @@ fun SeriesScreen(
         if (loading) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = Color(0xFF22C55E)) }
         } else if (selectedSeries != null) {
-            // Show episodes of selected series
             LazyVerticalGrid(
                 columns = GridCells.Fixed(5),
                 modifier = Modifier.fillMaxSize(),
@@ -100,7 +99,7 @@ fun SeriesScreen(
                         onClick = { onPlay(ep.url, ep.name) },
                         colors = CardDefaults.cardColors(containerColor = Color(0xFF151827)),
                         shape = RoundedCornerShape(6.dp),
-                        modifier = Modifier.height(140.dp)
+                        modifier = Modifier.height(180.dp)
                     ) {
                         Column(Modifier.fillMaxSize()) {
                             Box(Modifier.weight(1f).fillMaxWidth().background(Color(0xFF1E2236))) {
@@ -128,27 +127,33 @@ fun SeriesScreen(
                         }
                     }
                 }
-                LazyVerticalGrid(
-                    columns = GridCells.Fixed(5),
-                    modifier = Modifier.weight(1f).fillMaxHeight(),
-                    contentPadding = PaddingValues(6.dp),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    items(seriesList) { series ->
-                        Card(
-                            onClick = { selectedSeries = series },
-                            colors = CardDefaults.cardColors(containerColor = Color(0xFF151827)),
-                            shape = RoundedCornerShape(6.dp),
-                            modifier = Modifier.height(150.dp)
-                        ) {
-                            Column(Modifier.fillMaxSize()) {
-                                Box(Modifier.weight(1f).fillMaxWidth().background(Color(0xFF1E2236))) {
-                                    if (!series.logo.isNullOrEmpty()) {
-                                        AsyncImage(model = series.logo, contentDescription = series.name, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+                if (seriesList.isEmpty()) {
+                    Box(Modifier.weight(1f).fillMaxHeight(), contentAlignment = Alignment.Center) {
+                        Text("Carregando ou vazio...", color = Color(0xFF94A3B8))
+                    }
+                } else {
+                    LazyVerticalGrid(
+                        columns = GridCells.Fixed(5),
+                        modifier = Modifier.weight(1f).fillMaxHeight(),
+                        contentPadding = PaddingValues(6.dp),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        items(seriesList) { series ->
+                            Card(
+                                onClick = { selectedSeries = series },
+                                colors = CardDefaults.cardColors(containerColor = Color(0xFF151827)),
+                                shape = RoundedCornerShape(6.dp),
+                                modifier = Modifier.height(180.dp)
+                            ) {
+                                Column(Modifier.fillMaxSize()) {
+                                    Box(Modifier.weight(1f).fillMaxWidth().background(Color(0xFF1E2236))) {
+                                        if (!series.logo.isNullOrEmpty()) {
+                                            AsyncImage(model = series.logo, contentDescription = series.name, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+                                        }
                                     }
+                                    Text(series.name, color = Color.White, fontSize = 9.sp, maxLines = 2, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(2.dp))
                                 }
-                                Text(series.name, color = Color.White, fontSize = 9.sp, maxLines = 2, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(2.dp))
                             }
                         }
                     }

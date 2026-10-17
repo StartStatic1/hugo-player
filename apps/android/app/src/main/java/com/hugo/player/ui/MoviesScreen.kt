@@ -41,13 +41,15 @@ fun MoviesScreen(
     LaunchedEffect(playlistId) {
         categories = repo.getCategories(playlistId, "movie")
         selectedCat = categories.firstOrNull()?.name
-        movies = if (selectedCat != null) repo.getChannels(playlistId, "movie", selectedCat, 0, 200) else emptyList()
+        movies = if (selectedCat != null) repo.getChannels(playlistId, "movie", selectedCat, 0, 2000) else emptyList()
         loading = false
     }
 
     LaunchedEffect(selectedCat) {
         if (selectedCat != null) {
-            movies = repo.getChannels(playlistId, "movie", selectedCat, 0, 200)
+            loading = true
+            movies = repo.getChannels(playlistId, "movie", selectedCat, 0, 2000)
+            loading = false
         }
     }
 
@@ -85,7 +87,7 @@ fun MoviesScreen(
                             onClick = { onPlay(ch.url, ch.name) },
                             colors = CardDefaults.cardColors(containerColor = Color(0xFF151827)),
                             shape = RoundedCornerShape(6.dp),
-                            modifier = Modifier.height(150.dp)
+                            modifier = Modifier.height(180.dp)
                         ) {
                             Column(Modifier.fillMaxSize()) {
                                 Box(Modifier.weight(1f).fillMaxWidth().background(Color(0xFF1E2236))) {
