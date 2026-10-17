@@ -27,7 +27,7 @@ jobs:
         working-directory: apps/android
         run: |
           chmod +x gradlew
-          ./gradlew assembleDebug
+          ./gradlew assembleDebug testDebugUnitTest
 
       - name: Upload APK
         uses: actions/upload-artifact@v4

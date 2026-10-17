@@ -78,10 +78,17 @@ The API base defaults to `http://<current-host>:8080`. Change it under **Server 
 ### 3. Android app
 
 1. Open `apps/android` in Android Studio and let Gradle sync, or build from the CLI with `cd apps/android && ./gradlew assembleDebug` (the included wrapper downloads Gradle 8.11.1; requires JDK 17 and the Android SDK).
-2. The debug build points to `http://10.0.2.2:8080` (your computer as seen from the emulator). On a physical device change `API_BASE_URL` in `app/build.gradle.kts` to your machine's LAN IP and add it to `res/xml/network_security_config.xml`, or use HTTPS.
-3. Run the `app` configuration on a phone/emulator or an Android TV emulator.
+2. The app talks to `http://65.21.48.50:8080` by default. To use another server: `./gradlew assembleDebug -PhugoApiUrl=http://10.0.2.2:8080` (emulator → your computer).
+3. Run the `app` configuration on a phone/emulator or an Android TV emulator. Unit tests: `./gradlew testDebugUnitTest`.
 
-On first launch the app shows its Device ID and Device Key, registers with the API and displays the license status.
+**App flow (IBO-style):**
+
+1. **Ativação** – Device ID (MAC-like, generated from a UUID, not the real MAC) + 8-char Device Key, generated once and persisted; the device registers itself with the API. Installs that still had the old fixed `AA:BB:CC:DD:EE:FF` get their own ID and their playlists are copied once.
+2. **Playlists** – large cards with name and content summary; tapping *Abrir* loads the list with a progress bar **inside the card**; edit name / delete (synced with the API), PIN prompt for protected lists, add M3U from the app.
+3. **Home** – logo, TV ao Vivo / Filmes / Séries shortcuts with counts, utility cards, recent playlists.
+4. **Abas** – search bar, narrow category sidebar, poster grid; scroll resets on category change; paging 100 at a time from the local Room database.
+5. **Séries** – episodes grouped by series → season chips → episode list (next episodes queued in the player).
+6. **Player** – ExoPlayer (HLS/TS/MP4, auto-retry), title + back on top, play/pause, seek bar, controls auto-hide after 3 s.
 
 ## API reference
 
