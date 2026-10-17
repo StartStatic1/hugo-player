@@ -44,8 +44,8 @@ fun LoadingScreen(
             }
             status = "Carregando de $playlistName..."
             progress = 0.5f
-            // Load with limit to avoid OOM
-            val result = withTimeoutOrNull(60000) { loadChannelsFromUrl(playlistUrl, limit = 800) }
+            // Load more items (2000) - still safe for most devices
+            val result = withTimeoutOrNull(90000) { loadChannelsFromUrl(playlistUrl, limit = 2000) }
             if (result == null) {
                 status = "Timeout ao carregar"
                 kotlinx.coroutines.delay(1500)
