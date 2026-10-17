@@ -22,6 +22,14 @@ import java.net.URL
 data class Channel(val name: String, val url: String, val logo: String?, val group: String)
 data class Category(val name: String, val count: Int)
 
+// Cache simples para não recarregar ao voltar do player
+private object LiveTvCache {
+    var channels: List<Channel> = emptyList()
+    var categories: List<Category> = emptyList()
+    var selectedCategory: String? = null
+    var playlistId: String? = null
+}
+
 @Composable
 fun LiveTvScreen(
     playlistId: String,
@@ -30,28 +38,29 @@ fun LiveTvScreen(
     onPlay: (String, String) -> Unit,
     onBack: () -> Unit
 ) {
-    var allChannels by remember { mutableStateOf<List<Channel>>(emptyList()) }
-    var categories by remember { mutableStateOf<List<Category>>(emptyList()) }
-    var selectedCategory by remember { mutableStateOf<String?>(null) }
+    var allChannels by remember { mutableStateOf(LiveTvCache.channels) }
+    var categories by remember { mutableStateOf(LiveTvCache.categories) }
+    var selectedCategory by remember { mutableStateOf(LiveTvCache.selectedCategory) }
     var loading by remember { mutableStateOf(allChannels.isEmpty()) }
     var error by remember { mutableStateOf<String?>(null) }
-    var debugInfo by remember { mutableStateOf("") }
 
     LaunchedEffect(playlistId) {
-        if (allChannels.isNotEmpty()) {
+        // Se já tem cache da mesma playlist, não recarrega
+        if (LiveTvCache.playlistId == playlistId && LiveTvCache.channels.isNotEmpty()) {
+            allChannels = LiveTvCache.channels
+            categories = LiveTvCache.categories
+            selectedCategory = LiveTvCache.selectedCategory
             loading = false
             return@LaunchedEffect
         }
+
         loading = true
         error = null
-        debugInfo = "Buscando playlist..."
         try {
             val playlistUrl = withTimeoutOrNull(15000) {
                 getPlaylistUrl(playlistId, deviceId, deviceKey)
             }
-            debugInfo = "URL: ${playlistUrl ?: "null"}"
             if (playlistUrl != null) {
-                debugInfo = "Carregando canais..."
                 val result = withTimeoutOrNull(45000) {
                     loadChannelsFromUrl(playlistUrl)
                 }
@@ -59,7 +68,11 @@ fun LiveTvScreen(
                     allChannels = result.first
                     categories = result.second
                     selectedCategory = categories.firstOrNull()?.name
-                    debugInfo = "${allChannels.size} canais"
+                    // Salva no cache
+                    LiveTvCache.channels = allChannels
+                    LiveTvCache.categories = categories
+                    LiveTvCache.selectedCategory = selectedCategory
+                    LiveTvCache.playlistId = playlistId
                 } else {
                     error = "Timeout ao carregar"
                 }
@@ -70,6 +83,11 @@ fun LiveTvScreen(
             error = e.message ?: "Erro"
         }
         loading = false
+    }
+
+    // Atualiza cache quando muda categoria
+    LaunchedEffect(selectedCategory) {
+        LiveTvCache.selectedCategory = selectedCategory
     }
 
     val filtered = remember(allChannels, selectedCategory) {
@@ -94,7 +112,7 @@ fun LiveTvScreen(
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     CircularProgressIndicator(color = Color(0xFF8B5CF6))
                     Spacer(Modifier.height(12.dp))
-                    Text(debugInfo, color = Color(0xFF94A3B8), fontSize = 12.sp)
+                    Text("Carregando canais...", color = Color(0xFF94A3B8), fontSize = 12.sp)
                 }
             }
         } else if (error != null) {
@@ -108,9 +126,9 @@ fun LiveTvScreen(
         } else {
             Row(Modifier.fillMaxSize()) {
                 LazyColumn(
-                    Modifier.width(200.dp).fillMaxHeight().background(Color(0xFF12141C)),
-                    contentPadding = PaddingValues(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                    Modifier.width(190.dp).fillMaxHeight().background(Color(0xFF12141C)),
+                    contentPadding = PaddingValues(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(3.dp)
                 ) {
                     items(categories) { cat ->
                         val selected = cat.name == selectedCategory
@@ -119,16 +137,16 @@ fun LiveTvScreen(
                             colors = CardDefaults.cardColors(
                                 containerColor = if (selected) Color(0xFF8B5CF6) else Color(0xFF1E2236)
                             ),
-                            shape = RoundedCornerShape(8.dp),
-                            modifier = Modifier.height(48.dp)
+                            shape = RoundedCornerShape(6.dp),
+                            modifier = Modifier.height(44.dp)
                         ) {
                             Row(
-                                Modifier.padding(horizontal = 10.dp).fillMaxSize(),
+                                Modifier.padding(horizontal = 8.dp).fillMaxSize(),
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text(cat.name, color = Color.White, fontSize = 13.sp, maxLines = 1, modifier = Modifier.weight(1f))
-                                Text("${cat.count}", color = Color(0xFF94A3B8), fontSize = 11.sp)
+                                Text(cat.name, color = Color.White, fontSize = 12.sp, maxLines = 1, modifier = Modifier.weight(1f))
+                                Text("${cat.count}", color = Color(0xFF94A3B8), fontSize = 10.sp)
                             }
                         }
                     }
@@ -136,21 +154,21 @@ fun LiveTvScreen(
 
                 LazyColumn(
                     Modifier.weight(1f).fillMaxHeight(),
-                    contentPadding = PaddingValues(12.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                    contentPadding = PaddingValues(10.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     items(filtered) { ch ->
                         Card(
                             onClick = { onPlay(ch.url, ch.name) },
                             colors = CardDefaults.cardColors(containerColor = Color(0xFF151827)),
-                            shape = RoundedCornerShape(8.dp),
-                            modifier = Modifier.height(52.dp)
+                            shape = RoundedCornerShape(6.dp),
+                            modifier = Modifier.height(48.dp)
                         ) {
                             Row(
-                                Modifier.padding(horizontal = 14.dp).fillMaxSize(),
+                                Modifier.padding(horizontal = 12.dp).fillMaxSize(),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text(ch.name, color = Color.White, fontSize = 14.sp, maxLines = 1)
+                                Text(ch.name, color = Color.White, fontSize = 13.sp, maxLines = 1)
                             }
                         }
                     }
@@ -193,7 +211,7 @@ suspend fun loadChannelsFromUrl(playlistUrl: String): Pair<List<Channel>, List<C
 
     val chArr = json.optJSONArray("channels") ?: return@withContext Pair(emptyList(), emptyList())
     val channels = buildList {
-        for (i in 0 until chArr.length().coerceAtMost(600)) {
+        for (i in 0 until chArr.length().coerceAtMost(800)) {
             val c = chArr.getJSONObject(i)
             add(Channel(
                 c.optString("name", "Canal"),

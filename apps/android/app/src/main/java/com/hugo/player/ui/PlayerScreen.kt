@@ -1,7 +1,11 @@
 package com.hugo.player.ui
 
 import android.net.Uri
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
@@ -23,6 +27,7 @@ import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.ui.PlayerView
+import kotlinx.coroutines.delay
 
 @Composable
 fun PlayerScreen(streamUrl: String, title: String, onBack: () -> Unit) {
@@ -30,6 +35,15 @@ fun PlayerScreen(streamUrl: String, title: String, onBack: () -> Unit) {
     var isPlaying by remember { mutableStateOf(true) }
     var errorMsg by remember { mutableStateOf<String?>(null) }
     var loading by remember { mutableStateOf(true) }
+    var showControls by remember { mutableStateOf(true) }
+
+    // Auto-hide controls after 4 seconds
+    LaunchedEffect(showControls) {
+        if (showControls && errorMsg == null) {
+            delay(4000)
+            showControls = false
+        }
+    }
 
     val exoPlayer = remember {
         val httpDataSourceFactory = DefaultHttpDataSource.Factory()
@@ -48,6 +62,7 @@ fun PlayerScreen(streamUrl: String, title: String, onBack: () -> Unit) {
                     override fun onPlayerError(error: PlaybackException) {
                         errorMsg = error.message ?: "Erro ao reproduzir"
                         loading = false
+                        showControls = true
                     }
                     override fun onPlaybackStateChanged(state: Int) {
                         loading = state == Player.STATE_BUFFERING
@@ -67,7 +82,9 @@ fun PlayerScreen(streamUrl: String, title: String, onBack: () -> Unit) {
         onDispose { exoPlayer.release() }
     }
 
-    Box(Modifier.fillMaxSize().background(Color.Black)) {
+    Box(
+        Modifier.fillMaxSize().background(Color.Black).clickable { showControls = !showControls }
+    ) {
         AndroidView(
             factory = {
                 PlayerView(it).apply {
@@ -103,32 +120,42 @@ fun PlayerScreen(streamUrl: String, title: String, onBack: () -> Unit) {
             }
         }
 
-        Row(
-            Modifier.fillMaxWidth().padding(16.dp).align(Alignment.TopStart),
-            verticalAlignment = Alignment.CenterVertically
+        // Controls overlay (auto-hide)
+        AnimatedVisibility(
+            visible = showControls || errorMsg != null,
+            enter = fadeIn(),
+            exit = fadeOut()
         ) {
-            IconButton(onClick = onBack) {
-                Icon(Icons.Default.ArrowBack, contentDescription = "Voltar", tint = Color.White)
-            }
-            Spacer(Modifier.width(8.dp))
-            Text(title, color = Color.White, fontSize = 18.sp)
-        }
+            Box(Modifier.fillMaxSize()) {
+                Row(
+                    Modifier.fillMaxWidth().padding(16.dp).align(Alignment.TopStart),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.Default.ArrowBack, contentDescription = "Voltar", tint = Color.White)
+                    }
+                    Spacer(Modifier.width(8.dp))
+                    Text(title, color = Color.White, fontSize = 18.sp)
+                }
 
-        if (errorMsg == null) {
-            Row(
-                Modifier.align(Alignment.BottomCenter).padding(bottom = 32.dp),
-                horizontalArrangement = Arrangement.spacedBy(24.dp)
-            ) {
-                IconButton(onClick = {
-                    if (isPlaying) exoPlayer.pause() else exoPlayer.play()
-                    isPlaying = !isPlaying
-                }) {
-                    Icon(
-                        if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                        contentDescription = null,
-                        tint = Color.White,
-                        modifier = Modifier.size(40.dp)
-                    )
+                if (errorMsg == null) {
+                    Row(
+                        Modifier.align(Alignment.BottomCenter).padding(bottom = 32.dp),
+                        horizontalArrangement = Arrangement.spacedBy(24.dp)
+                    ) {
+                        IconButton(onClick = {
+                            if (isPlaying) exoPlayer.pause() else exoPlayer.play()
+                            isPlaying = !isPlaying
+                            showControls = true
+                        }) {
+                            Icon(
+                                if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                                contentDescription = null,
+                                tint = Color.White,
+                                modifier = Modifier.size(48.dp)
+                            )
+                        }
+                    }
                 }
             }
         }
