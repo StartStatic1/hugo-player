@@ -33,10 +33,10 @@ fun PlayerScreen(streamUrl: String, title: String, onBack: () -> Unit) {
 
     val exoPlayer = remember {
         val httpDataSourceFactory = DefaultHttpDataSource.Factory()
-            .setUserAgent("Lavf/60.3.100")
+            .setUserAgent("TiviMate/4.7.0 (Android 11; NVIDIA SHIELD TV Pro)")
             .setAllowCrossProtocolRedirects(true)
-            .setConnectTimeoutMs(15000)
-            .setReadTimeoutMs(15000)
+            .setConnectTimeoutMs(20000)
+            .setReadTimeoutMs(20000)
 
         val mediaSourceFactory = DefaultMediaSourceFactory(context)
             .setDataSourceFactory(httpDataSourceFactory)
