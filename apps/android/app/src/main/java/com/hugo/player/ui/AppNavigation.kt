@@ -97,7 +97,16 @@ fun AppNavigation() {
                 nav.navigate("player/$encUrl/$encTitle")
             }, onBack = { nav.popBackStack() })
         }
-        composable("series/{deviceId}/{deviceKey}/{playlistId}") { SeriesScreen(onBack = { nav.popBackStack() }) }
+        composable("series/{deviceId}/{deviceKey}/{playlistId}") { backStack ->
+            val deviceId = backStack.arguments?.getString("deviceId") ?: ""
+            val deviceKey = backStack.arguments?.getString("deviceKey") ?: ""
+            val playlistId = backStack.arguments?.getString("playlistId") ?: ""
+            SeriesScreen(playlistId, onPlay = { url, title ->
+                val encUrl = URLEncoder.encode(url, StandardCharsets.UTF_8.toString())
+                val encTitle = URLEncoder.encode(title, StandardCharsets.UTF_8.toString())
+                nav.navigate("player/$encUrl/$encTitle")
+            }, onBack = { nav.popBackStack() })
+        }
         composable("settings") { SettingsScreen(onBack = { nav.popBackStack() }) }
         composable("player/{url}/{title}") { backStack ->
             val encUrl = backStack.arguments?.getString("url") ?: ""
