@@ -15,7 +15,9 @@ android {
         targetSdk = 35
         versionCode = 1
         versionName = "0.1.0"
-        buildConfigField("String", "API_BASE_URL", "\"http://65.21.48.50:8080\"")
+        // Servidor da API; para testar contra outro: ./gradlew assembleDebug -PhugoApiUrl=http://10.0.2.2:8080
+        val apiUrl = (project.findProperty("hugoApiUrl") as String?) ?: "http://65.21.48.50:8080"
+        buildConfigField("String", "API_BASE_URL", "\"$apiUrl\"")
     }
 
     buildTypes {

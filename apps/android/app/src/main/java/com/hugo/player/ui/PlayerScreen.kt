@@ -62,6 +62,7 @@ import kotlinx.coroutines.delay
 
 private val Accent = Color(0xFF8B5CF6)
 private const val MAX_AUTO_RETRIES = 3
+private const val CONTROLS_HIDE_MS = 3_000L
 
 @OptIn(UnstableApi::class)
 private val resizeModes = listOf(
@@ -99,6 +100,9 @@ fun PlayerScreen(request: PlaybackRequest, onBack: () -> Unit) {
     var positionMs by remember { mutableLongStateOf(0L) }
     var durationMs by remember { mutableLongStateOf(C.TIME_UNSET) }
     var isLive by remember { mutableStateOf(current.isLive ?: true) }
+    /** Posição sendo arrastada na barra (null = não está arrastando). */
+    var scrubPosition by remember { mutableStateOf<Float?>(null) }
+    val scrubbing = scrubPosition != null
 
     val rootFocus = remember { FocusRequester() }
     val playFocus = remember { FocusRequester() }
@@ -213,10 +217,10 @@ fun PlayerScreen(request: PlaybackRequest, onBack: () -> Unit) {
         }
     }
 
-    // Esconde os controles após 5 s sem interação
-    LaunchedEffect(showControls, lastInteraction, errorMsg, isPlaying) {
-        if (showControls && errorMsg == null && isPlaying) {
-            delay(5_000)
+    // Esconde os controles após 3 s sem interação (toque ou D-pad mostram de novo)
+    LaunchedEffect(showControls, lastInteraction, errorMsg, isPlaying, scrubbing) {
+        if (showControls && errorMsg == null && isPlaying && !scrubbing) {
+            delay(CONTROLS_HIDE_MS)
             showControls = false
         }
     }
@@ -374,17 +378,26 @@ fun PlayerScreen(request: PlaybackRequest, onBack: () -> Unit) {
                         .padding(horizontal = 24.dp, vertical = 18.dp)
                 ) {
                     if (canSeek) {
-                        LinearProgressIndicator(
-                            progress = { (positionMs.toFloat() / durationMs.toFloat()).coerceIn(0f, 1f) },
-                            color = Accent,
-                            trackColor = Color(0x55FFFFFF),
-                            modifier = Modifier.fillMaxWidth().height(4.dp)
+                        SeekBar(
+                            positionMs = positionMs,
+                            durationMs = durationMs,
+                            scrubPosition = scrubPosition,
+                            onScrub = { scrubPosition = it; touch() },
+                            onScrubEnd = {
+                                scrubPosition?.let { f -> exoPlayer.seekTo((f * durationMs).toLong().coerceIn(0, durationMs)) }
+                                scrubPosition = null
+                                touch()
+                            },
+                            onSeekBy = { seekBy(it) },
                         )
-                        Row(Modifier.fillMaxWidth().padding(top = 6.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text(formatTime(positionMs), color = Color.White, fontSize = 12.sp)
-                            Text(formatTime(durationMs), color = Color.White, fontSize = 12.sp)
-                        }
                         Spacer(Modifier.height(8.dp))
+                    } else if (isLive) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(Modifier.size(8.dp).background(Color(0xFFDC2626), CircleShape))
+                            Spacer(Modifier.width(8.dp))
+                            Text("Transmissão ao vivo", color = Color.White, fontSize = 12.sp)
+                        }
+                        Spacer(Modifier.height(10.dp))
                     }
                     Row(
                         Modifier.fillMaxWidth(),
@@ -425,13 +438,57 @@ fun PlayerScreen(request: PlaybackRequest, onBack: () -> Unit) {
                     }
                     Spacer(Modifier.height(6.dp))
                     Text(
-                        "Tela: ${resizeModes[resizeIndex].second}" + if (canSeek) "  ·  ◀ ▶ avança/volta 10 s" else "",
+                        "Tela: ${resizeModes[resizeIndex].second}" + if (canSeek) "  ·  ◀ ▶ na barra avança/volta 10 s" else "",
                         color = Color(0xFF94A3B8),
                         fontSize = 11.sp,
                         modifier = Modifier.align(Alignment.CenterHorizontally)
                     )
                 }
             }
+        }
+    }
+}
+
+/** Barra de progresso/seek: arrastar no toque, ◀ ▶ no D-pad quando focada. */
+@Composable
+private fun SeekBar(
+    positionMs: Long,
+    durationMs: Long,
+    scrubPosition: Float?,
+    onScrub: (Float) -> Unit,
+    onScrubEnd: () -> Unit,
+    onSeekBy: (Long) -> Unit,
+) {
+    val interaction = remember { MutableInteractionSource() }
+    val focused by interaction.collectIsFocusedAsState()
+    val fraction = scrubPosition ?: (positionMs.toFloat() / durationMs.toFloat()).coerceIn(0f, 1f)
+    val shownMs = scrubPosition?.let { (it * durationMs).toLong() } ?: positionMs
+    Column(Modifier.fillMaxWidth()) {
+        Slider(
+            value = fraction,
+            onValueChange = onScrub,
+            onValueChangeFinished = onScrubEnd,
+            interactionSource = interaction,
+            colors = SliderDefaults.colors(
+                thumbColor = if (focused) Color.White else Accent,
+                activeTrackColor = Accent,
+                inactiveTrackColor = Color(0x55FFFFFF),
+            ),
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(28.dp)
+                .onPreviewKeyEvent { ev ->
+                    if (ev.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                    when (ev.key.nativeKeyCode) {
+                        AndroidKeyEvent.KEYCODE_DPAD_LEFT -> { onSeekBy(-10_000); true }
+                        AndroidKeyEvent.KEYCODE_DPAD_RIGHT -> { onSeekBy(10_000); true }
+                        else -> false
+                    }
+                }
+        )
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text(formatTime(shownMs), color = Color.White, fontSize = 12.sp)
+            Text("-" + formatTime((durationMs - shownMs).coerceAtLeast(0)) + "  /  " + formatTime(durationMs), color = Color.White, fontSize = 12.sp)
         }
     }
 }
