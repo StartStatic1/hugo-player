@@ -2,6 +2,7 @@ package com.hugo.player.ui
 
 import android.content.Intent
 import android.net.Uri
+import android.util.Log
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -35,15 +36,25 @@ fun PlaylistScreen(
 ) {
     var playlists by remember { mutableStateOf<List<PlaylistCard>>(emptyList()) }
     var loading by remember { mutableStateOf(true) }
+    var error by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
 
-    LaunchedEffect(Unit) {
+    fun reload() {
+        loading = true
+        error = null
         scope.launch {
-            playlists = loadPlaylists(deviceId, deviceKey)
+            try {
+                playlists = loadPlaylists(deviceId, deviceKey)
+            } catch (e: Exception) {
+                error = e.message
+                Log.e("Playlist", "Error", e)
+            }
             loading = false
         }
     }
+
+    LaunchedEffect(Unit) { reload() }
 
     Box(
         modifier = Modifier
@@ -57,10 +68,13 @@ fun PlaylistScreen(
             Text("Suas Playlists", color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Bold)
             Spacer(Modifier.height(8.dp))
             Text("Selecione uma lista para assistir", color = Color(0xFF94A3B8), fontSize = 14.sp)
-            Spacer(Modifier.height(32.dp))
+            Spacer(Modifier.height(24.dp))
 
             if (loading) {
                 CircularProgressIndicator(color = Color(0xFF8B5CF6))
+            } else if (error != null) {
+                Text("Erro: $error", color = Color.Red)
+                Button(onClick = { reload() }) { Text("Tentar novamente") }
             } else {
                 LazyVerticalGrid(
                     columns = GridCells.Fixed(2),
@@ -96,27 +110,34 @@ fun PlaylistScreen(
                         }
                     }
                 }
+                Spacer(Modifier.height(12.dp))
+                Button(onClick = { reload() }) { Text("Atualizar lista") }
             }
         }
     }
 }
 
 suspend fun loadPlaylists(deviceId: String, deviceKey: String): List<PlaylistCard> = withContext(Dispatchers.IO) {
-    try {
-        val url = URL("http://65.21.48.50:8080/playlists")
-        val conn = url.openConnection() as java.net.HttpURLConnection
-        conn.setRequestProperty("x-device-id", deviceId)
-        conn.setRequestProperty("x-device-key", deviceKey)
-        val text = conn.inputStream.bufferedReader().readText()
-        val json = JSONObject(text)
-        val arr = json.optJSONArray("playlists") ?: return@withContext emptyList()
-        buildList {
-            for (i in 0 until arr.length()) {
-                val p = arr.getJSONObject(i)
-                add(PlaylistCard(p.getString("id"), p.getString("name"), p.optString("type", "m3u")))
-            }
+    val url = URL("http://65.21.48.50:8080/playlists")
+    val conn = url.openConnection() as java.net.HttpURLConnection
+    conn.setRequestProperty("x-device-id", deviceId)
+    conn.setRequestProperty("x-device-key", deviceKey)
+    conn.connectTimeout = 10000
+    conn.readTimeout = 10000
+    val code = conn.responseCode
+    val text = if (code in 200..299) {
+        conn.inputStream.bufferedReader().readText()
+    } else {
+        conn.errorStream?.bufferedReader()?.readText() ?: "HTTP $code"
+    }
+    Log.d("Playlist", "Response $code: $text")
+    if (code !in 200..299) throw Exception("HTTP $code: $text")
+    val json = JSONObject(text)
+    val arr = json.optJSONArray("playlists") ?: return@withContext emptyList()
+    buildList {
+        for (i in 0 until arr.length()) {
+            val p = arr.getJSONObject(i)
+            add(PlaylistCard(p.getString("id"), p.getString("name"), p.optString("type", "m3u")))
         }
-    } catch (e: Exception) {
-        emptyList()
     }
 }
