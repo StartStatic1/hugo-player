@@ -8,7 +8,7 @@ channelsRouter.get("/", async (req, res) => {
 
   try {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 45000);
+    const timeout = setTimeout(() => controller.abort(), 60000);
     const response = await fetch(playlistUrl, {
       signal: controller.signal,
       headers: { "User-Agent": "TiviMate/4.7.0 (Android 11; NVIDIA SHIELD TV Pro)" }
@@ -26,13 +26,13 @@ channelsRouter.get("/", async (req, res) => {
 });
 
 function classify(name: string, group: string, url: string): "live" | "movie" | "series" {
-  const g = (group || "").toLowerCase();
+  const g = (group || "").toLowerCase().trim();
   const u = (url || "").toLowerCase();
 
-  // Parent prefixes first (most reliable)
-  if (g.startsWith("filmes |") || g.startsWith("filmes|") || g.startsWith("filmes /") || g.startsWith("filmes")) return "movie";
-  if (g.startsWith("series |") || g.startsWith("series|") || g.startsWith("séries |") || g.startsWith("series") || g.startsWith("séries")) return "series";
-  if (g.startsWith("canais |") || g.startsWith("canais|") || g.startsWith("canais") || g.startsWith("tv ao vivo")) return "live";
+  // Parent prefixes (case-insensitive)
+  if (g.startsWith("filmes") || g.startsWith("filme |")) return "movie";
+  if (g.startsWith("series") || g.startsWith("séries") || g.startsWith("serie |")) return "series";
+  if (g.startsWith("canais") || g.startsWith("tv ao vivo") || g.startsWith("live")) return "live";
 
   // URL path
   if (u.includes("/movie/") || u.includes("/movies/")) return "movie";
@@ -45,9 +45,8 @@ function classify(name: string, group: string, url: string): "live" | "movie" | 
   if (g.includes("novela")) return "series";
 
   // Live indicators
-  if (g.includes("24h") || g.includes("globo ") || g.includes("record") || g.includes("sbt") || g.includes("band") || g.includes("sport") || g.includes("noticias") || g.includes("telecine") || g.includes("hbo") || g.includes("a&e") || g.includes("amc") || u.includes(".ts")) return "live";
+  if (g.includes("24h") || g.includes("globo") || g.includes("record") || g.includes("sbt") || g.includes("band") || g.includes("sport") || g.includes("noticias") || g.includes("telecine") || g.includes("hbo") || g.includes("a&e") || g.includes("amc") || u.includes(".ts")) return "live";
 
-  // Default
   return "live";
 }
 
@@ -77,10 +76,10 @@ function parseM3U(content: string) {
     }
   }
 
-  // Prioritize VOD: take more movies/series, fewer live
-  const movies = allChannels.filter(c => c.type === "movie").slice(0, 800);
-  const series = allChannels.filter(c => c.type === "series").slice(0, 800);
-  const live = allChannels.filter(c => c.type === "live").slice(0, 400);
+  // Balance: 600 of each type
+  const movies = allChannels.filter(c => c.type === "movie").slice(0, 600);
+  const series = allChannels.filter(c => c.type === "series").slice(0, 600);
+  const live = allChannels.filter(c => c.type === "live").slice(0, 600);
   const channels = [...movies, ...series, ...live];
 
   const categories = Array.from(groups.entries())
