@@ -1,21 +1,24 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-  <meta charset="UTF-8">
-  <title>Hugo Player</title>
-  <style>
-    body { font-family: system-ui; background: #0b0d17; color: #fff; max-width: 480px; margin: 40px auto; padding: 20px; }
-    h1 { text-align: center; }
-    input, button { width: 100%; padding: 12px; margin: 8px 0; border-radius: 8px; border: 1px solid #333; background: #151827; color: #fff; }
-    button { background: #7c5cff; border: none; font-weight: bold; }
-  </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hugo Player</title>
+<style>
+body{margin:0;font-family:system-ui;background:#0b0d17;color:#e6e8f2;display:flex;min-height:100vh;align-items:center;justify-content:center}
+.card{background:#151827;padding:32px;border-radius:16px;width:100%;max-width:420px;border:1px solid #ffffff0d}
+h1{margin:0 0 8px;text-align:center}p{color:#9aa0b8;text-align:center;margin:0 0 24px}
+input,button{width:100%;padding:12px;margin:8px 0;border-radius:10px;border:1px solid #ffffff1a;background:#0b0d17;color:#fff;font-size:15px}
+button{background:#7c5cff;border:none;font-weight:600;cursor:pointer}
+</style>
 </head>
 <body>
+<div class="card">
   <h1>Hugo Player</h1>
-  <p>Informe o Device ID e Device Key do aplicativo.</p>
-  <input id="deviceId" placeholder="Device ID" />
-  <input id="deviceKey" placeholder="Device Key" />
+  <p>Ative seu dispositivo</p>
+  <input id="deviceId" placeholder="Device ID" class="mono">
+  <input id="deviceKey" placeholder="Device Key">
   <button>Entrar</button>
-  <p style="text-align:center;margin-top:40px;color:#9aa0b8;">Hugo Player — apenas um player. Você carrega suas próprias playlists.</p>
+</div>
 </body>
 </html>

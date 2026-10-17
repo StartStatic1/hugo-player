@@ -1,18 +1,20 @@
 # Hugo Player
 
-**Hugo Player** is a premium IPTV/OTT media player for Android phones, tablets and Android TV, with a backend API and a web portal for device activation and playlist management.
+Premium native Android IPTV/OTT player with device-based activation.
 
-> Hugo Player is a player only. It does not provide, sell or host any audiovisual content; users load their own legally obtained playlists.
+## Features
+- Native Kotlin + Jetpack Compose (Mobile + Android TV)
+- Device ID (MAC-style) + Device Key activation
+- Playlist management via website (M3U / Xtream)
+- Modern dark interface
 
-## Overview
-
-- **Android app**: native Kotlin + Jetpack Compose, one APK for mobile and Android TV.
-- **Device activation**: each install generates a **Device ID** (MAC-style) and an 8-character **Device Key**.
-- **Backend API**: Node.js + TypeScript + Express.
-- **Web portal**: dark landing page for device login and playlist management.
+## Structure
+- `apps/android/` - Android application
+- `apps/backend/` - API server
+- `apps/web/` - Activation portal
 
 ## Status
-Project started. Full scaffold being built.
+Active development. Full scaffold in progress.
 
 ## Repository
 https://github.com/StartStatic1/hugo-player
