@@ -22,12 +22,13 @@ import java.net.URL
 data class Channel(val name: String, val url: String, val logo: String?, val group: String)
 data class Category(val name: String, val count: Int)
 
-// Cache simples para não recarregar ao voltar do player
-private object LiveTvCache {
+// Cache compartilhado entre LoadingScreen e LiveTvScreen
+object LiveTvCache {
     var channels: List<Channel> = emptyList()
     var categories: List<Category> = emptyList()
     var selectedCategory: String? = null
     var playlistId: String? = null
+    var playlistName: String? = null
 }
 
 @Composable
@@ -45,7 +46,7 @@ fun LiveTvScreen(
     var error by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(playlistId) {
-        // Se já tem cache da mesma playlist, não recarrega
+        // Se o cache já foi preenchido pelo LoadingScreen, usa ele
         if (LiveTvCache.playlistId == playlistId && LiveTvCache.channels.isNotEmpty()) {
             allChannels = LiveTvCache.channels
             categories = LiveTvCache.categories
@@ -54,6 +55,7 @@ fun LiveTvScreen(
             return@LaunchedEffect
         }
 
+        // Fallback: carrega se não tiver cache
         loading = true
         error = null
         try {
@@ -68,13 +70,12 @@ fun LiveTvScreen(
                     allChannels = result.first
                     categories = result.second
                     selectedCategory = categories.firstOrNull()?.name
-                    // Salva no cache
                     LiveTvCache.channels = allChannels
                     LiveTvCache.categories = categories
                     LiveTvCache.selectedCategory = selectedCategory
                     LiveTvCache.playlistId = playlistId
                 } else {
-                    error = "Timeout ao carregar"
+                    error = "Timeout"
                 }
             } else {
                 error = "Playlist n\u00e3o encontrada"
@@ -85,7 +86,6 @@ fun LiveTvScreen(
         loading = false
     }
 
-    // Atualiza cache quando muda categoria
     LaunchedEffect(selectedCategory) {
         LiveTvCache.selectedCategory = selectedCategory
     }
@@ -101,7 +101,12 @@ fun LiveTvScreen(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text("TV ao Vivo", color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+            Column {
+                Text("TV ao Vivo", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                LiveTvCache.playlistName?.let {
+                    Text(it, color = Color(0xFF8B5CF6), fontSize = 12.sp)
+                }
+            }
             Button(onClick = onBack, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF8B5CF6))) {
                 Text("Voltar")
             }
@@ -109,11 +114,7 @@ fun LiveTvScreen(
 
         if (loading) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    CircularProgressIndicator(color = Color(0xFF8B5CF6))
-                    Spacer(Modifier.height(12.dp))
-                    Text("Carregando canais...", color = Color(0xFF94A3B8), fontSize = 12.sp)
-                }
+                CircularProgressIndicator(color = Color(0xFF8B5CF6))
             }
         } else if (error != null) {
             Box(Modifier.fillMaxSize().padding(16.dp), contentAlignment = Alignment.Center) {
