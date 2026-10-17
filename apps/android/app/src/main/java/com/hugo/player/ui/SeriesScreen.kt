@@ -6,6 +6,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
@@ -40,21 +41,47 @@ fun SeriesScreen(
     var selectedCat by remember { mutableStateOf<String?>(null) }
     var loading by remember { mutableStateOf(true) }
     var selectedSeries by remember { mutableStateOf<SeriesItem?>(null) }
+    var page by remember { mutableIntStateOf(0) }
+    var hasMore by remember { mutableStateOf(true) }
+    var loadingMore by remember { mutableStateOf(false) }
+    val gridState = rememberLazyGridState()
 
     LaunchedEffect(playlistId) {
         categories = repo.getCategories(playlistId, "series")
         selectedCat = categories.firstOrNull()?.name
-        episodes = if (selectedCat != null) repo.getChannels(playlistId, "series", selectedCat, 0, 2000) else emptyList()
+        page = 0
+        episodes = if (selectedCat != null) repo.getChannels(playlistId, "series", selectedCat, 0, 100) else emptyList()
+        hasMore = episodes.size >= 100
         loading = false
     }
 
     LaunchedEffect(selectedCat) {
         if (selectedCat != null) {
             loading = true
-            episodes = repo.getChannels(playlistId, "series", selectedCat, 0, 2000)
+            page = 0
+            episodes = repo.getChannels(playlistId, "series", selectedCat, 0, 100)
+            hasMore = episodes.size >= 100
             selectedSeries = null
             loading = false
         }
+    }
+
+    LaunchedEffect(gridState) {
+        snapshotFlow { gridState.layoutInfo.visibleItemsInfo.lastOrNull()?.index }
+            .collect { lastIndex ->
+                if (lastIndex != null && lastIndex >= episodes.size - 10 && hasMore && !loadingMore && selectedCat != null && selectedSeries == null) {
+                    loadingMore = true
+                    page++
+                    val more = repo.getChannels(playlistId, "series", selectedCat, page, 100)
+                    if (more.isNotEmpty()) {
+                        episodes = episodes + more
+                        hasMore = more.size >= 100
+                    } else {
+                        hasMore = false
+                    }
+                    loadingMore = false
+                }
+            }
     }
 
     val seriesList = remember(episodes) {
@@ -81,7 +108,7 @@ fun SeriesScreen(
 
     Column(Modifier.fillMaxSize().background(Color(0xFF07080F))) {
         Row(Modifier.fillMaxWidth().padding(12.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-            Text(if (selectedSeries != null) selectedSeries!!.name else "Séries", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+            Text(if (selectedSeries != null) selectedSeries!!.name else "Séries (${seriesList.size}${if (hasMore) "+" else ""})", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
             Button(onClick = { if (selectedSeries != null) selectedSeries = null else onBack() }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF22C55E))) { Text("Voltar") }
         }
         if (loading) {
@@ -129,11 +156,12 @@ fun SeriesScreen(
                 }
                 if (seriesList.isEmpty()) {
                     Box(Modifier.weight(1f).fillMaxHeight(), contentAlignment = Alignment.Center) {
-                        Text("Carregando ou vazio...", color = Color(0xFF94A3B8))
+                        Text("Carregando...", color = Color(0xFF94A3B8))
                     }
                 } else {
                     LazyVerticalGrid(
                         columns = GridCells.Fixed(5),
+                        state = gridState,
                         modifier = Modifier.weight(1f).fillMaxHeight(),
                         contentPadding = PaddingValues(6.dp),
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
