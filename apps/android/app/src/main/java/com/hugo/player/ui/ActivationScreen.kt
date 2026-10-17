@@ -3,29 +3,23 @@ package com.hugo.player.ui
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import com.hugo.player.DeviceIdentity
 
 @Composable
-fun ActivationScreen(
-    identity: DeviceIdentity.Identity,
-    isTv: Boolean,
-    onActivated: () -> Unit
-) {
-    Column(
-        modifier = Modifier.fillMaxSize().padding(24.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
-    ) {
-        Text("Hugo Player", style = MaterialTheme.typography.headlineLarge)
+fun ActivationScreen(onActivated: (String, String) -> Unit) {
+    // In a real app these would come from Keystore / DataStore
+    var deviceId by remember { mutableStateOf("AA:BB:CC:DD:EE:FF") }
+    var deviceKey by remember { mutableStateOf("ABC12345") }
+
+    Column(Modifier.fillMaxSize().padding(24.dp)) {
+        Text("Ativação", style = MaterialTheme.typography.headlineMedium)
+        Spacer(Modifier.height(16.dp))
+        Text("Device ID: $deviceId")
+        Text("Device Key: $deviceKey")
         Spacer(Modifier.height(24.dp))
-        Text("Device ID: ${identity.deviceId}")
-        Text("Device Key: ${identity.deviceKey}")
-        Spacer(Modifier.height(32.dp))
-        Button(onClick = onActivated) {
-            Text("Continuar para o app")
+        Button(onClick = { onActivated(deviceId, deviceKey) }) {
+            Text("Já ativei no site")
         }
     }
 }
