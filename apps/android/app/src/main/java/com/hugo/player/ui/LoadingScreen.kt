@@ -37,14 +37,15 @@ fun LoadingScreen(
             progress = 0.2f
             val playlistUrl = withTimeoutOrNull(15000) { getPlaylistUrlForLoading(playlistId, deviceId, deviceKey) }
             if (playlistUrl == null) {
-                status = "Lista n\u00e3o encontrada"
+                status = "Lista não encontrada"
                 kotlinx.coroutines.delay(1500)
                 onError()
                 return@LaunchedEffect
             }
-            status = "Carregando canais de $playlistName..."
+            status = "Carregando de $playlistName..."
             progress = 0.5f
-            val result = withTimeoutOrNull(50000) { loadChannelsFromUrl(playlistUrl) }
+            // Load with limit to avoid OOM
+            val result = withTimeoutOrNull(60000) { loadChannelsFromUrl(playlistUrl, limit = 800) }
             if (result == null) {
                 status = "Timeout ao carregar"
                 kotlinx.coroutines.delay(1500)
@@ -59,7 +60,8 @@ fun LoadingScreen(
             LiveTvCache.save(context)
             val live = result.first.count { it.type == "live" }
             val movies = result.first.count { it.type == "movie" }
-            status = "Pronto! $live ao vivo, $movies filmes"
+            val series = result.first.count { it.type == "series" }
+            status = "Pronto! $live TV, $movies filmes, $series séries"
             progress = 1f
             kotlinx.coroutines.delay(600)
             onLoaded()
