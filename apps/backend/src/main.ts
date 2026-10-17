@@ -35,9 +35,6 @@ interface Playlist {
   name: string;
   type: "m3u" | "xtream";
   url: string;
-  username?: string;
-  password?: string;
-  epgUrl?: string;
   createdAt: string;
 }
 
@@ -77,31 +74,29 @@ function verifyKey(key: string, device: Device): boolean {
   return candidate.length === stored.length && timingSafeEqual(candidate, stored);
 }
 
-const deviceIdSchema = z.string().trim().toUpperCase().regex(/^([0-9A-F]{2}:){5}[0-9A-F]{2}$/);
-const deviceKeySchema = z.string().trim().toUpperCase().regex(/^[A-HJ-NP-Z2-9]{8}$/);
+const deviceIdSchema = z.string().trim().toUpperCase();
+const deviceKeySchema = z.string().trim().toUpperCase().min(4).max(16);
 
 const registerSchema = z.object({
   deviceId: deviceIdSchema,
   deviceKey: deviceKeySchema,
   platform: z.enum(["android", "android-tv", "web"]).default("android"),
-  appVersion: z.string().trim().min(1).max(32).optional(),
+  appVersion: z.string().optional(),
 });
 
 const playlistSchema = z.object({
   name: z.string().trim().min(1).max(80),
   type: z.enum(["m3u", "xtream"]).default("m3u"),
-  url: z.string().trim().url(),
-  username: z.string().max(128).optional(),
-  password: z.string().max(128).optional(),
+  url: z.string().trim().min(5),
 });
 
 const app = express();
 app.disable("x-powered-by");
 app.set("trust proxy", 1);
 app.use(helmet());
-app.use(cors({ origin: CORS_ORIGIN === "*" ? true : CORS_ORIGIN.split(",").map(o => o.trim()) }));
+app.use(cors({ origin: true }));
 app.use(express.json({ limit: "32kb" }));
-app.use(rateLimit({ windowMs: 60_000, limit: 120 }));
+app.use(rateLimit({ windowMs: 60_000, limit: 200 }));
 
 app.use("/tmdb", tmdbRouter);
 app.use("/recovery", recoveryRouter);
@@ -113,7 +108,7 @@ app.get("/health", (_req, res) => {
 
 app.post("/devices/register", async (req, res) => {
   const parsed = registerSchema.safeParse(req.body);
-  if (!parsed.success) return res.status(400).json({ error: "validation_error" });
+  if (!parsed.success) return res.status(400).json({ error: "validation_error", details: parsed.error.flatten() });
   const { deviceId, deviceKey, platform, appVersion } = parsed.data;
   const now = new Date();
   const existing = db.devices[deviceId];
@@ -138,11 +133,9 @@ app.post("/devices/register", async (req, res) => {
 function requireDevice(req: Request, res: Response, next: NextFunction) {
   const id = req.header("x-device-id");
   const key = req.header("x-device-key");
-  const parsedId = deviceIdSchema.safeParse(id);
-  const parsedKey = deviceKeySchema.safeParse(key);
-  if (!parsedId.success || !parsedKey.success) return res.status(401).json({ error: "invalid_credentials" });
-  const device = db.devices[parsedId.data];
-  if (!device || !verifyKey(parsedKey.data, device)) return res.status(401).json({ error: "invalid_credentials" });
+  if (!id || !key) return res.status(401).json({ error: "invalid_credentials" });
+  const device = db.devices[id.toUpperCase()];
+  if (!device || !verifyKey(key.toUpperCase(), device)) return res.status(401).json({ error: "invalid_credentials" });
   (req as any).device = device;
   next();
 }
@@ -158,7 +151,7 @@ app.get("/playlists", requireDevice, (req, res) => {
 app.post("/playlists", requireDevice, async (req, res) => {
   const device = (req as any).device as Device;
   const parsed = playlistSchema.safeParse(req.body);
-  if (!parsed.success) return res.status(400).json({ error: "validation_error" });
+  if (!parsed.success) return res.status(400).json({ error: "validation_error", details: parsed.error.flatten() });
   const playlist: Playlist = {
     id: randomUUID(),
     deviceId: device.deviceId,
