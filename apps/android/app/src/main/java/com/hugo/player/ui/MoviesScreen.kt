@@ -16,6 +16,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -36,25 +37,23 @@ fun MoviesScreen(
     var movies by remember { mutableStateOf<List<ChannelEntity>>(emptyList()) }
     var selectedCat by remember { mutableStateOf<String?>(null) }
     var loading by remember { mutableStateOf(true) }
-    var page by remember { mutableStateOf(0) }
 
     LaunchedEffect(playlistId) {
         categories = repo.getCategories(playlistId, "movie")
         selectedCat = categories.firstOrNull()?.name
-        movies = if (selectedCat != null) repo.getChannels(playlistId, "movie", selectedCat, 0, 100) else emptyList()
+        movies = if (selectedCat != null) repo.getChannels(playlistId, "movie", selectedCat, 0, 200) else emptyList()
         loading = false
     }
 
     LaunchedEffect(selectedCat) {
         if (selectedCat != null) {
-            page = 0
-            movies = repo.getChannels(playlistId, "movie", selectedCat, 0, 100)
+            movies = repo.getChannels(playlistId, "movie", selectedCat, 0, 200)
         }
     }
 
     Column(Modifier.fillMaxSize().background(Color(0xFF07080F))) {
-        Row(Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-            Text("Filmes", color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+        Row(Modifier.fillMaxWidth().padding(12.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+            Text("Filmes", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
             Button(onClick = onBack, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEC4899))) { Text("Voltar") }
         }
         if (loading) {
@@ -63,21 +62,21 @@ fun MoviesScreen(
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("Nenhum filme nesta lista", color = Color(0xFF94A3B8)) }
         } else {
             Row(Modifier.fillMaxSize()) {
-                LazyColumn(Modifier.width(160.dp).fillMaxHeight().background(Color(0xFF12141C)), contentPadding = PaddingValues(6.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                LazyColumn(Modifier.width(150.dp).fillMaxHeight().background(Color(0xFF12141C)), contentPadding = PaddingValues(4.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     items(categories) { cat ->
                         val selected = cat.name == selectedCat
-                        Card(onClick = { selectedCat = cat.name }, colors = CardDefaults.cardColors(containerColor = if (selected) Color(0xFFEC4899) else Color(0xFF1E2236)), shape = RoundedCornerShape(6.dp), modifier = Modifier.height(42.dp)) {
-                            Row(Modifier.padding(horizontal = 8.dp).fillMaxSize(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                                Text(cat.name, color = Color.White, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-                                Text("${cat.count}", color = Color(0xFF94A3B8), fontSize = 10.sp)
+                        Card(onClick = { selectedCat = cat.name }, colors = CardDefaults.cardColors(containerColor = if (selected) Color(0xFFEC4899) else Color(0xFF1E2236)), shape = RoundedCornerShape(4.dp), modifier = Modifier.height(38.dp)) {
+                            Row(Modifier.padding(horizontal = 6.dp).fillMaxSize(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                                Text(cat.name, color = Color.White, fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                                Text("${cat.count}", color = Color(0xFF94A3B8), fontSize = 9.sp)
                             }
                         }
                     }
                 }
                 LazyVerticalGrid(
-                    columns = GridCells.Fixed(3),
+                    columns = GridCells.Fixed(5),
                     modifier = Modifier.weight(1f).fillMaxHeight(),
-                    contentPadding = PaddingValues(8.dp),
+                    contentPadding = PaddingValues(6.dp),
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
@@ -85,8 +84,8 @@ fun MoviesScreen(
                         Card(
                             onClick = { onPlay(ch.url, ch.name) },
                             colors = CardDefaults.cardColors(containerColor = Color(0xFF151827)),
-                            shape = RoundedCornerShape(8.dp),
-                            modifier = Modifier.height(160.dp)
+                            shape = RoundedCornerShape(6.dp),
+                            modifier = Modifier.height(150.dp)
                         ) {
                             Column(Modifier.fillMaxSize()) {
                                 Box(Modifier.weight(1f).fillMaxWidth().background(Color(0xFF1E2236))) {
@@ -94,7 +93,7 @@ fun MoviesScreen(
                                         AsyncImage(model = ch.logo, contentDescription = ch.name, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
                                     }
                                 }
-                                Text(ch.name, color = Color.White, fontSize = 10.sp, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(4.dp))
+                                Text(ch.name, color = Color.White, fontSize = 9.sp, maxLines = 2, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(2.dp))
                             }
                         }
                     }
