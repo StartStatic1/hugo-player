@@ -4,6 +4,9 @@ export const channelsRouter = Router();
 
 channelsRouter.get("/", async (req, res) => {
   const playlistUrl = req.query.url as string;
+  const page = parseInt(req.query.page as string) || 0;
+  const limit = parseInt(req.query.limit as string) || 500;
+  const type = req.query.type as string; // live, movie, series, or all
   if (!playlistUrl) return res.status(400).json({ error: "missing_url" });
 
   try {
@@ -17,7 +20,7 @@ channelsRouter.get("/", async (req, res) => {
     if (!response.ok) return res.status(502).json({ error: `upstream_${response.status}` });
     const text = await response.text();
     if (!text || text.length < 10) return res.status(422).json({ error: "empty_playlist" });
-    const parsed = parseM3U(text);
+    const parsed = parseM3U(text, page, limit, type);
     res.json(parsed);
   } catch (e: any) {
     if (e.name === "AbortError") return res.status(504).json({ error: "timeout" });
@@ -29,29 +32,19 @@ function classify(name: string, group: string, url: string): "live" | "movie" | 
   const g = (group || "").toLowerCase().trim();
   const u = (url || "").toLowerCase();
 
-  // Live first
   if (g.startsWith("canais") || g.startsWith("tv ao vivo") || g.startsWith("live") || g.includes("[24h]") || g.includes("globo") || g.includes("record") || g.includes("sbt") || g.includes("band") || g.includes("sport") || g.includes("noticias") || g.includes("telecine") || g.includes("a&e") || g.includes("amc")) return "live";
-
-  // Series
   if (g.startsWith("series") || g.startsWith("séries") || g.startsWith("serie |") || g.includes("novela") || g.includes("dorama") || g.includes("temporada")) return "series";
-
-  // Movies
   if (g.startsWith("filmes") || g.startsWith("filme |") || g.includes("filme")) return "movie";
-
-  // URL path
   if (u.includes("/movie/") || u.includes("/movies/")) return "movie";
   if (u.includes("/series/") || u.includes("/serie/")) return "series";
-
-  // Extension
   if (u.includes(".mp4") || u.includes(".mkv") || u.includes(".avi")) return "movie";
   if (u.includes(".ts")) return "live";
-
   return "live";
 }
 
-function parseM3U(content: string) {
+function parseM3U(content: string, page: number, limit: number, typeFilter?: string) {
   const lines = content.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
-  const channels: { name: string; url: string; logo?: string; group?: string; type: string }[] = [];
+  const allChannels: { name: string; url: string; logo?: string; group?: string; type: string }[] = [];
   const groups = new Map<string, { count: number; type: string }>();
 
   for (let i = 0; i < lines.length; i++) {
@@ -66,7 +59,7 @@ function parseM3U(content: string) {
       const next = lines[i + 1];
       if (next && !next.startsWith("#") && next.startsWith("http")) {
         const type = classify(name, group, next);
-        channels.push({ name, url: next, logo, group, type });
+        allChannels.push({ name, url: next, logo, group, type });
         const existing = groups.get(group);
         if (existing) existing.count++;
         else groups.set(group, { count: 1, type });
@@ -75,6 +68,17 @@ function parseM3U(content: string) {
     }
   }
 
+  // Filter by type if specified
+  let filtered = allChannels;
+  if (typeFilter && typeFilter !== "all") {
+    filtered = allChannels.filter(c => c.type === typeFilter);
+  }
+
+  // Paginate
+  const start = page * limit;
+  const channels = filtered.slice(start, start + limit);
+  const hasMore = start + limit < filtered.length;
+
   const categories = Array.from(groups.entries())
     .map(([name, info]) => ({ name, count: info.count, type: info.type }))
     .sort((a, b) => b.count - a.count);
@@ -82,11 +86,14 @@ function parseM3U(content: string) {
   return {
     channels,
     categories,
-    total: channels.length,
+    total: filtered.length,
+    page,
+    limit,
+    hasMore,
     stats: {
-      live: channels.filter(c => c.type === "live").length,
-      movies: channels.filter(c => c.type === "movie").length,
-      series: channels.filter(c => c.type === "series").length
+      live: allChannels.filter(c => c.type === "live").length,
+      movies: allChannels.filter(c => c.type === "movie").length,
+      series: allChannels.filter(c => c.type === "series").length
     }
   };
 }
