@@ -12,11 +12,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
+import com.hugo.player.data.CatalogRepository
 import kotlinx.coroutines.withTimeoutOrNull
-import org.json.JSONObject
-import java.net.URL
 
 @Composable
 fun LoadingScreen(
@@ -34,7 +31,7 @@ fun LoadingScreen(
     LaunchedEffect(playlistId) {
         try {
             status = "Buscando lista..."
-            progress = 0.2f
+            progress = 0.1f
             val playlistUrl = withTimeoutOrNull(15000) { getPlaylistUrlForLoading(playlistId, deviceId, deviceKey) }
             if (playlistUrl == null) {
                 status = "Lista não encontrada"
@@ -42,29 +39,22 @@ fun LoadingScreen(
                 onError()
                 return@LaunchedEffect
             }
-            status = "Carregando de $playlistName..."
-            progress = 0.5f
-            // Load first page only (200 items) - rest loads on demand
-            val result = withTimeoutOrNull(60000) { loadChannelsFromUrl(playlistUrl, limit = 200) }
-            if (result == null) {
-                status = "Timeout ao carregar"
-                kotlinx.coroutines.delay(1500)
-                onError()
-                return@LaunchedEffect
+            status = "Sincronizando $playlistName..."
+            progress = 0.3f
+            val repo = CatalogRepository(context)
+            withTimeoutOrNull(180000) {
+                repo.syncPlaylist(playlistId, playlistUrl) { msg ->
+                    status = msg
+                    progress += 0.1f
+                }
             }
-            LiveTvCache.channels = result.first
-            LiveTvCache.categories = result.second
-            LiveTvCache.selectedCategory = result.second.firstOrNull()?.name
             LiveTvCache.playlistId = playlistId
             LiveTvCache.playlistName = playlistName
             LiveTvCache.playlistUrl = playlistUrl
             LiveTvCache.save(context)
-            val live = result.first.count { it.type == "live" }
-            val movies = result.first.count { it.type == "movie" }
-            val series = result.first.count { it.type == "series" }
-            status = "Pronto! $live TV, $movies filmes, $series séries"
+            status = "Pronto!"
             progress = 1f
-            kotlinx.coroutines.delay(600)
+            kotlinx.coroutines.delay(400)
             onLoaded()
         } catch (e: Exception) {
             status = "Erro: ${e.message}"
@@ -79,16 +69,16 @@ fun LoadingScreen(
             Spacer(Modifier.height(8.dp))
             Text("M3U", color = Color(0xFF8B5CF6), fontSize = 14.sp)
             Spacer(Modifier.height(32.dp))
-            CircularProgressIndicator(progress = { progress }, color = Color(0xFF8B5CF6), modifier = Modifier.size(56.dp))
+            CircularProgressIndicator(progress = { progress.coerceIn(0f, 1f) }, color = Color(0xFF8B5CF6), modifier = Modifier.size(56.dp))
             Spacer(Modifier.height(16.dp))
             Text(status, color = Color(0xFF94A3B8), fontSize = 14.sp)
         }
     }
 }
 
-suspend fun getPlaylistUrlForLoading(playlistId: String, deviceId: String, deviceKey: String): String? = withContext(Dispatchers.IO) {
+suspend fun getPlaylistUrlForLoading(playlistId: String, deviceId: String, deviceKey: String): String? = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
     try {
-        val url = URL("http://65.21.48.50:8080/playlists")
+        val url = java.net.URL("http://65.21.48.50:8080/playlists")
         val conn = url.openConnection() as java.net.HttpURLConnection
         conn.setRequestProperty("x-device-id", deviceId)
         conn.setRequestProperty("x-device-key", deviceKey)
@@ -96,7 +86,7 @@ suspend fun getPlaylistUrlForLoading(playlistId: String, deviceId: String, devic
         conn.readTimeout = 10000
         if (conn.responseCode !in 200..299) return@withContext null
         val text = conn.inputStream.bufferedReader().readText()
-        val json = JSONObject(text)
+        val json = org.json.JSONObject(text)
         val arr = json.optJSONArray("playlists") ?: return@withContext null
         for (i in 0 until arr.length()) {
             val p = arr.getJSONObject(i)
