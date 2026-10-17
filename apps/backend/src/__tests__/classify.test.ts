@@ -90,3 +90,10 @@ test("catálogo M3U separa live/filmes/séries e agrupa episódios", () => {
   // categorias mantêm contagem
   assert.equal(cat.series.categories.find((x) => x.name === "Séries | Drama")!.count, 1);
 });
+
+test("ids únicos mesmo com entradas repetidas", () => {
+  const dup = "#EXTM3U\n#EXTINF:-1 group-title=\"Canais\",A\nhttp://h.example.test/1.ts\n#EXTINF:-1 group-title=\"Canais\",A\nhttp://h.example.test/1.ts\n";
+  const cat = buildCatalogFromM3U(parseM3U(dup));
+  assert.equal(cat.live.items.length, 2);
+  assert.notEqual(cat.live.items[0].id, cat.live.items[1].id);
+});

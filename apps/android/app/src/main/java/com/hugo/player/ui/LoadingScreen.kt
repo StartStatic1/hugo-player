@@ -13,6 +13,7 @@ import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import com.hugo.player.data.CatalogRepository
 import org.json.JSONObject
 import java.net.URL
 
@@ -42,28 +43,37 @@ fun LoadingScreen(
                 return@LaunchedEffect
             }
 
-            status = "Carregando canais de $playlistName..."
+            status = "Carregando conteúdo de $playlistName..."
             progress = 0.5f
-            val result = withTimeoutOrNull(50000) {
-                loadChannelsFromUrl(playlistUrl)
+            // Catálogo separado (live / filmes / séries) pelo backend
+            val catalog = try {
+                withTimeoutOrNull(120_000) {
+                    CatalogRepository.load(playlistId, deviceId, deviceKey)
+                }
+            } catch (e: Exception) {
+                status = e.message ?: "Erro ao carregar"
+                kotlinx.coroutines.delay(2500)
+                onError()
+                return@LaunchedEffect
             }
-            if (result == null) {
+            if (catalog == null) {
                 status = "Timeout ao carregar"
                 kotlinx.coroutines.delay(1500)
                 onError()
                 return@LaunchedEffect
             }
+            CatalogRepository.playlistName = playlistName
 
-            // Salva no cache global
-            LiveTvCache.channels = result.first
-            LiveTvCache.categories = result.second
-            LiveTvCache.selectedCategory = result.second.firstOrNull()?.name
+            // Mantém o cache antigo preenchido (compatibilidade)
+            LiveTvCache.channels = catalog.live.items.map { Channel(it.name, it.url, it.logo, it.group) }
+            LiveTvCache.categories = catalog.live.categories.map { Category(it.name, it.count) }
+            LiveTvCache.selectedCategory = LiveTvCache.categories.firstOrNull()?.name
             LiveTvCache.playlistId = playlistId
             LiveTvCache.playlistName = playlistName
 
-            status = "Pronto! ${result.first.size} canais"
+            status = "Pronto! ${catalog.live.items.size} canais · ${catalog.movies.items.size} filmes · ${catalog.series.items.size} séries"
             progress = 1f
-            kotlinx.coroutines.delay(600)
+            kotlinx.coroutines.delay(700)
             onLoaded()
         } catch (e: Exception) {
             status = "Erro: ${e.message}"
@@ -76,7 +86,7 @@ fun LoadingScreen(
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text(playlistName, color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold)
             Spacer(Modifier.height(8.dp))
-            Text("M3U", color = Color(0xFF8B5CF6), fontSize = 14.sp)
+            Text("Live · Filmes · Séries", color = Color(0xFF8B5CF6), fontSize = 14.sp)
             Spacer(Modifier.height(32.dp))
             CircularProgressIndicator(
                 progress = { progress },
@@ -91,7 +101,7 @@ fun LoadingScreen(
 
 suspend fun getPlaylistUrlForLoading(playlistId: String, deviceId: String, deviceKey: String): String? = withContext(Dispatchers.IO) {
     try {
-        val url = URL("http://65.21.48.50:8080/playlists")
+        val url = URL("${com.hugo.player.BuildConfig.API_BASE_URL}/playlists")
         val conn = url.openConnection() as java.net.HttpURLConnection
         conn.setRequestProperty("x-device-id", deviceId)
         conn.setRequestProperty("x-device-key", deviceKey)

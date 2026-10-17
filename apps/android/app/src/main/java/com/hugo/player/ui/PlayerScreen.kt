@@ -1,7 +1,6 @@
 package com.hugo.player.ui
 
 import android.content.Context
-import android.net.Uri
 import android.view.KeyEvent as AndroidKeyEvent
 import androidx.activity.compose.BackHandler
 import androidx.annotation.OptIn
@@ -50,21 +49,13 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.media3.common.C
-import androidx.media3.common.MediaItem
-import androidx.media3.common.MimeTypes
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
-import androidx.media3.datasource.DefaultDataSource
-import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.datasource.HttpDataSource
-import androidx.media3.exoplayer.DefaultLoadControl
-import androidx.media3.exoplayer.ExoPlayer
-import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
-import androidx.media3.extractor.DefaultExtractorsFactory
-import androidx.media3.extractor.ts.DefaultTsPayloadReaderFactory
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
+import com.hugo.player.player.HugoPlayerFactory
 import com.hugo.player.player.PlaybackRequest
 import com.hugo.player.player.StreamTypes
 import kotlinx.coroutines.delay
@@ -118,32 +109,14 @@ fun PlayerScreen(request: PlaybackRequest, onBack: () -> Unit) {
 
     val userAgent = remember(current) { current.userAgent ?: playerUserAgent(context) }
 
-    val exoPlayer = remember(userAgent) {
-        val http = DefaultHttpDataSource.Factory()
-            .setUserAgent(userAgent)
-            .setAllowCrossProtocolRedirects(true)
-            .setConnectTimeoutMs(15_000)
-            .setReadTimeoutMs(20_000)
-        val dataSource = DefaultDataSource.Factory(context, http)
-        val extractors = DefaultExtractorsFactory()
-            .setConstantBitrateSeekingEnabled(true)
-            .setTsExtractorFlags(DefaultTsPayloadReaderFactory.FLAG_ALLOW_NON_IDR_KEYFRAMES)
-        val loadControl = DefaultLoadControl.Builder()
-            // buffers pensados para IPTV: começa rápido, segura oscilações
-            .setBufferDurationsMs(15_000, 50_000, 2_000, 4_000)
-            .build()
-        ExoPlayer.Builder(context)
-            .setMediaSourceFactory(DefaultMediaSourceFactory(dataSource, extractors))
-            .setLoadControl(loadControl)
-            .build()
-    }
+    val exoPlayer = remember(userAgent) { HugoPlayerFactory.create(context, userAgent) }
 
     // (Re)carrega a mídia quando o item atual ou o modo HLS forçado muda
     LaunchedEffect(exoPlayer, current, forceHls) {
         errorMsg = null
         errorDetail = null
         loading = true
-        exoPlayer.setMediaItem(buildMediaItem(current.url, forceHls))
+        exoPlayer.setMediaItem(HugoPlayerFactory.mediaItem(current.url, forceHls))
         exoPlayer.prepare()
         exoPlayer.playWhenReady = true
     }
@@ -519,16 +492,6 @@ private fun ErrorPanel(
             OutlinedButton(onClick = onBack) { Text("Voltar", color = Color.White) }
         }
     }
-}
-
-@OptIn(UnstableApi::class)
-private fun buildMediaItem(url: String, forceHls: Boolean): MediaItem {
-    val builder = MediaItem.Builder().setUri(Uri.parse(url))
-    when {
-        forceHls || StreamTypes.detect(url) == StreamTypes.Kind.HLS -> builder.setMimeType(MimeTypes.APPLICATION_M3U8)
-        StreamTypes.detect(url) == StreamTypes.Kind.TS -> builder.setMimeType(MimeTypes.VIDEO_MP2T)
-    }
-    return builder.build()
 }
 
 private fun isRetryable(e: PlaybackException): Boolean = when (e.errorCode) {

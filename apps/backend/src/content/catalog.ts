@@ -115,6 +115,13 @@ export function buildCatalogFromM3U(pl: M3UPlaylist): Catalog {
   const movies: MovieItem[] = [];
   const seriesMap = new Map<string, SeriesItem>();
   let episodes = 0;
+  // Listas M3U repetem entradas com frequência: garante ids únicos
+  const seen = new Map<string, number>();
+  const uniq = (id: string) => {
+    const n = seen.get(id) ?? 0;
+    seen.set(id, n + 1);
+    return n === 0 ? id : `${id}-${n}`;
+  };
 
   for (const e of pl.entries) {
     const { type, episode } = classifyEntry({ name: e.name, group: e.group, url: e.url, attrs: e.attrs });
@@ -124,7 +131,7 @@ export function buildCatalogFromM3U(pl: M3UPlaylist): Catalog {
       const categoryId = liveCats.idFor(group, "live");
       liveCats.bump(group);
       live.push({
-        id: shortId("live", e.url, e.name),
+        id: uniq(shortId("live", e.url, e.name)),
         name: e.name,
         url: e.url,
         logo: e.logo ?? null,
@@ -138,7 +145,7 @@ export function buildCatalogFromM3U(pl: M3UPlaylist): Catalog {
       const categoryId = movieCats.idFor(group, "movie");
       movieCats.bump(group);
       movies.push({
-        id: shortId("movie", e.url),
+        id: uniq(shortId("movie", e.url)),
         name: e.name,
         url: e.url,
         poster: e.logo ?? null,
@@ -172,7 +179,7 @@ export function buildCatalogFromM3U(pl: M3UPlaylist): Catalog {
         s.seasons.push(season);
       }
       season.episodes.push({
-        id: shortId("ep", e.url),
+        id: uniq(shortId("ep", e.url)),
         name: e.name,
         season: info.season,
         episode: info.episode || season.episodes.length + 1,
