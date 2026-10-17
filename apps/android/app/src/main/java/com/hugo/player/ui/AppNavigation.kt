@@ -4,6 +4,9 @@ import androidx.compose.runtime.Composable
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import java.net.URLEncoder
+import java.net.URLDecoder
+import java.nio.charset.StandardCharsets
 
 @Composable
 fun AppNavigation() {
@@ -49,7 +52,9 @@ fun AppNavigation() {
                 deviceId = deviceId,
                 deviceKey = deviceKey,
                 onPlay = { url, title ->
-                    nav.navigate("player/$url/$title")
+                    val encUrl = URLEncoder.encode(url, StandardCharsets.UTF_8.toString())
+                    val encTitle = URLEncoder.encode(title, StandardCharsets.UTF_8.toString())
+                    nav.navigate("player/$encUrl/$encTitle")
                 },
                 onBack = { nav.popBackStack() }
             )
@@ -58,8 +63,10 @@ fun AppNavigation() {
         composable("series") { SeriesScreen(onBack = { nav.popBackStack() }) }
         composable("settings") { SettingsScreen(onBack = { nav.popBackStack() }) }
         composable("player/{url}/{title}") { backStack ->
-            val url = backStack.arguments?.getString("url") ?: ""
-            val title = backStack.arguments?.getString("title") ?: "Canal"
+            val encUrl = backStack.arguments?.getString("url") ?: ""
+            val encTitle = backStack.arguments?.getString("title") ?: "Canal"
+            val url = URLDecoder.decode(encUrl, StandardCharsets.UTF_8.toString())
+            val title = URLDecoder.decode(encTitle, StandardCharsets.UTF_8.toString())
             PlayerScreen(streamUrl = url, title = title, onBack = { nav.popBackStack() })
         }
     }

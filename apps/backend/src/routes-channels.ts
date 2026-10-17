@@ -8,7 +8,7 @@ channelsRouter.get("/", async (req, res) => {
 
   try {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 20000);
+    const timeout = setTimeout(() => controller.abort(), 25000);
 
     const response = await fetch(playlistUrl, {
       signal: controller.signal,
@@ -35,9 +35,17 @@ channelsRouter.get("/", async (req, res) => {
   }
 });
 
+function classifyGroup(group: string): "live" | "movie" | "series" | "other" {
+  const g = group.toLowerCase();
+  if (g.includes("filme") || g.includes("movie") || g.includes("vod") || g.includes("cinema")) return "movie";
+  if (g.includes("serie") || g.includes("series") || g.includes("temporada") || g.includes("season")) return "series";
+  if (g.includes("live") || g.includes("tv") || g.includes("canal") || g.includes("sport") || g.includes("news") || g.includes("infantil") || g.includes("desenho")) return "live";
+  return "other";
+}
+
 function parseM3U(content: string) {
   const lines = content.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
-  const channels: { name: string; url: string; logo?: string; group?: string }[] = [];
+  const channels: { name: string; url: string; logo?: string; group?: string; type: string }[] = [];
   const groups = new Map<string, number>();
 
   for (let i = 0; i < lines.length; i++) {
@@ -50,10 +58,11 @@ function parseM3U(content: string) {
       const name = nameMatch ? nameMatch[1].trim() : "Canal";
       const logo = logoMatch ? logoMatch[1] : undefined;
       const group = groupMatch ? groupMatch[1].trim() : "Outros";
+      const type = classifyGroup(group);
 
       const next = lines[i + 1];
       if (next && !next.startsWith("#") && next.startsWith("http")) {
-        channels.push({ name, url: next, logo, group });
+        channels.push({ name, url: next, logo, group, type });
         groups.set(group, (groups.get(group) || 0) + 1);
         i++;
       }
@@ -61,11 +70,11 @@ function parseM3U(content: string) {
   }
 
   const categories = Array.from(groups.entries())
-    .map(([name, count]) => ({ name, count }))
+    .map(([name, count]) => ({ name, count, type: classifyGroup(name) }))
     .sort((a, b) => b.count - a.count);
 
   return {
-    channels: channels.slice(0, 400),
+    channels: channels.slice(0, 500),
     categories,
     total: channels.length
   };
