@@ -15,6 +15,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import org.json.JSONObject
 import java.net.URL
 
@@ -34,20 +35,36 @@ fun LiveTvScreen(
     var selectedCategory by remember { mutableStateOf<String?>(null) }
     var loading by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf<String?>(null) }
+    var debugInfo by remember { mutableStateOf("") }
 
     LaunchedEffect(playlistId) {
+        loading = true
+        error = null
+        debugInfo = "Buscando playlist..."
         try {
-            val playlistUrl = getPlaylistUrl(playlistId, deviceId, deviceKey)
+            val playlistUrl = withTimeoutOrNull(15000) {
+                getPlaylistUrl(playlistId, deviceId, deviceKey)
+            }
+            debugInfo = "URL: ${playlistUrl ?: "null"}"
             if (playlistUrl != null) {
-                val result = loadChannelsFromUrl(playlistUrl)
-                allChannels = result.first
-                categories = result.second
-                selectedCategory = categories.firstOrNull()?.name
+                debugInfo = "Carregando canais de: $playlistUrl"
+                val result = withTimeoutOrNull(30000) {
+                    loadChannelsFromUrl(playlistUrl)
+                }
+                if (result != null) {
+                    allChannels = result.first
+                    categories = result.second
+                    selectedCategory = categories.firstOrNull()?.name
+                    debugInfo = "Carregados ${allChannels.size} canais, ${categories.size} categorias"
+                } else {
+                    error = "Timeout ao carregar canais"
+                }
             } else {
-                error = "Playlist n\u00e3o encontrada"
+                error = "Playlist n\u00e3o encontrada ou URL inv\u00e1lida"
             }
         } catch (e: Exception) {
-            error = e.message ?: "Erro ao carregar"
+            error = e.message ?: "Erro desconhecido"
+            debugInfo = e.stackTraceToString().take(200)
         }
         loading = false
     }
@@ -71,15 +88,26 @@ fun LiveTvScreen(
 
         if (loading) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = Color(0xFF8B5CF6))
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    CircularProgressIndicator(color = Color(0xFF8B5CF6))
+                    Spacer(Modifier.height(16.dp))
+                    Text(debugInfo, color = Color(0xFF94A3B8), fontSize = 12.sp)
+                }
             }
         } else if (error != null) {
+            Box(Modifier.fillMaxSize().padding(16.dp), contentAlignment = Alignment.Center) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text("Erro: $error", color = Color.Red, fontSize = 16.sp)
+                    Spacer(Modifier.height(8.dp))
+                    Text(debugInfo, color = Color(0xFF94A3B8), fontSize = 12.sp)
+                }
+            }
+        } else if (allChannels.isEmpty()) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("Erro: $error", color = Color.Red)
+                Text("Nenhum canal encontrado\n$debugInfo", color = Color(0xFF94A3B8))
             }
         } else {
             Row(Modifier.fillMaxSize()) {
-                // Categories sidebar
                 LazyColumn(
                     Modifier.width(220.dp).fillMaxHeight().background(Color(0xFF12141C)),
                     contentPadding = PaddingValues(8.dp),
@@ -105,7 +133,6 @@ fun LiveTvScreen(
                     }
                 }
 
-                // Channels list
                 LazyColumn(
                     Modifier.weight(1f).fillMaxHeight(),
                     contentPadding = PaddingValues(12.dp),
@@ -137,8 +164,10 @@ suspend fun getPlaylistUrl(playlistId: String, deviceId: String, deviceKey: Stri
         val conn = url.openConnection() as java.net.HttpURLConnection
         conn.setRequestProperty("x-device-id", deviceId)
         conn.setRequestProperty("x-device-key", deviceKey)
-        conn.connectTimeout = 8000
-        conn.readTimeout = 8000
+        conn.connectTimeout = 10000
+        conn.readTimeout = 10000
+        val code = conn.responseCode
+        if (code !in 200..299) return@withContext null
         val text = conn.inputStream.bufferedReader().readText()
         val json = JSONObject(text)
         val arr = json.optJSONArray("playlists") ?: return@withContext null
@@ -152,16 +181,23 @@ suspend fun getPlaylistUrl(playlistId: String, deviceId: String, deviceKey: Stri
 
 suspend fun loadChannelsFromUrl(playlistUrl: String): Pair<List<Channel>, List<Category>> = withContext(Dispatchers.IO) {
     try {
-        val endpoint = "http://65.21.48.50:8080/channels?url=${java.net.URLEncoder.encode(playlistUrl, "UTF-8")}"
-        val text = URL(endpoint).readText()
+        val encoded = java.net.URLEncoder.encode(playlistUrl, "UTF-8")
+        val endpoint = "http://65.21.48.50:8080/channels?url=$encoded"
+        val url = URL(endpoint)
+        val conn = url.openConnection() as java.net.HttpURLConnection
+        conn.connectTimeout = 15000
+        conn.readTimeout = 25000
+        val code = conn.responseCode
+        if (code !in 200..299) throw Exception("HTTP $code")
+        val text = conn.inputStream.bufferedReader().readText()
         val json = JSONObject(text)
 
         val chArr = json.optJSONArray("channels") ?: return@withContext Pair(emptyList(), emptyList())
         val channels = buildList {
-            for (i in 0 until chArr.length().coerceAtMost(500)) {
+            for (i in 0 until chArr.length().coerceAtMost(300)) {
                 val c = chArr.getJSONObject(i)
                 add(Channel(
-                    c.getString("name"),
+                    c.optString("name", "Canal"),
                     c.getString("url"),
                     c.optString("logo").takeIf { it.isNotEmpty() },
                     c.optString("group", "Outros")
@@ -183,6 +219,6 @@ suspend fun loadChannelsFromUrl(playlistUrl: String): Pair<List<Channel>, List<C
 
         Pair(channels, categories)
     } catch (e: Exception) {
-        Pair(emptyList(), emptyList())
+        throw e
     }
 }
