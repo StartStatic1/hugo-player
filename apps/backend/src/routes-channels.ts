@@ -27,35 +27,28 @@ channelsRouter.get("/", async (req, res) => {
 
 function classify(name: string, group: string, url: string): "live" | "movie" | "series" {
   const g = (group || "").toLowerCase();
-  const n = (name || "").toLowerCase();
   const u = (url || "").toLowerCase();
 
-  // Extension first
-  if (u.includes(".mp4") || u.includes(".mkv") || u.includes(".avi")) return "movie";
-  if (u.includes("/movie/")) return "movie";
+  // Parent prefixes (most reliable)
+  if (g.startsWith("filmes |") || g.startsWith("filmes|") || g.startsWith("filmes /")) return "movie";
+  if (g.startsWith("series |") || g.startsWith("series|") || g.startsWith("séries |") || g.startsWith("series /")) return "series";
+  if (g.startsWith("canais |") || g.startsWith("canais|") || g.startsWith("canais /")) return "live";
+
+  // URL path
+  if (u.includes("/movie/") || u.includes("/movies/")) return "movie";
   if (u.includes("/series/") || u.includes("/serie/")) return "series";
+  if (u.includes("/live/") || u.includes("/channel/")) return "live";
 
-  // Parent groups
-  if (g.startsWith("filmes") || g.startsWith("filme |") || g.startsWith("movies") || g.includes("filmes |")) return "movie";
-  if (g.startsWith("séries") || g.startsWith("series") || g.startsWith("serie |") || g.includes("séries |")) return "series";
-  if (g.startsWith("tv ao vivo") || g.startsWith("live") || g.startsWith("canais") || g.includes("tv |")) return "live";
-
-  // 24H live
-  if (g.startsWith("24h") || g.includes("24 horas") || g.includes("24hrs")) return "live";
-
-  // Genre groups = movies
-  if (g.includes("ação") || g.includes("comédia") || g.includes("drama") || g.includes("terror") || g.includes("romance") || g.includes("animação") || g.includes("suspense") || g.includes("lançamento") || g.includes("legendados")) return "movie";
-
-  // Live groups
-  if (g.includes("telecine") || g.includes("hbo") || g.includes("canais abertos") || g.includes("globo ") || g.includes("rede record") || g.includes("sbt") || g.includes("band ") || g.includes("sport") || g.includes("noticias")) return "live";
-
-  // Series by name
-  if (n.match(/s\d{1,2}e\d{1,2}/i) || g.includes("dorama") || g.includes("temporada")) return "series";
-
-  // .ts default live
+  // Extension
+  if (u.includes(".mp4") || u.includes(".mkv") || u.includes(".avi")) return "movie";
   if (u.includes(".ts")) return "live";
 
-  return "movie";
+  // Fallback by group keywords
+  if (g.includes("filme") || g.includes("movie")) return "movie";
+  if (g.includes("serie") || g.includes("série") || g.includes("dorama") || g.includes("novela")) return "series";
+  if (g.includes("canal") || g.includes("live") || g.includes("24h") || g.includes("globo ") || g.includes("record") || g.includes("sbt") || g.includes("band")) return "live";
+
+  return "live"; // default
 }
 
 function parseM3U(content: string) {
@@ -89,7 +82,7 @@ function parseM3U(content: string) {
     .sort((a, b) => b.count - a.count);
 
   return {
-    channels: channels.slice(0, 800),
+    channels: channels.slice(0, 1000),
     categories,
     total: channels.length,
     stats: {
