@@ -10,13 +10,10 @@ import path from "node:path";
 import { tmdbRouter } from "./routes-tmdb.js";
 import { recoveryRouter } from "./routes-recovery.js";
 import { channelsRouter } from "./routes-channels.js";
-import { createCatalogRouter, type PlaylistResolver } from "./routes-catalog.js";
-import { createEpgRouter } from "./routes-epg.js";
 
 const PORT = Number(process.env.PORT ?? 8080);
 const DATA_FILE = path.resolve(process.env.DATA_FILE ?? "./data/db.json");
 const TRIAL_DAYS = Number(process.env.TRIAL_DAYS ?? 7);
-const CORS_ORIGIN = process.env.CORS_ORIGIN ?? "*";
 
 type LicenseType = "trial" | "premium" | "expired";
 
@@ -110,29 +107,12 @@ app.disable("x-powered-by");
 app.set("trust proxy", 1);
 app.use(helmet());
 app.use(cors({ origin: true }));
-const jsonSmall = express.json({ limit: "32kb" });
-app.use((req, res, next) => (req.path.startsWith("/epg") ? next() : jsonSmall(req, res, next)));
+app.use(express.json({ limit: "32kb" }));
 app.use(rateLimit({ windowMs: 60_000, limit: 200 }));
 
 app.use("/tmdb", tmdbRouter);
 app.use("/recovery", recoveryRouter);
 app.use("/channels", channelsRouter);
-
-const resolvePlaylist: PlaylistResolver = (req) => {
-  const playlistId = (req.query.playlistId as string | undefined) ?? (req.body?.playlistId as string | undefined);
-  if (playlistId) {
-    const device = authDevice(req.header("x-device-id"), req.header("x-device-key"));
-    if (!device) return "unauthorized";
-    const p = db.playlists.find((x) => x.id === playlistId && x.deviceId === device.deviceId);
-    return p ? { url: p.url, type: p.type } : null;
-  }
-  const url = (req.query.url as string | undefined) ?? (req.body?.url as string | undefined);
-  const type = (req.query.type as string | undefined) ?? (req.body?.type as string | undefined);
-  return url ? { url, type } : null;
-};
-
-app.use("/catalog", createCatalogRouter(resolvePlaylist));
-app.use("/epg", express.json({ limit: "256kb" }), createEpgRouter(resolvePlaylist));
 
 app.get("/health", (_req, res) => {
   res.json({ status: "ok", time: new Date().toISOString() });
