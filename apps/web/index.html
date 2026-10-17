@@ -3,210 +3,536 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Hugo Player - Ativação</title>
+<meta name="color-scheme" content="dark">
+<title>Hugo Player · Minhas Playlists</title>
 <style>
 :root {
   --bg: #07080f;
+  --bg2: #0c0e18;
   --card: #12141f;
+  --card2: #181b2a;
   --primary: #8b5cf6;
-  --primary-dark: #7c3aed;
+  --primary2: #7c3aed;
+  --pink: #ec4899;
+  --cyan: #06b6d4;
+  --ok: #34d399;
+  --err: #f87171;
+  --warn: #fbbf24;
   --text: #f1f5f9;
   --muted: #94a3b8;
-  --border: #1e293b;
+  --border: #1f2638;
+  --radius: 16px;
 }
 * { box-sizing: border-box; }
+html, body { margin: 0; }
 body {
-  margin: 0;
-  font-family: system-ui, -apple-system, sans-serif;
-  background: var(--bg);
+  font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  background: radial-gradient(1200px 600px at 10% -10%, #1e1b4b55, transparent), radial-gradient(900px 500px at 110% 10%, #83184355, transparent), var(--bg);
   color: var(--text);
   min-height: 100vh;
 }
-.header {
-  text-align: center;
-  padding: 40px 20px 20px;
+a { color: var(--primary); }
+.hidden { display: none !important; }
+.mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .5px; }
+
+/* Top bar */
+.topbar {
+  position: sticky; top: 0; z-index: 10;
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  padding: 14px 28px; background: #07080fcc; backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--border);
 }
-.logo {
-  font-size: 32px;
-  font-weight: 800;
-  letter-spacing: -0.5px;
+.brand { display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 20px; letter-spacing: -.3px; }
+.brand .mark {
+  width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center;
+  background: linear-gradient(135deg, var(--primary), var(--pink)); box-shadow: 0 6px 24px #8b5cf655;
 }
-.logo span { color: var(--primary); }
-.tagline { color: var(--muted); margin-top: 6px; }
-.container {
-  max-width: 480px;
-  margin: 0 auto;
-  padding: 0 20px 60px;
-}
-.card {
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: 20px;
-  padding: 28px;
-  margin-bottom: 20px;
-}
-h2 { margin: 0 0 6px; font-size: 20px; }
-.desc { color: var(--muted); font-size: 14px; margin: 0 0 24px; }
-label {
-  display: block;
-  font-size: 13px;
-  color: var(--muted);
-  margin: 16px 0 6px;
-  font-weight: 500;
-}
+.brand span { color: var(--primary); }
+.session { display: flex; align-items: center; gap: 12px; color: var(--muted); font-size: 13px; }
+.badge { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; background: var(--card2); border: 1px solid var(--border); color: var(--muted); }
+.badge.trial { color: var(--warn); border-color: #fbbf2440; background: #fbbf2414; }
+.badge.premium { color: var(--ok); border-color: #34d39940; background: #34d39914; }
+.badge.expired { color: var(--err); border-color: #f8717140; background: #f8717114; }
+.badge.lock { color: #c4b5fd; border-color: #8b5cf640; background: #8b5cf614; }
+
+.wrap { max-width: 1100px; margin: 0 auto; padding: 32px 24px 80px; }
+.card { background: linear-gradient(180deg, var(--card), #0f111b); border: 1px solid var(--border); border-radius: var(--radius); padding: 26px; }
+h1 { font-size: 28px; margin: 0 0 6px; letter-spacing: -.5px; }
+h2 { font-size: 18px; margin: 0 0 4px; }
+.desc { color: var(--muted); font-size: 14px; margin: 0 0 20px; line-height: 1.5; }
+
+/* Forms */
+label { display: block; font-size: 12px; color: var(--muted); margin: 14px 0 6px; font-weight: 600; text-transform: uppercase; letter-spacing: .6px; }
 input {
-  width: 100%;
-  padding: 14px 16px;
-  border-radius: 12px;
-  border: 1px solid var(--border);
-  background: #0a0c14;
-  color: var(--text);
-  font-size: 15px;
+  width: 100%; padding: 13px 14px; border-radius: 12px; border: 1px solid var(--border);
+  background: var(--bg2); color: var(--text); font-size: 15px; transition: border-color .15s, box-shadow .15s;
 }
-input:focus { outline: none; border-color: var(--primary); }
-.mono { font-family: ui-monospace, SFMono-Regular, monospace; letter-spacing: 0.5px; }
-button {
-  width: 100%;
-  padding: 16px;
-  border: none;
-  border-radius: 12px;
-  background: var(--primary);
-  color: white;
-  font-size: 16px;
-  font-weight: 600;
-  cursor: pointer;
-  margin-top: 20px;
+input:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px #8b5cf633; }
+.row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.hint { color: var(--muted); font-size: 12px; margin-top: 6px; }
+button { font: inherit; cursor: pointer; border: none; border-radius: 12px; transition: transform .05s, background .15s, opacity .15s; }
+button:active { transform: translateY(1px); }
+button:disabled { opacity: .55; cursor: not-allowed; }
+.btn { padding: 13px 18px; font-weight: 650; font-size: 15px; background: var(--primary); color: #fff; }
+.btn:hover:not(:disabled) { background: var(--primary2); }
+.btn.block { width: 100%; margin-top: 20px; }
+.btn.ghost { background: transparent; color: var(--muted); border: 1px solid var(--border); }
+.btn.ghost:hover:not(:disabled) { color: var(--text); border-color: #334155; background: #ffffff08; }
+.btn.danger { background: #dc2626; }
+.btn.danger:hover:not(:disabled) { background: #b91c1c; }
+.btn.sm { padding: 8px 12px; font-size: 13px; border-radius: 10px; }
+.icon-btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 11px; font-size: 13px; font-weight: 600; border-radius: 10px; background: var(--card2); color: var(--text); border: 1px solid var(--border); }
+.icon-btn:hover { border-color: #3b4560; background: #1e2235; }
+.icon-btn.del:hover { border-color: #dc262680; color: var(--err); }
+.seg { display: inline-flex; padding: 4px; background: var(--bg2); border: 1px solid var(--border); border-radius: 12px; gap: 4px; }
+.seg button { padding: 8px 14px; border-radius: 9px; background: transparent; color: var(--muted); font-weight: 600; font-size: 13px; }
+.seg button.on { background: var(--primary); color: #fff; }
+.check { display: flex; align-items: center; gap: 10px; margin-top: 16px; color: var(--text); font-size: 14px; cursor: pointer; text-transform: none; letter-spacing: 0; font-weight: 500; }
+.check input { width: 18px; height: 18px; accent-color: var(--primary); }
+
+.status { margin-top: 14px; padding: 12px 14px; border-radius: 10px; font-size: 14px; display: none; }
+.status.ok { background: #10b98118; color: var(--ok); display: block; }
+.status.err { background: #ef444418; color: var(--err); display: block; }
+
+/* Login */
+.login { display: grid; grid-template-columns: 1.1fr 1fr; gap: 28px; align-items: center; min-height: calc(100vh - 160px); }
+.hero h1 { font-size: 40px; line-height: 1.1; }
+.hero h1 em { font-style: normal; background: linear-gradient(90deg, var(--primary), var(--pink)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 26px; }
+.step { background: #ffffff06; border: 1px solid var(--border); border-radius: 14px; padding: 14px; font-size: 13px; color: var(--muted); }
+.step b { display: block; color: var(--text); font-size: 14px; margin-bottom: 4px; }
+.step i { font-style: normal; color: var(--primary); font-weight: 800; margin-right: 6px; }
+
+/* Dashboard */
+.dash-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; margin-bottom: 22px; flex-wrap: wrap; }
+.grid { display: grid; grid-template-columns: 380px 1fr; gap: 22px; align-items: start; }
+.pl-list { display: grid; gap: 12px; }
+.pl {
+  display: grid; grid-template-columns: 48px 1fr auto; gap: 14px; align-items: center;
+  padding: 16px; border-radius: 14px; background: var(--card); border: 1px solid var(--border);
 }
-button:hover { background: var(--primary-dark); }
-.status {
-  margin-top: 16px;
-  padding: 14px;
-  border-radius: 10px;
-  font-size: 14px;
-  display: none;
-}
-.status.ok { background: #10b98122; color: #34d399; display: block; }
-.status.err { background: #ef444422; color: #f87171; display: block; }
-.info-box {
-  background: #1e1b4b;
-  border: 1px solid #312e81;
-  border-radius: 12px;
-  padding: 16px;
-  font-size: 14px;
-  color: #c4b5fd;
-  margin-top: 12px;
-}
-.steps { display: flex; gap: 12px; margin-top: 24px; }
-.step {
-  flex: 1;
-  background: #0f172a;
-  border-radius: 12px;
-  padding: 14px;
-  text-align: center;
-  font-size: 13px;
-}
-.step strong { display: block; color: var(--primary); margin-bottom: 4px; }
-.footer {
-  text-align: center;
-  color: var(--muted);
-  font-size: 12px;
-  margin-top: 30px;
+.pl:hover { border-color: #2c3550; }
+.pl .ico { width: 48px; height: 48px; border-radius: 12px; display: grid; place-items: center; font-size: 22px; background: linear-gradient(135deg, #8b5cf633, #ec489933); }
+.pl .name { font-weight: 700; font-size: 16px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pl .meta { color: var(--muted); font-size: 12px; margin-top: 4px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.pl .url { color: var(--muted); font-size: 12px; margin-top: 6px; word-break: break-all; }
+.pl .actions { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+.empty { text-align: center; padding: 48px 20px; color: var(--muted); border: 1px dashed var(--border); border-radius: 14px; }
+.empty .big { font-size: 36px; margin-bottom: 8px; }
+.skeleton { height: 82px; border-radius: 14px; background: linear-gradient(90deg, var(--card) 0%, var(--card2) 50%, var(--card) 100%); background-size: 200% 100%; animation: sh 1.2s infinite; }
+@keyframes sh { to { background-position: -200% 0; } }
+
+/* Modal */
+.modal-bg { position: fixed; inset: 0; background: #000a; backdrop-filter: blur(4px); display: grid; place-items: center; z-index: 50; padding: 20px; }
+.modal { width: 100%; max-width: 420px; }
+.modal .actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 22px; }
+.toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); padding: 12px 18px; border-radius: 12px; background: var(--card2); border: 1px solid var(--border); font-size: 14px; z-index: 60; box-shadow: 0 10px 40px #0008; }
+.toast.ok { border-color: #34d39955; color: var(--ok); }
+.toast.err { border-color: #f8717155; color: var(--err); }
+.footer { text-align: center; color: var(--muted); font-size: 12px; margin-top: 40px; }
+
+@media (max-width: 880px) {
+  .login, .grid { grid-template-columns: 1fr; }
+  .hero h1 { font-size: 30px; }
+  .pl { grid-template-columns: 40px 1fr; }
+  .pl .actions { grid-column: 1 / -1; justify-content: flex-start; }
+  .topbar { padding: 12px 16px; }
+  .session .who { display: none; }
 }
 </style>
 </head>
 <body>
-<div class="header">
-  <div class="logo">Hugo <span>Player</span></div>
-  <div class="tagline">Ative seu dispositivo e comece a assistir</div>
-</div>
+<header class="topbar">
+  <div class="brand"><div class="mark">▶</div>Hugo <span>Player</span></div>
+  <div class="session hidden" id="session">
+    <span class="who mono" id="whoId"></span>
+    <span class="badge" id="licBadge"></span>
+    <button class="btn ghost sm" id="logoutBtn" type="button">Sair</button>
+  </div>
+</header>
 
-<div class="container">
-  <div class="card">
-    <h2>Ativação do Dispositivo</h2>
-    <p class="desc">Cole os dados que aparecem no aplicativo</p>
-
-    <label>Device ID</label>
-    <input id="deviceId" class="mono" placeholder="AA:BB:CC:DD:EE:FF" autocomplete="off">
-
-    <label>Device Key</label>
-    <input id="deviceKey" class="mono" placeholder="8 caracteres" maxlength="8" autocomplete="off">
-
-    <label>URL da Playlist (M3U ou Xtream)</label>
-    <input id="playlistUrl" placeholder="https://...">
-
-    <label>Nome da playlist</label>
-    <input id="playlistName" placeholder="Minha Lista" value="Principal">
-
-    <button onclick="activate()">Ativar Agora</button>
-
-    <div id="status" class="status"></div>
-
-    <div class="info-box">
-      Você pode adicionar várias playlists no mesmo dispositivo. Depois de ativar, é só voltar aqui e ativar outra lista com o mesmo Device ID.
+<main class="wrap">
+  <!-- LOGIN -->
+  <section id="loginView" class="login">
+    <div class="hero">
+      <h1>Gerencie suas listas no <em>Hugo Player</em></h1>
+      <p class="desc">Entre com o Device ID e a Device Key que aparecem na tela do aplicativo para adicionar, renomear, proteger com PIN ou excluir suas playlists.</p>
+      <div class="steps">
+        <div class="step"><b><i>1</i>Abra o app</b>No celular ou na TV</div>
+        <div class="step"><b><i>2</i>Copie ID e Key</b>Mostrados na tela inicial</div>
+        <div class="step"><b><i>3</i>Entre aqui</b>E adicione suas listas</div>
+      </div>
     </div>
-  </div>
+    <form class="card" id="loginForm" autocomplete="off">
+      <h2>Entrar com o dispositivo</h2>
+      <p class="desc">Novo dispositivo? Ele é ativado automaticamente no primeiro acesso.</p>
+      <label for="deviceId">Device ID</label>
+      <input id="deviceId" class="mono" placeholder="A1:B2:C3:D4:E5:F6" maxlength="40" required>
+      <label for="deviceKey">Device Key</label>
+      <input id="deviceKey" class="mono" placeholder="8 caracteres" maxlength="16" required>
+      <button class="btn block" id="loginBtn" type="submit">Entrar</button>
+      <div class="status" id="loginStatus"></div>
+    </form>
+  </section>
 
-  <div class="steps">
-    <div class="step"><strong>1</strong> Abra o app</div>
-    <div class="step"><strong>2</strong> Copie ID e Key</div>
-    <div class="step"><strong>3</strong> Ative aqui</div>
-  </div>
+  <!-- DASHBOARD -->
+  <section id="dashView" class="hidden">
+    <div class="dash-head">
+      <div>
+        <h1>Minhas playlists</h1>
+        <p class="desc" style="margin:0" id="dashSub">Tudo o que você mudar aqui aparece no app ao atualizar a lista.</p>
+      </div>
+      <button class="btn ghost sm" id="refreshBtn" type="button">↻ Atualizar</button>
+    </div>
 
+    <div class="grid">
+      <form class="card" id="addForm" autocomplete="off">
+        <h2>Adicionar playlist</h2>
+        <p class="desc">Cole a URL M3U ou use os dados do seu servidor Xtream.</p>
+        <div class="seg" role="tablist">
+          <button type="button" class="on" data-type="m3u">URL M3U</button>
+          <button type="button" data-type="xtream">Xtream Codes</button>
+        </div>
+        <label for="plName">Nome da playlist</label>
+        <input id="plName" placeholder="Ex.: Minha Lista" maxlength="80" required>
+        <div id="m3uFields">
+          <label for="plUrl">URL M3U</label>
+          <input id="plUrl" placeholder="http://servidor.com/get.php?..." inputmode="url">
+        </div>
+        <div id="xtFields" class="hidden">
+          <label for="xtHost">Servidor (host:porta)</label>
+          <input id="xtHost" placeholder="http://servidor.com:8080" inputmode="url">
+          <div class="row">
+            <div><label for="xtUser">Usuário</label><input id="xtUser" autocomplete="off"></div>
+            <div><label for="xtPass">Senha</label><input id="xtPass" type="password" autocomplete="new-password"></div>
+          </div>
+        </div>
+        <label class="check"><input type="checkbox" id="plPinOn"> Proteger com PIN</label>
+        <div id="pinFields" class="hidden">
+          <label for="plPin">PIN (4 a 8 dígitos)</label>
+          <input id="plPin" class="mono" inputmode="numeric" maxlength="8" placeholder="••••">
+          <div class="hint">O PIN será pedido para ver, editar ou excluir esta lista.</div>
+        </div>
+        <button class="btn block" id="addBtn" type="submit">Adicionar playlist</button>
+        <div class="status" id="addStatus"></div>
+      </form>
+
+      <div>
+        <div class="pl-list" id="plList"></div>
+      </div>
+    </div>
+  </section>
   <div class="footer">Hugo Player • Ativação segura por dispositivo</div>
+</main>
+
+<!-- MODAL GENÉRICO -->
+<div class="modal-bg hidden" id="modalBg">
+  <form class="card modal" id="modalForm" autocomplete="off">
+    <h2 id="mTitle"></h2>
+    <p class="desc" id="mDesc"></p>
+    <div id="mBody"></div>
+    <div class="status" id="mStatus"></div>
+    <div class="actions">
+      <button type="button" class="btn ghost" id="mCancel">Cancelar</button>
+      <button type="submit" class="btn" id="mOk">OK</button>
+    </div>
+  </form>
 </div>
 
 <script>
-const API = "http://65.21.48.50:8080";
+"use strict";
+// Endereço da API: ?api=https://... > window.HUGO_API > padrão do servidor.
+const API = (new URLSearchParams(location.search).get("api") || window.HUGO_API || "http://65.21.48.50:8080").replace(/\/+$/, "");
+const $ = id => document.getElementById(id);
+const ERRORS = {
+  invalid_credentials: "Device ID ou Key incorretos.",
+  device_already_registered: "Device Key incorreta para este dispositivo.",
+  invalid_pin: "PIN incorreto.",
+  pin_required: "Esta playlist exige PIN.",
+  too_many_pin_attempts: "Muitas tentativas. Aguarde um minuto.",
+  playlist_not_found: "Playlist não encontrada.",
+  invalid_url: "URL inválida.",
+  validation_error: "Verifique os campos preenchidos.",
+};
+let session = null;      // { deviceId, deviceKey }
+let playlists = [];
+const unlocked = {};     // id -> { pin, url }  (só em memória)
+let addType = "m3u";
 
-async function activate() {
-  const deviceId = document.getElementById("deviceId").value.trim().toUpperCase();
-  const deviceKey = document.getElementById("deviceKey").value.trim().toUpperCase();
-  const url = document.getElementById("playlistUrl").value.trim();
-  const name = document.getElementById("playlistName").value.trim() || "Principal";
-  const status = document.getElementById("status");
+function esc(s) {
+  return String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+function friendly(err) {
+  if (err && err.details && err.details.fieldErrors) {
+    const f = Object.values(err.details.fieldErrors).flat()[0];
+    if (f) return f;
+  }
+  return ERRORS[err && err.error] || (err && err.error) || "Erro inesperado.";
+}
+async function api(method, path, body, extraHeaders = {}) {
+  const headers = { "Content-Type": "application/json", ...extraHeaders };
+  if (session) { headers["x-device-id"] = session.deviceId; headers["x-device-key"] = session.deviceKey; }
+  let res;
+  try {
+    res = await fetch(API + path, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
+  } catch {
+    throw { error: "Sem conexão com o servidor." };
+  }
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw { status: res.status, ...data };
+  return data;
+}
+function show(el, msg, type) { el.textContent = msg; el.className = "status " + type; }
+function clear(el) { el.textContent = ""; el.className = "status"; }
+let toastTimer;
+function toast(msg, type = "ok") {
+  document.querySelectorAll(".toast").forEach(t => t.remove());
+  const t = document.createElement("div");
+  t.className = "toast " + type; t.textContent = msg; document.body.appendChild(t);
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.remove(), 3200);
+}
 
-  if (!deviceId || !deviceKey || !url) {
-    show("Preencha Device ID, Key e URL da playlist", "err");
+/* ---------- Login ---------- */
+$("loginForm").addEventListener("submit", async e => {
+  e.preventDefault();
+  const deviceId = $("deviceId").value.trim().toUpperCase();
+  const deviceKey = $("deviceKey").value.trim().toUpperCase();
+  const st = $("loginStatus"); clear(st);
+  if (!deviceId || deviceKey.length < 4) return show(st, "Preencha o Device ID e a Device Key.", "err");
+  $("loginBtn").disabled = true; $("loginBtn").textContent = "Entrando...";
+  try {
+    session = null;
+    await api("POST", "/devices/register", { deviceId, deviceKey, platform: "web" });
+    session = { deviceId, deviceKey };
+    sessionStorage.setItem("hugo.session", JSON.stringify(session));
+    await enterDashboard();
+  } catch (err) {
+    session = null;
+    show(st, friendly(err), "err");
+  } finally {
+    $("loginBtn").disabled = false; $("loginBtn").textContent = "Entrar";
+  }
+});
+$("logoutBtn").addEventListener("click", () => {
+  session = null; playlists = [];
+  Object.keys(unlocked).forEach(k => delete unlocked[k]);
+  sessionStorage.removeItem("hugo.session");
+  $("dashView").classList.add("hidden"); $("session").classList.add("hidden");
+  $("loginView").classList.remove("hidden");
+});
+
+async function enterDashboard() {
+  const status = await api("GET", "/devices/status").catch(() => null);
+  $("whoId").textContent = session.deviceId;
+  const lic = status && status.license ? status.license : { type: "trial" };
+  const label = { trial: "Teste", premium: "Premium", expired: "Expirada" }[lic.type] || lic.type;
+  const until = lic.expiresAt ? " até " + new Date(lic.expiresAt).toLocaleDateString("pt-BR") : "";
+  $("licBadge").className = "badge " + lic.type; $("licBadge").textContent = "Licença: " + label + until;
+  $("loginView").classList.add("hidden");
+  $("dashView").classList.remove("hidden"); $("session").classList.remove("hidden");
+  await loadPlaylists();
+}
+
+/* ---------- Lista ---------- */
+async function loadPlaylists() {
+  const box = $("plList");
+  box.innerHTML = '<div class="skeleton"></div><div class="skeleton"></div>';
+  try {
+    const data = await api("GET", "/playlists");
+    playlists = data.playlists || [];
+    render();
+  } catch (err) {
+    if (err.status === 401) { $("logoutBtn").click(); return show($("loginStatus"), "Sessão expirada. Entre novamente.", "err"); }
+    box.innerHTML = '<div class="empty"><div class="big">⚠️</div>' + esc(friendly(err)) + '</div>';
+  }
+}
+function render() {
+  const box = $("plList");
+  $("dashSub").textContent = playlists.length
+    ? playlists.length + (playlists.length === 1 ? " playlist salva." : " playlists salvas.") + " As mudanças aparecem no app ao atualizar."
+    : "Tudo o que você mudar aqui aparece no app ao atualizar a lista.";
+  if (!playlists.length) {
+    box.innerHTML = '<div class="empty"><div class="big">📺</div><b>Nenhuma playlist ainda</b><br>Adicione a primeira no formulário ao lado.</div>';
     return;
   }
-
+  box.innerHTML = playlists.map(p => {
+    const u = unlocked[p.id];
+    const locked = p.protected && !u;
+    const url = p.url || (u && u.url);
+    const date = new Date(p.updatedAt || p.createdAt).toLocaleDateString("pt-BR");
+    return `<div class="pl" data-id="${esc(p.id)}">
+      <div class="ico">${p.protected ? "🔒" : "📺"}</div>
+      <div style="min-width:0">
+        <div class="name">${esc(p.name)}</div>
+        <div class="meta">
+          <span class="badge">${p.type === "xtream" ? "Xtream" : "Lista"}</span>
+          ${p.protected ? '<span class="badge lock">Protegida por PIN</span>' : ""}
+          <span>Atualizada em ${esc(date)}</span>
+        </div>
+        ${locked ? "" : `<div class="url mono">${esc(maskUrl(url))}</div>`}
+      </div>
+      <div class="actions">
+        ${locked ? `<button class="icon-btn" data-act="unlock">🔓 Desbloquear</button>` : ""}
+        <button class="icon-btn" data-act="rename">✏️ Renomear</button>
+        <button class="icon-btn" data-act="pin">${p.protected ? "🔑 PIN" : "🔒 Definir PIN"}</button>
+        <button class="icon-btn del" data-act="delete">🗑 Excluir</button>
+      </div>
+    </div>`;
+  }).join("");
+}
+function maskUrl(url) {
+  if (!url) return "";
   try {
-    const reg = await fetch(API + "/devices/register", {
-      method: "POST",
-      headers: {"Content-Type":"application/json"},
-      body: JSON.stringify({ deviceId, deviceKey, platform:"web" })
-    });
-    if (!reg.ok) {
-      const err = await reg.json();
-      throw new Error(err.error || "Erro no registro");
-    }
+    const u = new URL(url);
+    if (u.searchParams.has("password")) u.searchParams.set("password", "••••");
+    return u.toString().replace(/%E2%80%A2/g, "•");
+  } catch { return url; }
+}
+$("plList").addEventListener("click", e => {
+  const btn = e.target.closest("button[data-act]"); if (!btn) return;
+  const p = playlists.find(x => x.id === btn.closest(".pl").dataset.id); if (!p) return;
+  ({ unlock: unlockFlow, rename: renameFlow, pin: pinFlow, delete: deleteFlow })[btn.dataset.act](p);
+});
+$("refreshBtn").addEventListener("click", loadPlaylists);
 
-    const pl = await fetch(API + "/playlists", {
-      method: "POST",
-      headers: {
-        "Content-Type":"application/json",
-        "x-device-id": deviceId,
-        "x-device-key": deviceKey
-      },
-      body: JSON.stringify({ name, type:"m3u", url })
-    });
-
-    if (!pl.ok) {
-      const err = await pl.json();
-      throw new Error(err.error || "Erro ao adicionar playlist");
-    }
-
-    show("Dispositivo ativado! Abra o app e atualize a lista.", "ok");
-  } catch (e) {
-    show(e.message, "err");
+/* ---------- Adicionar ---------- */
+document.querySelectorAll(".seg button").forEach(b => b.addEventListener("click", () => {
+  addType = b.dataset.type;
+  document.querySelectorAll(".seg button").forEach(x => x.classList.toggle("on", x === b));
+  $("m3uFields").classList.toggle("hidden", addType !== "m3u");
+  $("xtFields").classList.toggle("hidden", addType !== "xtream");
+}));
+$("plPinOn").addEventListener("change", () => $("pinFields").classList.toggle("hidden", !$("plPinOn").checked));
+$("addForm").addEventListener("submit", async e => {
+  e.preventDefault();
+  const st = $("addStatus"); clear(st);
+  const name = $("plName").value.trim();
+  const body = { name, type: addType };
+  if (!name) return show(st, "Dê um nome para a playlist.", "err");
+  if (addType === "m3u") {
+    body.url = $("plUrl").value.trim();
+    if (!body.url) return show(st, "Cole a URL M3U.", "err");
+  } else {
+    body.url = $("xtHost").value.trim(); body.username = $("xtUser").value.trim(); body.password = $("xtPass").value;
+    if (!body.url || !body.username || !body.password) return show(st, "Preencha servidor, usuário e senha.", "err");
   }
+  if ($("plPinOn").checked) {
+    body.pin = $("plPin").value.trim();
+    if (!/^\d{4,8}$/.test(body.pin)) return show(st, "O PIN deve ter de 4 a 8 dígitos.", "err");
+  }
+  $("addBtn").disabled = true;
+  try {
+    const res = await api("POST", "/playlists", body);
+    if (body.pin) unlocked[res.playlist.id] = { pin: body.pin, url: res.playlist.url };
+    $("addForm").reset(); $("pinFields").classList.add("hidden");
+    document.querySelector('.seg button[data-type="m3u"]').click();
+    toast("Playlist adicionada!");
+    await loadPlaylists();
+  } catch (err) {
+    show(st, friendly(err), "err");
+  } finally { $("addBtn").disabled = false; }
+});
+
+/* ---------- Modal ---------- */
+function modal({ title, desc, body = "", ok = "Salvar", danger = false, onSubmit }) {
+  $("mTitle").textContent = title; $("mDesc").textContent = desc || "";
+  $("mBody").innerHTML = body; clear($("mStatus"));
+  $("mOk").textContent = ok; $("mOk").className = "btn" + (danger ? " danger" : ""); $("mOk").disabled = false;
+  $("modalBg").classList.remove("hidden");
+  const first = $("mBody").querySelector("input"); (first || $("mOk")).focus();
+  $("modalForm").onsubmit = async e => {
+    e.preventDefault(); $("mOk").disabled = true;
+    try { await onSubmit(); closeModal(); }
+    catch (err) { show($("mStatus"), friendly(err), "err"); $("mOk").disabled = false; }
+  };
+}
+function closeModal() { $("modalBg").classList.add("hidden"); $("modalForm").onsubmit = null; }
+$("mCancel").addEventListener("click", closeModal);
+$("modalBg").addEventListener("click", e => { if (e.target === $("modalBg")) closeModal(); });
+document.addEventListener("keydown", e => { if (e.key === "Escape") closeModal(); });
+const pinInput = (id, label) => `<label for="${id}">${label}</label><input id="${id}" class="mono" inputmode="numeric" maxlength="8" placeholder="••••">`;
+function pinHeader(p, typed) {
+  const pin = typed ?? (unlocked[p.id] && unlocked[p.id].pin);
+  return pin ? { "x-playlist-pin": pin } : {};
+}
+function needsPinField(p) { return p.protected && !unlocked[p.id]; }
+
+function unlockFlow(p) {
+  modal({
+    title: "Desbloquear playlist", desc: `Digite o PIN de "${p.name}".`, ok: "Desbloquear",
+    body: pinInput("mPin", "PIN"),
+    onSubmit: async () => {
+      const pin = $("mPin").value.trim();
+      const res = await api("POST", `/playlists/${encodeURIComponent(p.id)}/verify-pin`, { pin });
+      unlocked[p.id] = { pin, url: res.playlist.url };
+      render();
+    },
+  });
+}
+function renameFlow(p) {
+  modal({
+    title: "Renomear playlist", ok: "Salvar",
+    body: `<label for="mName">Novo nome</label><input id="mName" maxlength="80" value="${esc(p.name)}">` + (needsPinField(p) ? pinInput("mPin", "PIN da playlist") : ""),
+    onSubmit: async () => {
+      const name = $("mName").value.trim();
+      if (!name) throw { error: "Digite um nome." };
+      const typed = $("mPin") ? $("mPin").value.trim() : undefined;
+      await api("PATCH", `/playlists/${encodeURIComponent(p.id)}`, { name }, pinHeader(p, typed));
+      if (typed) unlocked[p.id] = { pin: typed, url: unlocked[p.id] && unlocked[p.id].url };
+      toast("Nome atualizado."); await loadPlaylists();
+    },
+  });
+}
+function pinFlow(p) {
+  if (!p.protected) {
+    return modal({
+      title: "Proteger com PIN", desc: "O PIN será pedido para ver, editar ou excluir esta playlist (no site e no app).", ok: "Definir PIN",
+      body: pinInput("mNew", "Novo PIN (4 a 8 dígitos)") + pinInput("mNew2", "Confirmar PIN"),
+      onSubmit: async () => {
+        const a = $("mNew").value.trim(), b = $("mNew2").value.trim();
+        if (!/^\d{4,8}$/.test(a)) throw { error: "O PIN deve ter de 4 a 8 dígitos." };
+        if (a !== b) throw { error: "Os PINs não conferem." };
+        const res = await api("PATCH", `/playlists/${encodeURIComponent(p.id)}`, { newPin: a });
+        unlocked[p.id] = { pin: a, url: res.playlist.url };
+        toast("PIN definido."); await loadPlaylists();
+      },
+    });
+  }
+  modal({
+    title: "PIN da playlist", desc: "Troque o PIN ou remova a proteção.", ok: "Salvar",
+    body: (needsPinField(p) ? pinInput("mPin", "PIN atual") : "") + pinInput("mNew", "Novo PIN (deixe vazio para remover)"),
+    onSubmit: async () => {
+      const typed = $("mPin") ? $("mPin").value.trim() : undefined;
+      const n = $("mNew").value.trim();
+      if (n && !/^\d{4,8}$/.test(n)) throw { error: "O PIN deve ter de 4 a 8 dígitos." };
+      const res = await api("PATCH", `/playlists/${encodeURIComponent(p.id)}`, n ? { newPin: n } : { removePin: true }, pinHeader(p, typed));
+      if (n) unlocked[p.id] = { pin: n, url: res.playlist.url }; else delete unlocked[p.id];
+      toast(n ? "PIN alterado." : "Proteção removida."); await loadPlaylists();
+    },
+  });
+}
+function deleteFlow(p) {
+  modal({
+    title: "Excluir playlist?", desc: `"${p.name}" será removida deste dispositivo. Essa ação não pode ser desfeita.`, ok: "Excluir", danger: true,
+    body: needsPinField(p) ? pinInput("mPin", "PIN da playlist") : "",
+    onSubmit: async () => {
+      const typed = $("mPin") ? $("mPin").value.trim() : undefined;
+      await api("DELETE", `/playlists/${encodeURIComponent(p.id)}`, undefined, pinHeader(p, typed));
+      delete unlocked[p.id];
+      toast("Playlist excluída."); await loadPlaylists();
+    },
+  });
 }
 
-function show(msg, type) {
-  const el = document.getElementById("status");
-  el.textContent = msg;
-  el.className = "status " + type;
-}
+/* ---------- Sessão salva (só nesta aba) ---------- */
+(async () => {
+  const params = new URLSearchParams(location.search);
+  if (params.get("id")) $("deviceId").value = params.get("id");
+  try {
+    const saved = JSON.parse(sessionStorage.getItem("hugo.session") || "null");
+    if (saved && saved.deviceId && saved.deviceKey) { session = saved; await enterDashboard(); }
+  } catch { session = null; }
+})();
 </script>
 </body>
 </html>

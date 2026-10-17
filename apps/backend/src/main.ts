@@ -4,12 +4,13 @@ import helmet from "helmet";
 import cors from "cors";
 import rateLimit from "express-rate-limit";
 import { z } from "zod";
-import { randomBytes, randomUUID, scryptSync, timingSafeEqual } from "node:crypto";
+import { randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { tmdbRouter } from "./routes-tmdb.js";
 import { recoveryRouter } from "./routes-recovery.js";
 import { channelsRouter } from "./routes-channels.js";
+import { createPlaylistRouter, type StoredPlaylist } from "./routes-playlists.js";
 
 const PORT = Number(process.env.PORT ?? 8080);
 const DATA_FILE = path.resolve(process.env.DATA_FILE ?? "./data/db.json");
@@ -28,18 +29,9 @@ interface Device {
   lastSeenAt: string;
 }
 
-interface Playlist {
-  id: string;
-  deviceId: string;
-  name: string;
-  type: "m3u" | "xtream";
-  url: string;
-  createdAt: string;
-}
-
 interface Db {
   devices: Record<string, Device>;
-  playlists: Playlist[];
+  playlists: StoredPlaylist[];
 }
 
 let db: Db = { devices: {}, playlists: [] };
@@ -48,6 +40,8 @@ let writeChain: Promise<void> = Promise.resolve();
 async function loadDb(): Promise<void> {
   try {
     db = JSON.parse(await fs.readFile(DATA_FILE, "utf8")) as Db;
+    db.devices ??= {};
+    db.playlists ??= [];
   } catch {
     await fs.mkdir(path.dirname(DATA_FILE), { recursive: true });
     await persist();
@@ -82,25 +76,6 @@ const registerSchema = z.object({
   platform: z.enum(["android", "android-tv", "web"]).default("android"),
   appVersion: z.string().optional(),
 });
-
-const playlistSchema = z.object({
-  name: z.string().trim().min(1).max(80),
-  type: z.enum(["m3u", "xtream"]).default("m3u"),
-  url: z.string().trim().min(5),
-  username: z.string().trim().min(1).max(200).optional(),
-  password: z.string().trim().min(1).max(200).optional(),
-});
-
-function normalizePlaylistUrl(p: z.infer<typeof playlistSchema>): string {
-  if (p.type !== "xtream" || !p.username || !p.password) return p.url;
-  const base = new URL(/^https?:\/\//i.test(p.url) ? p.url : `http://${p.url}`);
-  const u = new URL("/get.php", `${base.protocol}//${base.host}`);
-  u.searchParams.set("username", p.username);
-  u.searchParams.set("password", p.password);
-  u.searchParams.set("type", "m3u_plus");
-  u.searchParams.set("output", "m3u8");
-  return u.toString();
-}
 
 const app = express();
 app.disable("x-powered-by");
@@ -156,36 +131,26 @@ function requireDevice(req: Request, res: Response, next: NextFunction) {
   next();
 }
 
-app.get("/playlists", requireDevice, (req, res) => {
+app.get("/devices/status", requireDevice, (req, res) => {
   const device = (req as any).device as Device;
-  const items = db.playlists.filter(p => p.deviceId === device.deviceId).map(p => ({
-    id: p.id, name: p.name, type: p.type, url: p.url
-  }));
-  res.json({ playlists: items });
+  const expiresAt = device.license.expiresAt ? new Date(device.license.expiresAt) : null;
+  const expired = expiresAt !== null && expiresAt.getTime() < Date.now();
+  res.json({
+    deviceId: device.deviceId,
+    platform: device.platform,
+    license: { type: expired ? "expired" : device.license.type, expiresAt: device.license.expiresAt },
+    playlists: db.playlists.filter(p => p.deviceId === device.deviceId).length,
+    createdAt: device.createdAt,
+    lastSeenAt: device.lastSeenAt,
+  });
 });
 
-app.post("/playlists", requireDevice, async (req, res) => {
-  const device = (req as any).device as Device;
-  const parsed = playlistSchema.safeParse(req.body);
-  if (!parsed.success) return res.status(400).json({ error: "validation_error", details: parsed.error.flatten() });
-  let url: string;
-  try {
-    url = normalizePlaylistUrl(parsed.data);
-  } catch {
-    return res.status(400).json({ error: "invalid_url" });
-  }
-  const playlist: Playlist = {
-    id: randomUUID(),
-    deviceId: device.deviceId,
-    name: parsed.data.name,
-    type: parsed.data.type,
-    url,
-    createdAt: new Date().toISOString(),
-  };
-  db.playlists.push(playlist);
-  await persist();
-  res.status(201).json({ playlist: { id: playlist.id, name: playlist.name } });
-});
+app.use("/playlists", createPlaylistRouter({
+  playlists: () => db.playlists,
+  setPlaylists: next => { db.playlists = next; },
+  persist,
+  authenticate: (id, key) => authDevice(id, key)?.deviceId ?? null,
+}));
 
 app.use((_req, res) => res.status(404).json({ error: "not_found" }));
 

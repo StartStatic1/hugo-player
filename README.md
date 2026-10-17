@@ -117,19 +117,19 @@ Registers a device or refreshes an existing registration (same key required).
 ```
 
 ### `GET /devices/status`  *(auth)*
-Headers `x-device-id`, `x-device-key` (or `?deviceId=&deviceKey=`). Returns `{ "device": {...}, "playlists": 1 }`. `401` on bad credentials.
+Headers `x-device-id`, `x-device-key`. Returns `{ "deviceId", "platform", "license": { "type", "expiresAt" }, "playlists": 1, "createdAt", "lastSeenAt" }`. `401` on bad credentials.
 
-### `GET /playlists`  *(auth)*
-Returns `{ "playlists": [ { "id", "name", "type", "url", "username?", "epgUrl?", "createdAt", "hasPassword" } ] }`. Passwords are never returned.
+### Playlists  *(auth: `x-device-id` + `x-device-key`)*
 
-### `POST /playlists`  *(auth)*
+| Method | Path | Body | Notes |
+| --- | --- | --- | --- |
+| `GET` | `/playlists` | – | `{ playlists: [{ id, name, type, protected, url, createdAt, updatedAt }] }`. `url` is `null` for PIN-protected lists unless header `x-playlist-pin` is correct. |
+| `POST` | `/playlists` | `{ name, type: "m3u"\|"xtream", url, username?, password?, pin? }` | Xtream is converted to `get.php?type=m3u_plus`. `pin` = 4–8 digits (optional). `201`. |
+| `PATCH` | `/playlists/:id` | `{ name?, url?, type?, username?, password?, newPin?, removePin? }` | Rename / change URL / set, change or remove PIN. Protected lists need `x-playlist-pin`. |
+| `DELETE` | `/playlists/:id` | – | Protected lists need `x-playlist-pin`. |
+| `POST` | `/playlists/:id/verify-pin` | `{ pin }` | `200 { ok, playlist }` with the URL, `403 invalid_pin`. Rate limited (20/min per device+IP). |
 
-```json
-{ "name": "Main", "type": "m3u", "url": "https://provider.example/list.m3u" }
-{ "name": "Xtream", "type": "xtream", "url": "http://provider.example:8080", "username": "user", "password": "pass" }
-```
-
-- `201` created · `400` validation · `401` bad credentials · `402` license expired · `409` limit of 20 playlists
+PINs are stored only as scrypt hash + salt (never in plain text). Errors: `400 validation_error`, `401 invalid_credentials`, `403 invalid_pin`, `404 playlist_not_found`, `429 too_many_pin_attempts`.
 
 ### `GET /catalog`  *(Part A — content detection)*
 Fetches the playlist and returns content split into **live / movies / series**, with categories (provider order) and logos.
