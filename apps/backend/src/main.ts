@@ -7,6 +7,7 @@ import { z } from "zod";
 import { randomBytes, randomUUID, scryptSync, timingSafeEqual } from "node:crypto";
 import { promises as fs } from "node:fs";
 import path from "node:path";
+import { tmdbRouter } from "./routes-tmdb.js";
 
 const PORT = Number(process.env.PORT ?? 8080);
 const DATA_FILE = path.resolve(process.env.DATA_FILE ?? "./data/db.json");
@@ -174,6 +175,8 @@ function requireDevice(req: AuthedRequest, res: Response, next: NextFunction) {
   req.device = device;
   next();
 }
+
+app.use("/tmdb", tmdbRouter);
 
 app.get("/health", (_req, res) => {
   res.json({ status: "ok", time: new Date().toISOString() });
