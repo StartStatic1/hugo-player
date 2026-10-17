@@ -19,7 +19,9 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
+import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.ui.PlayerView
 
 @Composable
@@ -30,24 +32,35 @@ fun PlayerScreen(streamUrl: String, title: String, onBack: () -> Unit) {
     var loading by remember { mutableStateOf(true) }
 
     val exoPlayer = remember {
-        ExoPlayer.Builder(context).build().apply {
-            addListener(object : Player.Listener {
-                override fun onPlayerError(error: PlaybackException) {
-                    errorMsg = error.message ?: "Erro ao reproduzir"
-                    loading = false
-                }
-                override fun onPlaybackStateChanged(state: Int) {
-                    loading = state == Player.STATE_BUFFERING
-                    if (state == Player.STATE_READY) errorMsg = null
-                }
-            })
-            val mediaItem = MediaItem.Builder()
-                .setUri(Uri.parse(streamUrl))
-                .build()
-            setMediaItem(mediaItem)
-            prepare()
-            playWhenReady = true
-        }
+        val httpDataSourceFactory = DefaultHttpDataSource.Factory()
+            .setUserAgent("Lavf/60.3.100")
+            .setAllowCrossProtocolRedirects(true)
+            .setConnectTimeoutMs(15000)
+            .setReadTimeoutMs(15000)
+
+        val mediaSourceFactory = DefaultMediaSourceFactory(context)
+            .setDataSourceFactory(httpDataSourceFactory)
+
+        ExoPlayer.Builder(context)
+            .setMediaSourceFactory(mediaSourceFactory)
+            .build().apply {
+                addListener(object : Player.Listener {
+                    override fun onPlayerError(error: PlaybackException) {
+                        errorMsg = error.message ?: "Erro ao reproduzir"
+                        loading = false
+                    }
+                    override fun onPlaybackStateChanged(state: Int) {
+                        loading = state == Player.STATE_BUFFERING
+                        if (state == Player.STATE_READY) errorMsg = null
+                    }
+                })
+                val mediaItem = MediaItem.Builder()
+                    .setUri(Uri.parse(streamUrl))
+                    .build()
+                setMediaItem(mediaItem)
+                prepare()
+                playWhenReady = true
+            }
     }
 
     DisposableEffect(Unit) {
