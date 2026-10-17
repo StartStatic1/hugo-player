@@ -30,6 +30,31 @@ object HugoApi {
         readTimeoutMs: Int = 60_000,
     ): String = request("POST", path, body, deviceId, deviceKey, readTimeoutMs)
 
+    /** PATCH via POST + X-HTTP-Method-Override (HttpURLConnection não suporta PATCH). */
+    suspend fun patch(
+        path: String,
+        body: String,
+        deviceId: String? = null,
+        deviceKey: String? = null,
+        headers: Map<String, String> = emptyMap(),
+    ): String = request("POST", path, body, deviceId, deviceKey, 30_000, headers + ("X-HTTP-Method-Override" to "PATCH"))
+
+    suspend fun delete(
+        path: String,
+        deviceId: String? = null,
+        deviceKey: String? = null,
+        headers: Map<String, String> = emptyMap(),
+    ): String = request("DELETE", path, null, deviceId, deviceKey, 30_000, headers)
+
+    suspend fun send(
+        method: String,
+        path: String,
+        body: String?,
+        deviceId: String?,
+        deviceKey: String?,
+        headers: Map<String, String> = emptyMap(),
+    ): String = request(method, path, body, deviceId, deviceKey, 30_000, headers)
+
     private suspend fun request(
         method: String,
         path: String,
@@ -37,10 +62,12 @@ object HugoApi {
         deviceId: String?,
         deviceKey: String?,
         readTimeoutMs: Int,
+        headers: Map<String, String> = emptyMap(),
     ): String = withContext(Dispatchers.IO) {
         val conn = URL(baseUrl + path).openConnection() as HttpURLConnection
         try {
             conn.requestMethod = method
+            headers.forEach { (k, v) -> conn.setRequestProperty(k, v) }
             conn.connectTimeout = 15_000
             conn.readTimeout = readTimeoutMs
             conn.setRequestProperty("Accept", "application/json")
@@ -66,6 +93,13 @@ object HugoApi {
 
     private fun friendlyApiError(code: Int, apiErr: String?): String = when {
         code == 401 -> "Dispositivo não autorizado. Ative novamente no site."
+        apiErr == "invalid_pin" -> "PIN incorreto."
+        apiErr == "pin_required" -> "Esta playlist exige PIN."
+        apiErr == "too_many_pin_attempts" || code == 429 -> "Muitas tentativas. Aguarde um minuto."
+        apiErr == "playlist_not_found" -> "Playlist não encontrada."
+        apiErr == "invalid_url" -> "URL inválida."
+        apiErr == "validation_error" -> "Verifique os dados informados."
+        code == 404 && apiErr == "not_found" -> "Função indisponível: atualize o servidor do Hugo Player."
         apiErr == "timeout_fetching_playlist" || code == 504 -> "O servidor da lista demorou demais para responder."
         apiErr == "empty_playlist" -> "A lista está vazia ou não é uma M3U válida."
         apiErr == "playlist_too_large" -> "A lista é grande demais."

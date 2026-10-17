@@ -134,6 +134,12 @@ export function createPlaylistRouter(deps: PlaylistDeps): Router {
     return p;
   }
 
+  // Android HttpURLConnection não suporta PATCH: aceita POST + X-HTTP-Method-Override.
+  r.use((req, _res, next) => {
+    const o = String(req.header("x-http-method-override") ?? "").toUpperCase();
+    if (req.method === "POST" && (o === "PATCH" || o === "DELETE")) req.method = o;
+    next();
+  });
   r.use(requireDevice);
 
   r.get("/", (req, res) => {

@@ -83,6 +83,9 @@ test("CRUD completo + PIN", async () => {
     // Editar nome
     assert.equal((await api.call("PATCH", `/${id}`, { name: "  Casa  " })).json.playlist.name, "Casa");
     assert.equal((await api.call("PATCH", `/${id}`, { name: "" })).status, 400);
+    // POST + X-HTTP-Method-Override (app Android)
+    assert.equal((await api.call("POST", `/${id}`, { name: "Casa 2" }, { "x-http-method-override": "PATCH" })).json.playlist.name, "Casa 2");
+    assert.equal((await api.call("PATCH", `/${id}`, { name: "Casa" })).json.playlist.name, "Casa");
     // Protegida exige PIN para editar
     assert.equal((await api.call("PATCH", `/${pid}`, { name: "X" })).status, 403);
     assert.equal((await api.call("PATCH", `/${pid}`, { name: "X" }, { "x-playlist-pin": "4321" })).status, 200);

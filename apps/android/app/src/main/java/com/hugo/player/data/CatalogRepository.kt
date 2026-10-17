@@ -23,8 +23,14 @@ class CatalogRepository(private val context: Context) {
         fun clearAll() {}
     }
 
-    suspend fun syncPlaylist(playlistId: String, playlistUrl: String, onProgress: (String) -> Unit = {}) = withContext(Dispatchers.IO) {
+    suspend fun syncPlaylist(
+        playlistId: String,
+        playlistUrl: String,
+        onProgress: (String) -> Unit = {},
+        onFraction: (Float?) -> Unit = {},
+    ) = withContext(Dispatchers.IO) {
         onProgress("Baixando lista...")
+        onFraction(null)
         val encoded = java.net.URLEncoder.encode(playlistUrl, "UTF-8")
         val endpoint = "http://65.21.48.50:8080/channels?url=$encoded&limit=100000"
         val conn = URL(endpoint).openConnection() as java.net.HttpURLConnection
@@ -35,6 +41,7 @@ class CatalogRepository(private val context: Context) {
         val json = JSONObject(text)
 
         onProgress("Salvando no banco...")
+        onFraction(0f)
         dao.deleteChannels(playlistId)
         dao.deleteCategories(playlistId)
 
@@ -54,6 +61,7 @@ class CatalogRepository(private val context: Context) {
                 dao.insertChannels(channels.toList())
                 channels.clear()
                 onProgress("Salvando... ${i}/${chArr.length()}")
+                onFraction(i.toFloat() / chArr.length().coerceAtLeast(1))
             }
         }
         if (channels.isNotEmpty()) dao.insertChannels(channels)
@@ -72,7 +80,14 @@ class CatalogRepository(private val context: Context) {
             }
             dao.insertCategories(categories)
         }
+        onFraction(1f)
         onProgress("Pronto! ${chArr.length()} itens")
+    }
+
+    /** Apaga do aparelho o catálogo salvo de uma playlist. */
+    suspend fun deletePlaylist(playlistId: String) = withContext(Dispatchers.IO) {
+        dao.deleteChannels(playlistId)
+        dao.deleteCategories(playlistId)
     }
 
     suspend fun getChannels(playlistId: String, type: String, group: String? = null, page: Int = 0, pageSize: Int = 100) =
