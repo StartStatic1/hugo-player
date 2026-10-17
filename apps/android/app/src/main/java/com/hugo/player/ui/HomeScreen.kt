@@ -20,75 +20,65 @@ fun HomeScreen(onNavigate: (String) -> Unit) {
             .fillMaxSize()
             .background(
                 Brush.radialGradient(
-                    listOf(Color(0xFF1A0A2E), Color(0xFF0B0D17))
+                    listOf(Color(0xFF1A0A2E), Color(0xFF07080F))
                 )
             )
     ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(32.dp),
+                .padding(48.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
             Text(
-                text = "Hugo Player",
+                "Hugo Player",
                 color = Color.White,
-                fontSize = 36.sp,
+                fontSize = 42.sp,
                 fontWeight = FontWeight.Bold
             )
             Spacer(Modifier.height(48.dp))
 
             Row(
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                horizontalArrangement = Arrangement.spacedBy(20.dp),
                 modifier = Modifier.fillMaxWidth()
             ) {
-                PlayerTile(
-                    title = "TV ao Vivo",
-                    modifier = Modifier.weight(1.4f).height(180.dp),
-                    onClick = { onNavigate("live") }
-                )
+                BigTile("TV ao Vivo", Modifier.weight(1.5f).height(200.dp)) { onNavigate("live") }
                 Column(
                     modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                    verticalArrangement = Arrangement.spacedBy(20.dp)
                 ) {
-                    PlayerTile("Filmes", onClick = { onNavigate("movies") })
-                    PlayerTile("Séries", onClick = { onNavigate("series") })
+                    BigTile("Filmes") { onNavigate("movies") }
+                    BigTile("Séries") { onNavigate("series") }
                 }
             }
 
-            Spacer(Modifier.height(16.dp))
-
+            Spacer(Modifier.height(20.dp))
             Row(
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                horizontalArrangement = Arrangement.spacedBy(20.dp),
                 modifier = Modifier.fillMaxWidth()
             ) {
-                PlayerTile("Conta", modifier = Modifier.weight(1f), onClick = { onNavigate("settings") })
-                PlayerTile("Configurações", modifier = Modifier.weight(1f), onClick = { onNavigate("settings") })
+                BigTile("Conta", Modifier.weight(1f)) { onNavigate("settings") }
+                BigTile("Configurações", Modifier.weight(1f)) { onNavigate("settings") }
             }
         }
     }
 }
 
 @Composable
-private fun PlayerTile(
+private fun BigTile(
     title: String,
     modifier: Modifier = Modifier,
     onClick: () -> Unit
 ) {
     Card(
         onClick = onClick,
-        modifier = modifier.height(90.dp),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF2A1B3D).copy(alpha = 0.85f))
+        modifier = modifier.height(100.dp),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF2A1B3D).copy(alpha = 0.9f))
     ) {
-        Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
-            Text(
-                text = title,
-                color = Color.White,
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Medium
-            )
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Text(title, color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Medium)
         }
     }
 }
