@@ -1,117 +1,78 @@
 package com.hugo.player.data
 
 import android.content.Context
+import com.hugo.player.data.db.CategoryEntity
+import com.hugo.player.data.db.ChannelEntity
+import com.hugo.player.data.db.HugoDatabase
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
+import java.net.URL
 
-/**
- * Carrega o catálogo (live / filmes / séries) da playlist pelo backend.
- * Ordem: memória -> disco (dentro da validade) -> rede. Se a rede falhar,
- * usa o cache em disco mesmo vencido (modo offline).
- */
-object CatalogRepository {
-    data class Key(val playlistId: String, val deviceId: String, val deviceKey: String)
+class CatalogRepository(private val context: Context) {
+    private val db = HugoDatabase.get(context)
+    private val dao = db.channelDao()
 
-    enum class Origin { MEMORY, DISK, NETWORK, STALE_DISK }
+    suspend fun syncPlaylist(playlistId: String, playlistUrl: String, onProgress: (String) -> Unit = {}) = withContext(Dispatchers.IO) {
+        onProgress("Baixando lista...")
+        val encoded = java.net.URLEncoder.encode(playlistUrl, "UTF-8")
+        val endpoint = "http://65.21.48.50:8080/channels?url=$encoded&limit=50000"
+        val conn = URL(endpoint).openConnection() as java.net.HttpURLConnection
+        conn.connectTimeout = 30000
+        conn.readTimeout = 120000
+        if (conn.responseCode !in 200..299) throw Exception("HTTP ${conn.responseCode}")
+        val text = conn.inputStream.bufferedReader().readText()
+        val json = JSONObject(text)
 
-    @Volatile var key: Key? = null
-        private set
-    @Volatile var catalog: Catalog? = null
-        private set
-    @Volatile var playlistName: String? = null
-    /** De onde veio o catálogo atual e quando foi gerado (para mostrar "atualizado há…"). */
-    @Volatile var origin: Origin = Origin.NETWORK
-        private set
-    @Volatile var savedAt: Long = 0L
-        private set
+        onProgress("Salvando no banco...")
+        dao.deleteChannels(playlistId)
+        dao.deleteCategories(playlistId)
 
-    private val seriesDetails = HashMap<String, SeriesDetails>()
-
-    fun init(context: Context) {
-        AppSettings.init(context)
-        DiskCache.init(context)
-    }
-
-    private fun variant() = AppSettings.liveFormat
-
-    fun hasDiskCache(playlistId: String): Boolean = DiskCache.savedAt(playlistId, variant()) != null
-
-    fun cached(playlistId: String): Catalog? = catalog.takeIf { key?.playlistId == playlistId }
-
-    /** Existe cache em disco válido para abrir direto? */
-    fun hasFreshDiskCache(playlistId: String): Boolean {
-        val at = DiskCache.savedAt(playlistId, variant()) ?: return false
-        return System.currentTimeMillis() - at < AppSettings.catalogTtlHours * 3_600_000L
-    }
-
-    suspend fun load(playlistId: String, deviceId: String, deviceKey: String, force: Boolean = false): Catalog {
-        val k = Key(playlistId, deviceId, deviceKey)
-        if (!force) cached(playlistId)?.let { origin = Origin.MEMORY; return it }
-
-        val disk = withContext(Dispatchers.IO) { DiskCache.read(playlistId, variant()) }
-        val ttlMs = AppSettings.catalogTtlHours * 3_600_000L
-        if (!force && disk != null && disk.ageMs() < ttlMs) {
-            val parsed = withContext(Dispatchers.Default) { parseCatalog(disk.catalog) }
-            set(k, parsed, Origin.DISK, disk.savedAt)
-            if (playlistName == null) playlistName = disk.playlistName
-            return parsed
-        }
-
-        return try {
-            val refresh = if (force) "&refresh=1" else ""
-            val text = HugoApi.get(
-                "/catalog?playlistId=${HugoApi.enc(playlistId)}&liveFormat=${variant()}$refresh",
-                deviceId, deviceKey, readTimeoutMs = 120_000
-            )
-            val (json, parsed) = withContext(Dispatchers.Default) {
-                val j = JSONObject(text)
-                j to parseCatalog(j)
+        val chArr = json.optJSONArray("channels") ?: return@withContext
+        val channels = mutableListOf<ChannelEntity>()
+        for (i in 0 until chArr.length()) {
+            val c = chArr.getJSONObject(i)
+            channels.add(ChannelEntity(
+                name = c.optString("name", "Canal"),
+                url = c.getString("url"),
+                logo = c.optString("logo").takeIf { it.isNotEmpty() },
+                group = c.optString("group", "Outros"),
+                type = c.optString("type", "live"),
+                playlistId = playlistId
+            ))
+            if (channels.size >= 500) {
+                dao.insertChannels(channels.toList())
+                channels.clear()
             }
-            withContext(Dispatchers.IO) { DiskCache.write(playlistId, variant(), json, playlistName) }
-            set(k, parsed, Origin.NETWORK, System.currentTimeMillis())
-            parsed
-        } catch (e: Exception) {
-            // Sem rede / servidor fora: usa o que tiver em disco
-            if (disk == null) throw e
-            val parsed = withContext(Dispatchers.Default) { parseCatalog(disk.catalog) }
-            set(k, parsed, Origin.STALE_DISK, disk.savedAt)
-            if (playlistName == null) playlistName = disk.playlistName
-            parsed
         }
+        if (channels.isNotEmpty()) dao.insertChannels(channels)
+
+        val catArr = json.optJSONArray("categories")
+        if (catArr != null) {
+            val categories = mutableListOf<CategoryEntity>()
+            for (i in 0 until catArr.length()) {
+                val c = catArr.getJSONObject(i)
+                categories.add(CategoryEntity(
+                    name = c.getString("name"),
+                    count = c.optInt("count", 0),
+                    type = c.optString("type", "live"),
+                    playlistId = playlistId
+                ))
+            }
+            dao.insertCategories(categories)
+        }
+        onProgress("Pronto!")
     }
 
-    fun set(k: Key, c: Catalog, from: Origin = Origin.NETWORK, at: Long = System.currentTimeMillis()) {
-        if (key?.playlistId != k.playlistId) synchronized(seriesDetails) { seriesDetails.clear() }
-        key = k
-        catalog = c
-        origin = from
-        savedAt = at
-    }
-
-    /** Limpa memória e disco (Configurações > Limpar cache). */
-    fun clearAll() {
-        catalog = null
-        key = null
-        synchronized(seriesDetails) { seriesDetails.clear() }
-        DiskCache.clear()
-    }
-
-    /** Temporadas/episódios de uma série (Xtream busca sob demanda; M3U já vem agrupado). */
-    suspend fun seriesDetails(series: Series): SeriesDetails {
-        if (series.seriesId == null && series.seasons.isNotEmpty()) {
-            return SeriesDetails(series.name, series.cover, series.plot, series.year, series.rating, series.seasons)
+    suspend fun getChannels(playlistId: String, type: String, group: String? = null, page: Int = 0, pageSize: Int = 50) =
+        withContext(Dispatchers.IO) {
+            if (group != null) dao.getByTypeAndGroup(playlistId, type, group, pageSize, page * pageSize)
+            else dao.getByType(playlistId, type, pageSize, page * pageSize)
         }
-        synchronized(seriesDetails) { seriesDetails[series.id] }?.let { return it }
-        val k = key ?: throw ApiException(400, "Playlist não carregada")
-        val text = HugoApi.get(
-            "/catalog/series/${HugoApi.enc(series.id)}?playlistId=${HugoApi.enc(k.playlistId)}",
-            k.deviceId, k.deviceKey
-        )
-        val d = withContext(Dispatchers.Default) { parseSeriesDetails(JSONObject(text)) }.let {
-            it.copy(name = it.name.ifBlank { series.name }, cover = it.cover ?: series.cover, plot = it.plot ?: series.plot)
-        }
-        synchronized(seriesDetails) { seriesDetails[series.id] = d }
-        return d
-    }
+
+    suspend fun getCategories(playlistId: String, type: String) =
+        withContext(Dispatchers.IO) { dao.getCategories(playlistId, type) }
+
+    suspend fun count(playlistId: String, type: String) =
+        withContext(Dispatchers.IO) { dao.countByType(playlistId, type) }
 }
