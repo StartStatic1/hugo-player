@@ -8,7 +8,7 @@ channelsRouter.get("/", async (req, res) => {
 
   try {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 30000);
+    const timeout = setTimeout(() => controller.abort(), 45000);
     const response = await fetch(playlistUrl, {
       signal: controller.signal,
       headers: { "User-Agent": "TiviMate/4.7.0 (Android 11; NVIDIA SHIELD TV Pro)" }
@@ -27,37 +27,33 @@ channelsRouter.get("/", async (req, res) => {
 
 function classify(name: string, group: string, url: string): "live" | "movie" | "series" {
   const g = (group || "").toLowerCase();
-  const n = (name || "").toLowerCase();
   const u = (url || "").toLowerCase();
 
-  // URL path is most reliable
-  if (u.includes("/movie/") || u.includes("/movies/")) return "movie";
-  if (u.includes("/series/") || u.includes("/serie/")) return "series";
-  if (u.includes("/live/") || u.includes("/channel/")) return "live";
-
-  // Extension
-  if (u.includes(".mp4") || u.includes(".mkv") || u.includes(".avi")) return "movie";
-
-  // Parent prefixes
+  // Parent prefixes first (most reliable)
   if (g.startsWith("filmes |") || g.startsWith("filmes|") || g.startsWith("filmes /") || g.startsWith("filmes")) return "movie";
   if (g.startsWith("series |") || g.startsWith("series|") || g.startsWith("séries |") || g.startsWith("series") || g.startsWith("séries")) return "series";
   if (g.startsWith("canais |") || g.startsWith("canais|") || g.startsWith("canais") || g.startsWith("tv ao vivo")) return "live";
 
-  // Series indicators
-  if (g.includes("serie") || g.includes("série") || g.includes("dorama") || g.includes("novela") || g.includes("temporada") || n.match(/s\d{1,2}e\d{1,2}/i)) return "series";
+  // URL path
+  if (u.includes("/movie/") || u.includes("/movies/")) return "movie";
+  if (u.includes("/series/") || u.includes("/serie/")) return "series";
 
-  // Movie indicators (genres, streaming services)
-  if (g.includes("filme") || g.includes("movie") || g.includes("ação") || g.includes("comédia") || g.includes("drama") || g.includes("terror") || g.includes("romance") || g.includes("animação") || g.includes("suspense") || g.includes("lançamento") || g.includes("legendados") || g.includes("netflix") || g.includes("prime") || g.includes("disney") || g.includes("hbo") || g.includes("apple tv") || g.includes("crunchyroll") || g.includes("paramount") || g.includes("globoplay") || g.includes("look") || g.includes("directv")) return "movie";
+  // Extension
+  if (u.includes(".mp4") || u.includes(".mkv") || u.includes(".avi")) return "movie";
+
+  // Novelas = series
+  if (g.includes("novela")) return "series";
 
   // Live indicators
-  if (g.includes("canal") || g.includes("live") || g.includes("24h") || g.includes("globo ") || g.includes("record") || g.includes("sbt") || g.includes("band") || g.includes("sport") || g.includes("noticias") || g.includes("telecine") || u.includes(".ts")) return "live";
+  if (g.includes("24h") || g.includes("globo ") || g.includes("record") || g.includes("sbt") || g.includes("band") || g.includes("sport") || g.includes("noticias") || g.includes("telecine") || g.includes("hbo") || g.includes("a&e") || g.includes("amc") || u.includes(".ts")) return "live";
 
-  return "movie"; // default VOD
+  // Default
+  return "live";
 }
 
 function parseM3U(content: string) {
   const lines = content.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
-  const channels: { name: string; url: string; logo?: string; group?: string; type: string }[] = [];
+  const allChannels: { name: string; url: string; logo?: string; group?: string; type: string }[] = [];
   const groups = new Map<string, { count: number; type: string }>();
 
   for (let i = 0; i < lines.length; i++) {
@@ -72,7 +68,7 @@ function parseM3U(content: string) {
       const next = lines[i + 1];
       if (next && !next.startsWith("#") && next.startsWith("http")) {
         const type = classify(name, group, next);
-        channels.push({ name, url: next, logo, group, type });
+        allChannels.push({ name, url: next, logo, group, type });
         const existing = groups.get(group);
         if (existing) existing.count++;
         else groups.set(group, { count: 1, type });
@@ -81,18 +77,24 @@ function parseM3U(content: string) {
     }
   }
 
+  // Prioritize VOD: take more movies/series, fewer live
+  const movies = allChannels.filter(c => c.type === "movie").slice(0, 800);
+  const series = allChannels.filter(c => c.type === "series").slice(0, 800);
+  const live = allChannels.filter(c => c.type === "live").slice(0, 400);
+  const channels = [...movies, ...series, ...live];
+
   const categories = Array.from(groups.entries())
     .map(([name, info]) => ({ name, count: info.count, type: info.type }))
     .sort((a, b) => b.count - a.count);
 
   return {
-    channels: channels.slice(0, 1500),
+    channels,
     categories,
-    total: channels.length,
+    total: allChannels.length,
     stats: {
-      live: channels.filter(c => c.type === "live").length,
-      movies: channels.filter(c => c.type === "movie").length,
-      series: channels.filter(c => c.type === "series").length
+      live: allChannels.filter(c => c.type === "live").length,
+      movies: allChannels.filter(c => c.type === "movie").length,
+      series: allChannels.filter(c => c.type === "series").length
     }
   };
 }
