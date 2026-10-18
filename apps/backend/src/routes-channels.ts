@@ -42,6 +42,15 @@ channelsRouter.get("/latest.apk", (_req, res) => {
 });
 
 channelsRouter.get("/version", (_req, res) => {
+  try {
+    const fs = require("fs");
+    const path = require("path");
+    const file = path.join(process.cwd(), "update.json");
+    if (fs.existsSync(file)) {
+      const data = JSON.parse(fs.readFileSync(file, "utf8"));
+      return res.json(data);
+    }
+  } catch {}
   res.json({
     versionCode: 2,
     versionName: "0.2.0",
