@@ -109,7 +109,7 @@ fun SeriesDetailScreen(
                 }
                 episodes = list
             } catch (ex: Exception) {
-                errorMsg = "Erro ao carregar episódios: ${ex.message}\nURL: $endpoint"
+                errorMsg = "Erro: ${ex.javaClass.simpleName}: ${ex.message}\nURL: $endpoint"
                 episodes = local
             }
         } else {
