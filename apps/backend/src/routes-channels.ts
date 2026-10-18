@@ -45,7 +45,7 @@ channelsRouter.get("/version", (_req, res) => {
   try {
     const fs = require("fs");
     const path = require("path");
-    const file = path.join(__dirname, "..", "update.json");
+    const file = "/root/hugo-player/apps/backend/update.json";
     if (fs.existsSync(file)) {
       const data = JSON.parse(fs.readFileSync(file, "utf8"));
       return res.json(data);
