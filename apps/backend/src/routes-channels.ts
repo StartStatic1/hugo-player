@@ -1,4 +1,5 @@
 import { Router } from "express";
+import fs from "fs";
 import { classifyEntry, parseEpisode } from "./content/classify.js";
 import { parseXtreamUrl, buildCatalogFromXtream, fetchSeriesInfo } from "./content/xtream.js";
 
@@ -43,7 +44,6 @@ channelsRouter.get("/latest.apk", (_req, res) => {
 
 channelsRouter.get("/version", (_req, res) => {
   try {
-    const fs = require("fs");
     const file = "/root/hugo-player/apps/backend/update.json";
     if (fs.existsSync(file)) {
       const data = JSON.parse(fs.readFileSync(file, "utf8"));
