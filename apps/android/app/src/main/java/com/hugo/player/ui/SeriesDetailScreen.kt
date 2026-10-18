@@ -31,6 +31,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.SubcomposeAsyncImage
+import com.hugo.player.data.AppSettings
 import com.hugo.player.data.CatalogRepository
 import org.json.JSONObject
 import java.net.URL
