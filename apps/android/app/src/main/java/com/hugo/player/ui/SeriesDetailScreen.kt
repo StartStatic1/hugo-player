@@ -16,6 +16,8 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -72,7 +74,7 @@ fun SeriesDetailScreen(
     val listState = rememberLazyListState()
 
     LaunchedEffect(playlistId, seriesName) {
-        val local = repo.episodes(playlistId, seriesName)
+        val local = withContext(Dispatchers.IO) { repo.episodes(playlistId, seriesName) }
         val marker = local.firstOrNull()?.url
         if (marker != null && marker.startsWith("xtream://series/")) {
             val seriesId = marker.removePrefix("xtream://series/")
@@ -82,7 +84,7 @@ fun SeriesDetailScreen(
             val encoded = java.net.URLEncoder.encode(plUrl, "UTF-8")
             val endpoint = "${com.hugo.player.data.HugoApi.baseUrl}/channels/series-episodes?url=$encoded&seriesId=$seriesId"
             try {
-                val conn = URL(endpoint).openConnection() as java.net.HttpURLConnection
+                val conn = withContext(Dispatchers.IO) { URL(endpoint).openConnection() as java.net.HttpURLConnection }
                 conn.connectTimeout = 20000
                 conn.readTimeout = 30000
                 val code = conn.responseCode
