@@ -155,13 +155,14 @@ fun SeriesDetailScreen(
         Row(Modifier.fillMaxSize().padding(24.dp)) {
             // Coluna do pôster
             Column(Modifier.width(220.dp)) {
-                HugoIconButton(Icons.AutoMirrored.Filled.ArrowBack, "Voltar", onClick = onBack, label = "Voltar")
+                HugoIconButton(Icons.AutoMirrored.Filled.ArrowBack, "Voltar", onClick = onBack, label = "Voltar", modifier = Modifier.padding(8.dp))
                 Spacer(Modifier.height(16.dp))
                 Box(
                     Modifier.fillMaxWidth().aspectRatio(2f / 3f).clip(RoundedCornerShape(14.dp)).background(HugoColors.Card),
                     contentAlignment = Alignment.Center
                 ) {
                     errorMsg?.let { Text(it, color = Color(0xFFF87171), fontSize = 12.sp, modifier = Modifier.padding(8.dp)) }
+            Text("Sinopse disponível em breve", color = HugoColors.TextMuted, fontSize = 12.sp, modifier = Modifier.padding(bottom = 8.dp))
             Text(seriesName, color = HugoColors.TextDim, fontSize = 14.sp, modifier = Modifier.padding(12.dp))
                     if (poster != null) SubcomposeAsyncImage(model = poster, contentDescription = seriesName, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
                 }
@@ -169,6 +170,7 @@ fun SeriesDetailScreen(
             Spacer(Modifier.width(28.dp))
             Column(Modifier.weight(1f)) {
                 errorMsg?.let { Text(it, color = Color(0xFFF87171), fontSize = 12.sp, modifier = Modifier.padding(8.dp)) }
+            Text("Sinopse disponível em breve", color = HugoColors.TextMuted, fontSize = 12.sp, modifier = Modifier.padding(bottom = 8.dp))
             Text(seriesName, color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 Spacer(Modifier.height(4.dp))
                 Text(
