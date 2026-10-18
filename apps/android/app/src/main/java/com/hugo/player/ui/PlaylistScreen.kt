@@ -390,7 +390,9 @@ fun PlaylistScreen(
                     HugoTextField(name, { name = it }, "Nome")
                     Spacer(Modifier.height(10.dp))
                     if (isXtream) {
-                        HugoTextField(host, { host = it.trim() }, "Host (ex: http://servidor.com:8080)", keyboardType = KeyboardType.Uri)
+                        HugoTextField(host, { host = it.trim() }, "Host", keyboardType = KeyboardType.Uri)
+                        Spacer(Modifier.height(6.dp))
+                        Text("Ex: http://servidor.com:8080", color = HugoColors.TextMuted, fontSize = 11.sp)
                         Spacer(Modifier.height(8.dp))
                         HugoTextField(user, { user = it.trim() }, "Usuário")
                         Spacer(Modifier.height(8.dp))
