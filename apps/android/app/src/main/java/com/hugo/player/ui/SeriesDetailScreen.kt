@@ -103,6 +103,7 @@ fun SeriesDetailScreen(
                 }
                 episodes = list
             } catch (ex: Exception) {
+                android.util.Log.e("HugoSeries", "episodes fetch failed: " + ex.message + " url=" + endpoint)
                 episodes = local
             }
         } else {
