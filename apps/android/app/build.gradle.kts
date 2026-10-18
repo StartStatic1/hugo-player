@@ -20,8 +20,17 @@ android {
         buildConfigField("String", "API_BASE_URL", "\"$apiUrl\"")
     }
 
+    signingConfigs {
+        create("release") {
+            storeFile = file("../../hugo-release.keystore")
+            storePassword = "hugoplayer2026"
+            keyAlias = "hugo"
+            keyPassword = "hugoplayer2026"
+        }
+    }
     buildTypes {
         release {
+            signingConfig = signingConfigs.getByName("release")
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
