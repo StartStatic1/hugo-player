@@ -13,8 +13,9 @@ android {
         applicationId = "com.hugo.player"
         minSdk = 24
         targetSdk = 35
-        versionCode = 2
-        versionName = "0.2.0"
+        // CI passa -PversionCode=<número do build> para que cada APK publicado seja mais novo que o anterior
+        versionCode = (project.findProperty("versionCode") as String?)?.toIntOrNull() ?: 2
+        versionName = (project.findProperty("versionName") as String?) ?: "0.2.0"
         // Servidor da API; para testar contra outro: ./gradlew assembleDebug -PhugoApiUrl=http://10.0.2.2:8080
         val apiUrl = (project.findProperty("hugoApiUrl") as String?) ?: "http://65.21.48.50:8080"
         buildConfigField("String", "API_BASE_URL", "\"$apiUrl\"")

@@ -8,6 +8,9 @@ on:
       - '.github/workflows/build-apk.yml'
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -27,7 +30,7 @@ jobs:
         working-directory: apps/android
         run: |
           chmod +x gradlew
-          ./gradlew assembleDebug testDebugUnitTest
+          ./gradlew assembleDebug testDebugUnitTest -PversionCode=${{ github.run_number }} -PversionName=0.3.${{ github.run_number }}
 
       - name: Upload Debug APK
         uses: actions/upload-artifact@v4
@@ -37,25 +40,36 @@ jobs:
           retention-days: 14
 
       - name: Build Release APK
-        if: success()
         working-directory: apps/android
         run: |
-          ./gradlew assembleRelease
+          ./gradlew assembleRelease -PversionCode=${{ github.run_number }} -PversionName=0.3.${{ github.run_number }}
 
       - name: Upload Release APK
-        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: hugo-player-release
           path: apps/android/app/build/outputs/apk/release/app-release.apk
           retention-days: 30
 
-      - name: Update version for in-app updates
-        if: success()
+      # Publica o APK como GitHub Release; /channels/latest.apk redireciona para releases/latest/download/app-release.apk
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          echo '{"versionCode": 3, "versionName": "0.3.0", "notes": "Atualização automática.", "apkUrl": "http://65.21.48.50:8080/channels/latest.apk"}' > apps/backend/update.json
+          gh release create "v0.3.${{ github.run_number }}" \
+            apps/android/app/build/outputs/apk/release/app-release.apk \
+            --title "Hugo Player 0.3.${{ github.run_number }}" \
+            --notes "Build automático de ${{ github.sha }}" \
+            --target "${{ github.sha }}" --latest
+
+      # Atualiza update.json com o MESMO versionCode do APK publicado (evita aviso de atualização infinito)
+      - name: Update version for in-app updates
+        run: |
+          printf '{"versionCode": %s, "versionName": "0.3.%s", "notes": "Atualização automática.", "apkUrl": "http://65.21.48.50:8080/channels/latest.apk"}\n' \
+            "${{ github.run_number }}" "${{ github.run_number }}" > apps/backend/update.json
           git config user.email "bot@hugo.player"
           git config user.name "Hugo Bot"
           git add apps/backend/update.json
-          git commit -m "chore: auto update version" || true
-          git push || true
+          git commit -m "chore: update.json -> versionCode ${{ github.run_number }} [skip ci]" || exit 0
+          git pull --rebase origin main
+          git push origin HEAD:main
