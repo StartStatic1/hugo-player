@@ -71,7 +71,7 @@ class CatalogRepository(context: Context) {
         conn.readTimeout = 180000
         if (conn.responseCode !in 200..299) {
             val err = conn.errorStream?.bufferedReader()?.use { it.readText() }.orEmpty()
-            val apiErr = Regex(""error"\s*:\s*"([^"]+)"").find(err)?.groupValues?.get(1)
+            val apiErr = Regex("\"error\"\s*:\s*\"([^\"]+)\"").find(err)?.groupValues?.get(1)
             conn.disconnect()
             throw Exception(
                 when {
