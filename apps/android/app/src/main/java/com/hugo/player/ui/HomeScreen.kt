@@ -40,6 +40,7 @@ import com.hugo.player.ui.components.HugoColors
 import com.hugo.player.ui.components.HugoLogo
 import com.hugo.player.ui.components.InitialAvatar
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import java.text.NumberFormat
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -56,6 +57,7 @@ private val SeriesBrush = Brush.linearGradient(listOf(Color(0xFF0891B2), Color(0
  */
 @Composable
 fun HomeScreen(playlistId: String, playlistName: String, onNavigate: (String) -> Unit) {
+    val context = LocalContext.current
     var updateInfo by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(Unit) {
         try {
@@ -106,7 +108,6 @@ fun HomeScreen(playlistId: String, playlistName: String, onNavigate: (String) ->
         )
     }
 
-    val context = LocalContext.current
     val repo = remember { CatalogRepository.get(context) }
     var counts by remember { mutableStateOf(Triple(-1, -1, -1)) }
     val recents = remember { RecentPlaylists.list(context) }
