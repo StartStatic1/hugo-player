@@ -13,6 +13,9 @@ data class PlaybackRequest(
     val userAgent: String? = null,
     /** Próximos itens (ex.: episódios seguintes) */
     val queue: List<PlaybackRequest> = emptyList(),
+    /** Para favoritos / continuar assistindo */
+    val playlistId: String? = null,
+    val logo: String? = null,
 )
 
 object PlaybackSession {
