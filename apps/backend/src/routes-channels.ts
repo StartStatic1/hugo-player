@@ -8,6 +8,9 @@ export const channelsRouter = Router();
 const playlistCache = new Map<string, { channels: any[]; categories: any[]; stats: any; timestamp: number }>();
 const CACHE_TTL = 10 * 60 * 1000;
 
+const UPDATE_JSON_REMOTE =
+  process.env.UPDATE_JSON_URL ||
+  "https://raw.githubusercontent.com/StartStatic1/hugo-player/main/apps/backend/update.json";
 
 channelsRouter.get("/series-episodes", async (req, res) => {
   const playlistUrl = req.query.url as string;
@@ -22,20 +25,20 @@ channelsRouter.get("/series-episodes", async (req, res) => {
       return r.json();
     };
     const info = await fetchSeriesInfo(xt, seriesId, fetchJson);
-    const episodes = info.seasons.flatMap(s => s.episodes.map(e => ({
-      name: e.name || `${info.name} S${String(s.season).padStart(2,"0")}E${String(e.episode).padStart(2,"0")}`,
-      url: e.url,
-      season: s.season,
-      episode: e.episode,
-      logo: info.cover,
-    })));
+    const episodes = info.seasons.flatMap((s) =>
+      s.episodes.map((e) => ({
+        name: e.name || `${info.name} S${String(s.season).padStart(2, "0")}E${String(e.episode).padStart(2, "0")}`,
+        url: e.url,
+        season: s.season,
+        episode: e.episode,
+        logo: info.cover,
+      })),
+    );
     res.json({ name: info.name, cover: info.cover, plot: info.plot, episodes });
   } catch (e: any) {
     res.status(502).json({ error: e.message || "series_info_failed" });
   }
 });
-
-
 
 channelsRouter.get("/latest.apk", (_req, res) => {
   const localPaths = [
@@ -53,7 +56,26 @@ channelsRouter.get("/latest.apk", (_req, res) => {
   res.redirect("https://github.com/StartStatic1/hugo-player/releases/latest/download/app-release.apk");
 });
 
-channelsRouter.get("/version", (_req, res) => {
+/**
+ * Versão do app para o popup de update.
+ * Lê SEMPRE do GitHub (update.json no main) — igual StreamFlix:
+ * quando o CI publica, o app vê a versão nova sem git pull no VPS.
+ * Fallback: arquivo local no servidor.
+ */
+channelsRouter.get("/version", async (_req, res) => {
+  try {
+    const r = await fetch(UPDATE_JSON_REMOTE, {
+      headers: { "Cache-Control": "no-cache", Accept: "application/json" },
+    });
+    if (r.ok) {
+      const data = await r.json();
+      if (data && typeof data.versionCode === "number") {
+        return res.json(data);
+      }
+    }
+  } catch (e: any) {
+    console.warn("update.json remote failed:", e.message);
+  }
   try {
     const file = "/root/hugo-player/apps/backend/update.json";
     if (fs.existsSync(file)) {
@@ -61,13 +83,12 @@ channelsRouter.get("/version", (_req, res) => {
       return res.json(data);
     }
   } catch (e: any) {
-    console.error("update.json error:", e.message);
-    return res.json({ error: e.message, versionCode: 2 });
+    console.error("update.json local error:", e.message);
   }
   res.json({
-    versionCode: 2,
-    versionName: "0.2.0",
-    notes: "Séries com episódios reais, correções de UI e estabilidade.",
+    versionCode: 5,
+    versionName: "0.5.0",
+    notes: "Atualização disponível.",
     apkUrl: "https://github.com/StartStatic1/hugo-player/releases/latest/download/app-release.apk",
   });
 });
@@ -75,7 +96,6 @@ channelsRouter.get("/version", (_req, res) => {
 channelsRouter.get("/", async (req, res) => {
   const playlistUrl = req.query.url as string;
   const page = parseInt(String(req.query.page || "0"), 10) || 0;
-  // Sync do app pede limit=80000; o teto antigo de 200 cortava filmes/séries (só vinha live)
   const rawLimit = parseInt(String(req.query.limit || "50"), 10) || 50;
   const limit = Math.min(Math.max(rawLimit, 1), 100_000);
   const type = req.query.type as string | undefined;
@@ -92,9 +112,22 @@ channelsRouter.get("/", async (req, res) => {
       };
       const catalog = await buildCatalogFromXtream(xt, fetchJson);
       const channels: any[] = [];
-      for (const it of catalog.live.items) channels.push({ name: it.name, url: it.url, logo: it.logo, group: it.group, type: "live" });
-      for (const it of catalog.movies.items) channels.push({ name: it.name, url: it.url, logo: it.poster, group: it.group, type: "movie" });
-      for (const it of catalog.series.items) channels.push({ name: it.name, url: `xtream://series/${it.seriesId}`, logo: it.cover, group: it.group, type: "series", seriesName: it.name, seriesId: it.seriesId, episodeCount: it.episodeCount, plot: it.plot });
+      for (const it of catalog.live.items)
+        channels.push({ name: it.name, url: it.url, logo: it.logo, group: it.group, type: "live" });
+      for (const it of catalog.movies.items)
+        channels.push({ name: it.name, url: it.url, logo: it.poster, group: it.group, type: "movie" });
+      for (const it of catalog.series.items)
+        channels.push({
+          name: it.name,
+          url: `xtream://series/${it.seriesId}`,
+          logo: it.cover,
+          group: it.group,
+          type: "series",
+          seriesName: it.name,
+          seriesId: it.seriesId,
+          episodeCount: it.episodeCount,
+          plot: it.plot,
+        });
       const categories = [
         ...catalog.live.categories.map((c, i) => ({ name: c.name, count: c.count, type: "live", position: i })),
         ...catalog.movies.categories.map((c, i) => ({ name: c.name, count: c.count, type: "movie", position: i })),
@@ -126,7 +159,7 @@ channelsRouter.get("/", async (req, res) => {
       const timeout = setTimeout(() => controller.abort(), 180000);
       const response = await fetch(playlistUrl, {
         signal: controller.signal,
-        headers: { "User-Agent": "TiviMate/4.7.0 (Android 11; NVIDIA SHIELD TV Pro)" }
+        headers: { "User-Agent": "TiviMate/4.7.0 (Android 11; NVIDIA SHIELD TV Pro)" },
       });
       clearTimeout(timeout);
       if (!response.ok) return res.status(502).json({ error: `upstream_${response.status}` });
@@ -151,7 +184,7 @@ channelsRouter.get("/", async (req, res) => {
       page,
       limit,
       hasMore,
-      stats: data.stats
+      stats: data.stats,
     });
   } catch (e: any) {
     if (e.name === "AbortError") return res.status(504).json({ error: "timeout" });
@@ -161,7 +194,16 @@ channelsRouter.get("/", async (req, res) => {
 
 function parseM3U(content: string) {
   const lines = content.split(/\r?\n/);
-  const channels: { name: string; url: string; logo?: string; group?: string; type: string; seriesName?: string; season?: number; episode?: number }[] = [];
+  const channels: {
+    name: string;
+    url: string;
+    logo?: string;
+    group?: string;
+    type: string;
+    seriesName?: string;
+    season?: number;
+    episode?: number;
+  }[] = [];
   const catMap = new Map<string, number>();
   let i = 0;
   while (i < lines.length) {
@@ -177,7 +219,10 @@ function parseM3U(content: string) {
       let j = i + 1;
       while (j < lines.length) {
         const t = lines[j].trim();
-        if (t && !t.startsWith("#")) { next = t; break; }
+        if (t && !t.startsWith("#")) {
+          next = t;
+          break;
+        }
         if (t.startsWith("#EXTINF")) break;
         j++;
       }
@@ -202,12 +247,16 @@ function parseM3U(content: string) {
     }
     i++;
   }
-  const categories = Array.from(catMap.entries()).map(([name, count], idx) => ({ name, count, position: idx }));
+  const categories = Array.from(catMap.entries()).map(([name, count], idx) => ({
+    name,
+    count,
+    position: idx,
+  }));
   const stats = {
     total: channels.length,
-    live: channels.filter(c => c.type === "live").length,
-    movie: channels.filter(c => c.type === "movie").length,
-    series: channels.filter(c => c.type === "series").length,
+    live: channels.filter((c) => c.type === "live").length,
+    movie: channels.filter((c) => c.type === "movie").length,
+    series: channels.filter((c) => c.type === "series").length,
   };
   return { channels, categories, stats, timestamp: Date.now() };
 }
