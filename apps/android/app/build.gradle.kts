@@ -22,7 +22,7 @@ android {
 
     signingConfigs {
         create("release") {
-            storeFile = file("../../hugo-release.keystore")
+            storeFile = file("../hugo-release.keystore")
             storePassword = "hugoplayer2026"
             keyAlias = "hugo"
             keyPassword = "hugoplayer2026"
