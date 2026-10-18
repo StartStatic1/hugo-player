@@ -68,8 +68,8 @@ interface ChannelDao {
     suspend fun countFiltered(playlistId: String, type: String, group: String?, query: String?): Int
 
     @Query(
-        """SELECT seriesName AS seriesName, MAX(logo) AS logo, COUNT(*) AS episodes, COUNT(DISTINCT season) AS seasons
-           FROM channels WHERE playlistId = :playlistId AND type = 'series' AND seriesName IS NOT NULL
+        """SELECT COALESCE(seriesName, name) AS seriesName, MAX(logo) AS logo, COUNT(*) AS episodes, COUNT(DISTINCT season) AS seasons
+           FROM channels WHERE playlistId = :playlistId AND type = 'series'
            AND (:group IS NULL OR `group` = :group)
            AND (:query IS NULL OR seriesName LIKE '%' || :query || '%')
            GROUP BY seriesName ORDER BY seriesName COLLATE NOCASE LIMIT :limit OFFSET :offset"""
@@ -77,7 +77,7 @@ interface ChannelDao {
     suspend fun seriesPage(playlistId: String, group: String?, query: String?, limit: Int, offset: Int): List<SeriesSummary>
 
     @Query(
-        """SELECT COUNT(DISTINCT seriesName) FROM channels WHERE playlistId = :playlistId AND type = 'series'
+        """SELECT COUNT(DISTINCT COALESCE(seriesName, name)) FROM channels WHERE playlistId = :playlistId AND type = 'series'
            AND (:group IS NULL OR `group` = :group)
            AND (:query IS NULL OR seriesName LIKE '%' || :query || '%')"""
     )
