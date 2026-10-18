@@ -74,7 +74,11 @@ fun SeriesDetailScreen(
         val marker = local.firstOrNull()?.url
         if (marker != null && marker.startsWith("xtream://series/")) {
             val seriesId = marker.removePrefix("xtream://series/")
-            val plUrl = LiveTvCache.playlistUrl ?: ""
+            var plUrl = LiveTvCache.playlistUrl
+            if (plUrl.isNullOrBlank()) {
+                // fallback: the series entity itself may not have the original URL; use cache or empty
+                plUrl = ""
+            }
             val encoded = java.net.URLEncoder.encode(plUrl, "UTF-8")
             val endpoint = "${com.hugo.player.data.HugoApi.baseUrl}/channels/series-episodes?url=$encoded&seriesId=$seriesId"
             try {
