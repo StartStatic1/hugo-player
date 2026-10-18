@@ -7,6 +7,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -60,14 +61,13 @@ fun SettingsScreen(deviceId: String?, deviceKey: String?, onBack: () -> Unit) {
             Spacer(Modifier.height(6.dp))
             OutlinedTextField(value = restoreKey, onValueChange = { restoreKey = it }, label = { Text("Device Key") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
             Spacer(Modifier.height(10.dp))
+            val scope = rememberCoroutineScope()
             Button(onClick = {
                 restoring = true
-                kotlinx.coroutines.GlobalScope.launch {
+                scope.launch {
                     val ok = com.hugo.player.data.DeviceIdentity.restore(appContext, restoreId, restoreKey)
-                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
-                        restoring = false
-                        message = if (ok) "Dispositivo restaurado. Reinicie o app." else "ID ou Key inválidos."
-                    }
+                    restoring = false
+                    message = if (ok) "Dispositivo restaurado. Reinicie o app." else "ID ou Key inválidos."
                 }
             }, enabled = !restoring) { Text(if (restoring) "Restaurando..." else "Restaurar") }
         }
