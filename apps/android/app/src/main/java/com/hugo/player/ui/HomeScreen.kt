@@ -40,7 +40,6 @@ import com.hugo.player.ui.components.HugoColors
 import com.hugo.player.ui.components.HugoLogo
 import com.hugo.player.ui.components.InitialAvatar
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import java.text.NumberFormat
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -58,56 +57,6 @@ private val SeriesBrush = Brush.linearGradient(listOf(Color(0xFF0891B2), Color(0
 @Composable
 fun HomeScreen(playlistId: String, playlistName: String, onNavigate: (String) -> Unit) {
     val context = LocalContext.current
-    var updateInfo by remember { mutableStateOf<String?>(null) }
-    LaunchedEffect(Unit) {
-        try {
-            val url = "${com.hugo.player.data.HugoApi.baseUrl}/channels/version"
-            val text = java.net.URL(url).openConnection().getInputStream().bufferedReader().use { it.readText() }
-            val json = org.json.JSONObject(text)
-            val remote = json.optInt("versionCode", 1)
-            val local = com.hugo.player.BuildConfig.VERSION_CODE
-            if (remote > local) {
-                updateInfo = json.optString("notes", "Nova versão disponível")
-            }
-        } catch (_: Exception) {}
-    }
-    updateInfo?.let { notes ->
-        var downloading by remember { mutableStateOf(false) }
-        androidx.compose.material3.AlertDialog(
-            onDismissRequest = { if (!downloading) updateInfo = null },
-            title = { androidx.compose.material3.Text("Atualização disponível") },
-            text = { androidx.compose.material3.Text(notes) },
-            confirmButton = {
-                androidx.compose.material3.TextButton(
-                    enabled = !downloading,
-                    onClick = {
-                        downloading = true
-                        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
-                            try {
-                                val apkUrl = "http://65.21.48.50:8080/channels/latest.apk"
-                                val file = java.io.File(context.getExternalFilesDir("updates"), "update.apk")
-                                file.parentFile?.mkdirs()
-                                java.net.URL(apkUrl).openStream().use { input ->
-                                    file.outputStream().use { output -> input.copyTo(output) }
-                                }
-                                val uri = androidx.core.content.FileProvider.getUriForFile(context, context.packageName + ".fileprovider", file)
-                                val intent = android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
-                                    setDataAndType(uri, "application/vnd.android.package-archive")
-                                    addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
-                                }
-                                context.startActivity(intent)
-                            } catch (e: Exception) {
-                                android.util.Log.e("HugoUpdate", "install failed", e)
-                            }
-                            updateInfo = null
-                        }
-                    }
-                ) { androidx.compose.material3.Text(if (downloading) "Baixando..." else "Baixar e instalar") }
-            },
-            dismissButton = { androidx.compose.material3.TextButton(onClick = { updateInfo = null }) { androidx.compose.material3.Text("Depois") } }
-        )
-    }
-
     val repo = remember { CatalogRepository.get(context) }
     var counts by remember { mutableStateOf(Triple(-1, -1, -1)) }
     val recents = remember { RecentPlaylists.list(context) }
@@ -130,7 +79,6 @@ fun HomeScreen(playlistId: String, playlistName: String, onNavigate: (String) ->
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 32.dp, vertical = 20.dp)
     ) {
-        // Topo: logo, playlist atual, relógio
         Row(verticalAlignment = Alignment.CenterVertically) {
             HugoLogo(markSize = 40.dp, textSize = 24.sp)
             Spacer(Modifier.width(18.dp))
@@ -151,7 +99,6 @@ fun HomeScreen(playlistId: String, playlistName: String, onNavigate: (String) ->
 
         Spacer(Modifier.height(26.dp))
 
-        // Atalhos principais
         Row(horizontalArrangement = Arrangement.spacedBy(16.dp), modifier = Modifier.fillMaxWidth()) {
             MainTile("TV ao Vivo", countLabel(counts.first, "canais"), Icons.Default.LiveTv, LiveBrush, Modifier.weight(1f).focusRequester(liveFocus)) { onNavigate("live") }
             MainTile("Filmes", countLabel(counts.second, "filmes"), Icons.Default.Movie, MoviesBrush, Modifier.weight(1f)) { onNavigate("movies") }
@@ -160,7 +107,6 @@ fun HomeScreen(playlistId: String, playlistName: String, onNavigate: (String) ->
 
         Spacer(Modifier.height(16.dp))
 
-        // Cards pequenos de utilidades
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
             SmallTile("Playlists", Icons.AutoMirrored.Filled.PlaylistPlay, Color(0xFF8B5CF6), Modifier.weight(1f)) { onNavigate("playlists") }
             SmallTile("Atualizar conteúdo", Icons.Default.Sync, Color(0xFF06B6D4), Modifier.weight(1f)) { onNavigate("refresh") }
@@ -169,7 +115,6 @@ fun HomeScreen(playlistId: String, playlistName: String, onNavigate: (String) ->
 
         Spacer(Modifier.height(26.dp))
 
-        // Playlists recentes
         Row(verticalAlignment = Alignment.CenterVertically) {
             Icon(Icons.Default.History, null, tint = HugoColors.TextMuted, modifier = Modifier.size(18.dp))
             Spacer(Modifier.width(8.dp))
