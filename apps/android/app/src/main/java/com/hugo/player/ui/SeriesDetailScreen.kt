@@ -32,6 +32,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.SubcomposeAsyncImage
 import com.hugo.player.data.CatalogRepository
+import org.json.JSONObject
+import java.net.URL
 import com.hugo.player.data.db.ChannelEntity
 import com.hugo.player.player.PlaybackRequest
 import com.hugo.player.ui.components.FocusSurface
@@ -68,7 +70,41 @@ fun SeriesDetailScreen(
     val listState = rememberLazyListState()
 
     LaunchedEffect(playlistId, seriesName) {
-        episodes = repo.episodes(playlistId, seriesName)
+        val local = repo.episodes(playlistId, seriesName)
+        val marker = local.firstOrNull()?.url
+        if (marker != null && marker.startsWith("xtream://series/")) {
+            val seriesId = marker.removePrefix("xtream://series/")
+            val plUrl = LiveTvCache.playlistUrl ?: ""
+            val encoded = java.net.URLEncoder.encode(plUrl, "UTF-8")
+            val endpoint = "${com.hugo.player.data.HugoApi.baseUrl}/channels/series-episodes?url=$encoded&seriesId=$seriesId"
+            try {
+                val text = URL(endpoint).openConnection().apply { connectTimeout = 20000; readTimeout = 30000 }.getInputStream().bufferedReader().use { it.readText() }
+                val json = JSONObject(text)
+                val arr = json.optJSONArray("episodes")
+                val list = mutableListOf<ChannelEntity>()
+                if (arr != null) {
+                    for (i in 0 until arr.length()) {
+                        val e = arr.getJSONObject(i)
+                        list.add(ChannelEntity(
+                            name = e.optString("name", seriesName),
+                            url = e.getString("url"),
+                            logo = e.optString("logo").takeIf { it.isNotEmpty() },
+                            group = "",
+                            type = "series",
+                            playlistId = playlistId,
+                            seriesName = seriesName,
+                            season = e.optInt("season", 1),
+                            episode = e.optInt("episode", i + 1),
+                        ))
+                    }
+                }
+                episodes = list
+            } catch (ex: Exception) {
+                episodes = local
+            }
+        } else {
+            episodes = local
+        }
     }
     val bySeason = remember(episodes) {
         episodes.orEmpty().groupBy { it.season ?: 1 }.toSortedMap()
