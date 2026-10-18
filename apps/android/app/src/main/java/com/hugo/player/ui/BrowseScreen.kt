@@ -164,7 +164,7 @@ class BrowseViewModel(app: Application) : AndroidViewModel(app) {
                 key = "s:" + it.seriesName,
                 title = it.seriesName,
                 image = it.logo,
-                subtitle = if (it.seasons > 1) "${it.seasons} temporadas" else "${it.episodes} episódio(s)",
+                subtitle = null,
                 url = null,
                 seriesName = it.seriesName,
             )

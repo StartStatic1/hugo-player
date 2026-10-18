@@ -211,7 +211,7 @@ fun SeriesDetailScreen(
 
                 // Episódios da temporada
                 LazyColumn(state = listState, verticalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(bottom = 24.dp, end = 4.dp, start = 2.dp)) {
-                    itemsIndexed(seasonEps, key = { _, it -> it.id }) { index, ep ->
+                    itemsIndexed(seasonEps, key = { i, it -> "${it.id}-$i" }) { index, ep ->
                         FocusSurface(
                             onClick = { play(ep) },
                             focusScale = 1.01f,
