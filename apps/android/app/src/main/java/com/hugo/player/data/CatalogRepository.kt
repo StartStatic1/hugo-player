@@ -9,6 +9,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import android.util.JsonReader
+import android.util.JsonToken
 import java.net.URL
 
 /** Extrai nome da série / temporada / episódio de títulos como "Série S01E02". */
@@ -39,6 +40,14 @@ object SeriesParser {
         return null
     }
 }
+
+
+    private fun JsonReader.nextStringOrNull(): String? {
+        return if (peek() == JsonToken.NULL) { nextNull(); null } else nextString()
+    }
+    private fun JsonReader.nextIntOrNull(): Int? {
+        return if (peek() == JsonToken.NULL) { nextNull(); null } else nextInt()
+    }
 
 class CatalogRepository(context: Context) {
     private val db = HugoDatabase.get(context)
@@ -108,14 +117,14 @@ class CatalogRepository(context: Context) {
                             var episode: Int? = null
                             while (reader.hasNext()) {
                                 when (reader.nextName()) {
-                                    "name" -> name = reader.nextString()
-                                    "url" -> url = reader.nextString()
-                                    "logo" -> logo = reader.nextString().takeIf { it.isNotEmpty() }
-                                    "group" -> group = reader.nextString()
-                                    "type" -> type = reader.nextString()
-                                    "seriesName" -> seriesName = reader.nextString().takeIf { it.isNotBlank() }
-                                    "season" -> season = reader.nextInt().takeIf { it > 0 }
-                                    "episode" -> episode = reader.nextInt().takeIf { it > 0 }
+                                    "name" -> name = reader.nextStringOrNull() ?: "Canal"
+                                    "url" -> url = reader.nextStringOrNull() ?: ""
+                                    "logo" -> logo = reader.nextStringOrNull()?.takeIf { it.isNotEmpty() }
+                                    "group" -> group = reader.nextStringOrNull() ?: "Outros"
+                                    "type" -> type = reader.nextStringOrNull() ?: "live"
+                                    "seriesName" -> seriesName = reader.nextStringOrNull()?.takeIf { it.isNotBlank() }
+                                    "season" -> season = reader.nextIntOrNull()?.takeIf { it > 0 }
+                                    "episode" -> episode = reader.nextIntOrNull()?.takeIf { it > 0 }
                                     else -> reader.skipValue()
                                 }
                             }
