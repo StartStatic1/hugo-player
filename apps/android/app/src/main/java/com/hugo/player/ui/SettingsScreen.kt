@@ -42,7 +42,8 @@ fun SettingsScreen(deviceId: String, deviceKey: String, onBack: () -> Unit) {
     var licenseExpires by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(Unit) {
-        cacheSize = DiskCache.sizeBytes(context)
+        DiskCache.init(context)
+        cacheSize = DiskCache.sizeBytes()
         licenseType = null
         try {
             val text = withContext(Dispatchers.IO) {
@@ -137,7 +138,7 @@ fun SettingsScreen(deviceId: String, deviceKey: String, onBack: () -> Unit) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("Espaço usado: ${"%.1f".format(cacheSize / 1_048_576.0)} MB", color = Color.White, fontSize = 13.sp, modifier = Modifier.weight(1f))
                 OutlinedButton(onClick = {
-                    DiskCache.clear(context)
+                    DiskCache.clear()
                     cacheSize = 0
                     message = "Cache limpo."
                 }) { Text("Limpar cache", color = Color.White) }
