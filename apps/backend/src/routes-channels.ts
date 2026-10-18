@@ -22,10 +22,10 @@ channelsRouter.get("/series-episodes", async (req, res) => {
     };
     const info = await fetchSeriesInfo(xt, seriesId, fetchJson);
     const episodes = info.seasons.flatMap(s => s.episodes.map(e => ({
-      name: e.title || `${info.name} S${String(s.number).padStart(2,"0")}E${String(e.number).padStart(2,"0")}`,
+      name: e.name || `${info.name} S${String(s.season).padStart(2,"0")}E${String(e.episode).padStart(2,"0")}`,
       url: e.url,
-      season: s.number,
-      episode: e.number,
+      season: s.season,
+      episode: e.episode,
       logo: info.cover,
     })));
     res.json({ name: info.name, cover: info.cover, plot: info.plot, episodes });
