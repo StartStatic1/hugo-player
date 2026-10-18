@@ -442,6 +442,7 @@ private fun enterPlaylist(context: android.content.Context, pl: RemotePlaylist, 
     LiveTvCache.save(context)
     AppSettings.lastPlaylistId = pl.id
     AppSettings.lastPlaylistName = pl.name
+    AppSettings.lastPlaylistUrl = url
     RecentPlaylists.touch(context, pl.id, pl.name)
     onOpen(pl.id, pl.name)
 }

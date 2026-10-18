@@ -42,4 +42,8 @@ object AppSettings {
     var lastPlaylistName: String?
         get() = if (isReady) prefs.getString("lastPlaylistName", null) else null
         set(v) { prefs.edit().putString("lastPlaylistName", v).apply() }
+
+    var lastPlaylistUrl: String?
+        get() = if (isReady) prefs.getString("lastPlaylistUrl", null) else null
+        set(v) { prefs.edit().putString("lastPlaylistUrl", v).apply() }
 }
