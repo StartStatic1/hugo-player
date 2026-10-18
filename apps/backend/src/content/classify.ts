@@ -54,7 +54,8 @@ function makeMatcher(words: string[]): (text: string) => boolean {
 const SERIES_WORDS = [
   "series", "serie", "seriados", "seriado", "temporada", "temporadas", "season", "seasons",
   "tv shows", "tvshows", "shows", "dorama", "doramas", "k-drama", "kdrama", "anime series",
-  "novelas turcas", "miniseries", "minisseries",
+  "novelas turcas", "novelas", "turcas", "turca", "mexicanas", "mexicana", "mexicano",
+  "miniseries", "minisseries", "novela", "telenovela", "soap",
   // AR (já sem diacríticos)
   "مسلسلات", "مسلسل",
 ];
