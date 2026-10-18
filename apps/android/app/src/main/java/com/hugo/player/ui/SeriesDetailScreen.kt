@@ -151,13 +151,15 @@ fun SeriesDetailScreen(
                     Modifier.fillMaxWidth().aspectRatio(2f / 3f).clip(RoundedCornerShape(14.dp)).background(HugoColors.Card),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(seriesName, color = HugoColors.TextDim, fontSize = 14.sp, modifier = Modifier.padding(12.dp))
+                    errorMsg?.let { Text(it, color = Color(0xFFF87171), fontSize = 12.sp, modifier = Modifier.padding(8.dp)) }
+            Text(seriesName, color = HugoColors.TextDim, fontSize = 14.sp, modifier = Modifier.padding(12.dp))
                     if (poster != null) SubcomposeAsyncImage(model = poster, contentDescription = seriesName, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
                 }
             }
             Spacer(Modifier.width(28.dp))
             Column(Modifier.weight(1f)) {
-                Text(seriesName, color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                errorMsg?.let { Text(it, color = Color(0xFFF87171), fontSize = 12.sp, modifier = Modifier.padding(8.dp)) }
+            Text(seriesName, color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 Spacer(Modifier.height(4.dp))
                 Text(
                     if (episodes == null) "Carregando..." else "${bySeason.size} temporada(s) · ${episodes!!.size} episódio(s)",
