@@ -80,10 +80,25 @@ fun HomeScreen(playlistId: String, playlistName: String, onNavigate: (String) ->
                     enabled = !downloading,
                     onClick = {
                         downloading = true
-                        // Download and install will be wired next; for now open the URL
-                        val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("http://65.21.48.50:8080/channels/version"))
-                        context.startActivity(intent)
-                        updateInfo = null
+                        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+                            try {
+                                val apkUrl = "http://65.21.48.50:8080/channels/latest.apk"
+                                val file = java.io.File(context.getExternalFilesDir("updates"), "update.apk")
+                                file.parentFile?.mkdirs()
+                                java.net.URL(apkUrl).openStream().use { input ->
+                                    file.outputStream().use { output -> input.copyTo(output) }
+                                }
+                                val uri = androidx.core.content.FileProvider.getUriForFile(context, context.packageName + ".fileprovider", file)
+                                val intent = android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
+                                    setDataAndType(uri, "application/vnd.android.package-archive")
+                                    addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                                }
+                                context.startActivity(intent)
+                            } catch (e: Exception) {
+                                android.util.Log.e("HugoUpdate", "install failed", e)
+                            }
+                            updateInfo = null
+                        }
                     }
                 ) { androidx.compose.material3.Text(if (downloading) "Baixando..." else "Baixar e instalar") }
             },
