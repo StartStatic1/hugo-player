@@ -8,6 +8,7 @@ import com.hugo.player.data.db.SeriesSummary
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
+import android.util.JsonReader
 import java.net.URL
 
 /** Extrai nome da série / temporada / episódio de títulos como "Série S01E02". */
@@ -68,86 +69,98 @@ class CatalogRepository(context: Context) {
         val conn = URL(endpoint).openConnection() as java.net.HttpURLConnection
         conn.connectTimeout = 30000
         conn.readTimeout = 180000
-        val text = try {
-            if (conn.responseCode !in 200..299) {
-                val err = conn.errorStream?.bufferedReader()?.use { it.readText() }.orEmpty()
-                val apiErr = Regex("\"error\"\\s*:\\s*\"([^\"]+)\"").find(err)?.groupValues?.get(1)
-                throw Exception(
-                    when {
-                        apiErr == "timeout" || conn.responseCode == 504 -> "o servidor da lista demorou demais"
-                        apiErr == "empty_playlist" -> "lista vazia ou inválida"
-                        apiErr?.startsWith("upstream_") == true -> "o provedor recusou a lista (${apiErr.removePrefix("upstream_")})"
-                        else -> "HTTP ${conn.responseCode}"
-                    }
-                )
-            }
-            onProgress("Lendo lista...")
-            conn.inputStream.bufferedReader().use { it.readText() }
-        } finally {
+        if (conn.responseCode !in 200..299) {
+            val err = conn.errorStream?.bufferedReader()?.use { it.readText() }.orEmpty()
+            val apiErr = Regex(""error"\s*:\s*"([^"]+)"").find(err)?.groupValues?.get(1)
             conn.disconnect()
+            throw Exception(
+                when {
+                    apiErr == "timeout" || conn.responseCode == 504 -> "o servidor da lista demorou demais"
+                    apiErr == "empty_playlist" -> "lista vazia ou inválida"
+                    apiErr?.startsWith("upstream_") == true -> "o provedor recusou a lista (${apiErr.removePrefix("upstream_")})"
+                    else -> "HTTP ${conn.responseCode}"
+                }
+            )
         }
-        val json = JSONObject(text)
-
-        onProgress("Salvando no aparelho...")
-        onFraction(0f)
+        onProgress("Lendo lista...")
         dao.deleteChannels(playlistId)
         dao.deleteCategories(playlistId)
 
-        val chArr = json.optJSONArray("channels") ?: return@withContext
-        val total = chArr.length()
-        val channels = ArrayList<ChannelEntity>(1000)
-        for (i in 0 until total) {
-            val c = chArr.getJSONObject(i)
-            val name = c.optString("name", "Canal")
-            val type = c.optString("type", "live")
-            var seriesName: String? = null
-            var season: Int? = null
-            var episode: Int? = null
-            if (type == "series") {
-                val parsed = SeriesParser.parse(name)
-                seriesName = c.optString("seriesName", "").takeIf { it.isNotBlank() } ?: parsed?.seriesName ?: name.trim()
-                season = (if (c.has("season")) c.optInt("season", 0) else 0).takeIf { it > 0 } ?: parsed?.season ?: 1
-                episode = (if (c.has("episode")) c.optInt("episode", 0) else 0).takeIf { it > 0 } ?: parsed?.episode
+        val reader = JsonReader(conn.inputStream.bufferedReader())
+        reader.isLenient = true
+        val channels = ArrayList<ChannelEntity>(800)
+        var total = 0
+        try {
+            reader.beginObject()
+            while (reader.hasNext()) {
+                when (reader.nextName()) {
+                    "channels" -> {
+                        reader.beginArray()
+                        while (reader.hasNext()) {
+                            reader.beginObject()
+                            var name = "Canal"; var url = ""; var logo: String? = null
+                            var group = "Outros"; var type = "live"
+                            var seriesName: String? = null; var season: Int? = null; var episode: Int? = null
+                            while (reader.hasNext()) {
+                                when (reader.nextName()) {
+                                    "name" -> name = reader.nextString()
+                                    "url" -> url = reader.nextString()
+                                    "logo" -> logo = reader.nextString().takeIf { it.isNotEmpty() }
+                                    "group" -> group = reader.nextString()
+                                    "type" -> type = reader.nextString()
+                                    "seriesName" -> seriesName = reader.nextString().takeIf { it.isNotBlank() }
+                                    "season" -> season = reader.nextInt().takeIf { it > 0 }
+                                    "episode" -> episode = reader.nextInt().takeIf { it > 0 }
+                                    else -> reader.skipValue()
+                                }
+                            }
+                            reader.endObject()
+                            if (type == "series" && seriesName.isNullOrBlank()) {
+                                val parsed = SeriesParser.parse(name)
+                                seriesName = parsed?.seriesName ?: name.trim()
+                                season = season ?: parsed?.season ?: 1
+                                episode = episode ?: parsed?.episode
+                            }
+                            channels.add(ChannelEntity(name = name, url = url, logo = logo, group = group, type = type, playlistId = playlistId, seriesName = seriesName, season = season, episode = episode))
+                            total++
+                            if (channels.size >= 800) {
+                                dao.insertChannels(channels.toList())
+                                channels.clear()
+                                onProgress("Salvando... $total")
+                            }
+                        }
+                        reader.endArray()
+                    }
+                    "categories" -> {
+                        reader.beginArray()
+                        val categories = ArrayList<CategoryEntity>()
+                        var pos = 0
+                        while (reader.hasNext()) {
+                            reader.beginObject()
+                            var cname = ""; var ccount = 0; var ctype = "live"
+                            while (reader.hasNext()) {
+                                when (reader.nextName()) {
+                                    "name" -> cname = reader.nextString()
+                                    "count" -> ccount = reader.nextInt()
+                                    "type" -> ctype = reader.nextString()
+                                    else -> reader.skipValue()
+                                }
+                            }
+                            reader.endObject()
+                            categories.add(CategoryEntity(name = cname, count = ccount, type = ctype, playlistId = playlistId, position = pos++))
+                        }
+                        reader.endArray()
+                        if (categories.isNotEmpty()) dao.insertCategories(categories)
+                    }
+                    else -> reader.skipValue()
+                }
             }
-            channels.add(
-                ChannelEntity(
-                    name = name,
-                    url = c.getString("url"),
-                    logo = c.optString("logo").takeIf { it.isNotEmpty() },
-                    group = c.optString("group", "Outros"),
-                    type = type,
-                    playlistId = playlistId,
-                    seriesName = seriesName,
-                    season = season,
-                    episode = episode,
-                )
-            )
-            if (channels.size >= 1000) {
-                dao.insertChannels(channels.toList())
-                channels.clear()
-                onProgress("Salvando... $i/$total")
-                onFraction(i.toFloat() / total.coerceAtLeast(1))
-            }
+            reader.endObject()
+        } finally {
+            reader.close()
+            conn.disconnect()
         }
         if (channels.isNotEmpty()) dao.insertChannels(channels)
-
-        val catArr = json.optJSONArray("categories")
-        if (catArr != null) {
-            val categories = ArrayList<CategoryEntity>(catArr.length())
-            for (i in 0 until catArr.length()) {
-                val c = catArr.getJSONObject(i)
-                categories.add(
-                    CategoryEntity(
-                        name = c.getString("name"),
-                        count = c.optInt("count", 0),
-                        type = c.optString("type", "live"),
-                        playlistId = playlistId,
-                        position = i,
-                    )
-                )
-            }
-            dao.insertCategories(categories)
-        }
         onFraction(1f)
         onProgress("Pronto! $total itens")
     }
