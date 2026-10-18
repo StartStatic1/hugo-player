@@ -45,7 +45,7 @@ channelsRouter.get("/version", (_req, res) => {
   try {
     const fs = require("fs");
     const path = require("path");
-    const file = path.join(process.cwd(), "update.json");
+    const file = path.join(__dirname, "..", "update.json");
     if (fs.existsSync(file)) {
       const data = JSON.parse(fs.readFileSync(file, "utf8"));
       return res.json(data);
