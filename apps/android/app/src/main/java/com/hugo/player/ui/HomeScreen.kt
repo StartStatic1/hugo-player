@@ -70,11 +70,24 @@ fun HomeScreen(playlistId: String, playlistName: String, onNavigate: (String) ->
         } catch (_: Exception) {}
     }
     updateInfo?.let { notes ->
+        var downloading by remember { mutableStateOf(false) }
         androidx.compose.material3.AlertDialog(
-            onDismissRequest = { updateInfo = null },
+            onDismissRequest = { if (!downloading) updateInfo = null },
             title = { androidx.compose.material3.Text("Atualização disponível") },
             text = { androidx.compose.material3.Text(notes) },
-            confirmButton = { androidx.compose.material3.TextButton(onClick = { updateInfo = null }) { androidx.compose.material3.Text("OK") } }
+            confirmButton = {
+                androidx.compose.material3.TextButton(
+                    enabled = !downloading,
+                    onClick = {
+                        downloading = true
+                        // Download and install will be wired next; for now open the URL
+                        val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("http://65.21.48.50:8080/channels/version"))
+                        context.startActivity(intent)
+                        updateInfo = null
+                    }
+                ) { androidx.compose.material3.Text(if (downloading) "Baixando..." else "Baixar e instalar") }
+            },
+            dismissButton = { androidx.compose.material3.TextButton(onClick = { updateInfo = null }) { androidx.compose.material3.Text("Depois") } }
         )
     }
 
