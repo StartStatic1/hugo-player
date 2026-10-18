@@ -301,6 +301,9 @@ fun PlayerScreen(request: PlaybackRequest, onBack: () -> Unit) {
         AndroidView(
             factory = {
                 PlayerView(it).apply {
+                    setControllerVisibilityListener(androidx.media3.ui.PlayerView.ControllerVisibilityListener { visibility ->
+                        // Track selector can be added here
+                    })
                     player = exoPlayer
                     useController = false
                     keepScreenOn = true
