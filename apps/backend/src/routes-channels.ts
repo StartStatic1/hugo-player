@@ -50,7 +50,6 @@ channelsRouter.get("/latest.apk", (_req, res) => {
       return res.sendFile(p);
     }
   }
-  // Fallback: GitHub Releases
   res.redirect("https://github.com/StartStatic1/hugo-player/releases/latest/download/app-release.apk");
 });
 
@@ -90,11 +89,10 @@ channelsRouter.get("/", async (req, res) => {
         return r.json();
       };
       const catalog = await buildCatalogFromXtream(xt, fetchJson);
-      const channels = [
-        ...catalog.live.channels,
-        ...catalog.movies.channels,
-        ...catalog.series.channels,
-      ];
+      const channels: any[] = [];
+      for (const it of catalog.live.items) channels.push({ name: it.name, url: it.url, logo: it.logo, group: it.group, type: "live" });
+      for (const it of catalog.movies.items) channels.push({ name: it.name, url: it.url, logo: it.poster, group: it.group, type: "movie" });
+      for (const it of catalog.series.items) channels.push({ name: it.name, url: `xtream://series/${it.seriesId}`, logo: it.cover, group: it.group, type: "series", seriesName: it.name, seriesId: it.seriesId, episodeCount: it.episodeCount, plot: it.plot });
       const categories = [
         ...catalog.live.categories.map((c, i) => ({ name: c.name, count: c.count, type: "live", position: i })),
         ...catalog.movies.categories.map((c, i) => ({ name: c.name, count: c.count, type: "movie", position: i })),
@@ -161,11 +159,11 @@ channelsRouter.get("/", async (req, res) => {
 
 function parseM3U(content: string) {
   const lines = content.split(/\r?\n/);
-  const channels: any[] = [];
+  const channels: { name: string; url: string; logo?: string; group?: string; type: string; seriesName?: string; season?: number; episode?: number }[] = [];
   const catMap = new Map<string, number>();
-  let current: any = null;
-  for (const raw of lines) {
-    const line = raw.trim();
+  let i = 0;
+  while (i < lines.length) {
+    const line = lines[i].trim();
     if (line.startsWith("#EXTINF")) {
       const nameMatch = line.match(/,(.*)$/);
       const groupMatch = line.match(/group-title="([^"]*)"/i);
@@ -173,16 +171,36 @@ function parseM3U(content: string) {
       const name = (nameMatch?.[1] || "").trim();
       const group = (groupMatch?.[1] || "Geral").trim();
       const logo = logoMatch?.[1] || "";
-      const classified = classifyEntry(name, group);
-      current = { name, group, logo, type: classified.type, ...parseEpisode(name) };
-      catMap.set(group, (catMap.get(group) || 0) + 1);
-    } else if (line && !line.startsWith("#") && current) {
-      current.url = line;
-      channels.push(current);
-      current = null;
+      let next = "";
+      let j = i + 1;
+      while (j < lines.length) {
+        const t = lines[j].trim();
+        if (t && !t.startsWith("#")) { next = t; break; }
+        if (t.startsWith("#EXTINF")) break;
+        j++;
+      }
+      if (next) {
+        const result = classifyEntry({ name, group, url: next });
+        const type = result.type;
+        const ep = result.episode || (type === "series" ? parseEpisode(name) : null);
+        channels.push({
+          name,
+          url: next,
+          logo,
+          group,
+          type,
+          seriesName: ep?.show,
+          season: ep?.season,
+          episode: ep?.episode,
+        });
+        catMap.set(group, (catMap.get(group) || 0) + 1);
+      }
+      i = j;
+      continue;
     }
+    i++;
   }
-  const categories = Array.from(catMap.entries()).map(([name, count], i) => ({ name, count, position: i }));
+  const categories = Array.from(catMap.entries()).map(([name, count], idx) => ({ name, count, position: idx }));
   const stats = {
     total: channels.length,
     live: channels.filter(c => c.type === "live").length,
