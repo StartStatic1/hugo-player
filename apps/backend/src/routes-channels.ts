@@ -55,7 +55,7 @@ channelsRouter.get("/", async (req, res) => {
       const channels: any[] = [];
       for (const it of catalog.live.items) channels.push({ name: it.name, url: it.url, logo: it.logo, group: it.group, type: "live" });
       for (const it of catalog.movies.items) channels.push({ name: it.name, url: it.url, logo: it.poster, group: it.group, type: "movie" });
-      for (const it of catalog.series.items) channels.push({ name: it.name, url: `xtream://series/${it.seriesId}`, logo: it.cover, group: it.group, type: "series", seriesName: it.name, seriesId: it.seriesId });
+      for (const it of catalog.series.items) channels.push({ name: it.name, url: `xtream://series/${it.seriesId}`, logo: it.cover, group: it.group, type: "series", seriesName: it.name, seriesId: it.seriesId, episodeCount: it.episodeCount });
       const categories = [
         ...catalog.live.categories.map((c, i) => ({ name: c.name, count: c.count, type: "live", position: i })),
         ...catalog.movies.categories.map((c, i) => ({ name: c.name, count: c.count, type: "movie", position: i })),

@@ -170,7 +170,7 @@ export async function buildCatalogFromXtream(c: XtreamCredentials, fetchJson: Js
       plot: str(s.plot) || undefined,
       seriesId: id,
       seasons: [],
-      episodeCount: 0,
+      episodeCount: num(s.episode_count) ?? num(s.episodes) ?? 0,
     };
   });
 
