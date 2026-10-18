@@ -50,19 +50,5 @@ jobs:
           path: apps/android/app/build/outputs/apk/release/app-release.apk
           retention-days: 30
 
-      - name: Update version for in-app updates
-        if: success()
-        run: |
-          echo '{"versionCode": 3, "versionName": "0.3.0", "notes": "Atualização automática.", "apkUrl": "http://65.21.48.50:8080/channels/latest.apk"}' > apps/backend/update.json
-          git config user.email "bot@hugo.player"
-          git config user.name "Hugo Bot"
-          git add apps/backend/update.json
-          git commit -m "chore: auto update version" || true
-          git push || true
-
-      - name: Notify build result
-        if: always()
-        run: |
-          STATUS="${{ job.status }}"
-          echo "Build $STATUS" 
-          # Add Telegram or other notification here when token is available
+      # NÃO sobrescreve update.json com versão fixa (antes forçava 3 e quebrava o fluxo).
+      # No VPS: copie o APK para apps/backend/public/latest.apk e ajuste update.json manualmente.
