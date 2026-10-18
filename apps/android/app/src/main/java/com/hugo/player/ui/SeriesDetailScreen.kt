@@ -82,8 +82,13 @@ fun SeriesDetailScreen(
             val encoded = java.net.URLEncoder.encode(plUrl, "UTF-8")
             val endpoint = "${com.hugo.player.data.HugoApi.baseUrl}/channels/series-episodes?url=$encoded&seriesId=$seriesId"
             try {
-                val text = URL(endpoint).openConnection().apply { connectTimeout = 20000; readTimeout = 30000 }.getInputStream().bufferedReader().use { it.readText() }
-                val json = JSONObject(text)
+                val conn = URL(endpoint).openConnection() as java.net.HttpURLConnection
+                conn.connectTimeout = 20000
+                conn.readTimeout = 30000
+                val code = conn.responseCode
+                val body = (if (code in 200..299) conn.inputStream else conn.errorStream)?.bufferedReader()?.use { it.readText() }.orEmpty()
+                if (code !in 200..299) throw Exception("HTTP $code: ${body.take(200)}")
+                val json = JSONObject(body)
                 val arr = json.optJSONArray("episodes")
                 val list = mutableListOf<ChannelEntity>()
                 if (arr != null) {
