@@ -39,12 +39,13 @@ object HugoApi {
         headers: Map<String, String> = emptyMap(),
     ): String = request("POST", path, body, deviceId, deviceKey, 30_000, headers + ("X-HTTP-Method-Override" to "PATCH"))
 
+    /** DELETE via POST + X-HTTP-Method-Override (mais compatível com proxies e servidores). */
     suspend fun delete(
         path: String,
         deviceId: String? = null,
         deviceKey: String? = null,
         headers: Map<String, String> = emptyMap(),
-    ): String = request("DELETE", path, null, deviceId, deviceKey, 30_000, headers)
+    ): String = request("POST", path, "{}", deviceId, deviceKey, 30_000, headers + ("X-HTTP-Method-Override" to "DELETE"))
 
     suspend fun send(
         method: String,

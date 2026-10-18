@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { classifyEntry, parseEpisode } from "./content/classify.js";
 
 export const channelsRouter = Router();
 
@@ -56,53 +57,6 @@ channelsRouter.get("/", async (req, res) => {
   }
 });
 
-function extractSeriesInfo(name: string): { seriesName: string; season: number; episode: number } | null {
-  const patterns = [
-    /(.+?)\s*[Ss](\d+)\s*[Ee](\d+)/i,
-    /(.+?)\s*(\d+)x(\d+)/i,
-    /(.+?)\s*[Tt]emp(?:orada)?\s*(\d+)\s*[Ee]p(?:is[oó]dio)?\s*(\d+)/i,
-    /(.+?)\s*[Ss]eason\s*(\d+)\s*[Ee]pisode\s*(\d+)/i
-  ];
-  for (const p of patterns) {
-    const m = name.match(p);
-    if (m) {
-      return {
-        seriesName: m[1].trim().replace(/[-_]+$/, "").trim(),
-        season: parseInt(m[2]),
-        episode: parseInt(m[3])
-      };
-    }
-  }
-  return null;
-}
-
-function classify(name: string, group: string, url: string): "live" | "movie" | "series" {
-  const g = (group || "").toLowerCase().trim();
-  const u = (url || "").toLowerCase();
-
-  if (extractSeriesInfo(name)) return "series";
-
-  if (g.startsWith("canais") || g.startsWith("tv ao vivo") || g.startsWith("live") || g.includes("[24h]") ||
-      g.includes("globo") || g.includes("record") || g.includes("sbt") || g.includes("band") ||
-      g.includes("sport") || g.includes("noticias") || g.includes("telecine") || g.includes("premiere")) return "live";
-
-  if (g.startsWith("series") || g.startsWith("séries") || g.startsWith("serie") ||
-      g.includes("novela") || g.includes("dorama") || g.includes("anime") ||
-      g.includes("turca") || g.includes("mexica") || g.includes("reel") ||
-      g.includes("apple+") || g.includes("star+") || g.includes("disney") ||
-      g.includes("hbo") || g.includes("netflix") || g.includes("prime") ||
-      g.includes("paramount") || g.includes("legendada")) return "series";
-
-  if (g.startsWith("filmes") || g.startsWith("filme") || g.includes("filme")) return "movie";
-
-  if (u.includes("/series/") || u.includes("/serie/")) return "series";
-  if (u.includes("/movie/") || u.includes("/movies/")) return "movie";
-  if (u.includes(".mp4") || u.includes(".mkv") || u.includes(".avi")) return "movie";
-  if (u.includes(".ts")) return "live";
-
-  return "live";
-}
-
 function parseM3U(content: string) {
   const lines = content.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
   const channels: { name: string; url: string; logo?: string; group?: string; type: string; seriesName?: string; season?: number; episode?: number }[] = [];
@@ -119,21 +73,27 @@ function parseM3U(content: string) {
       const group = groupMatch ? groupMatch[1].trim() : "Outros";
       const next = lines[i + 1];
       if (next && !next.startsWith("#") && next.startsWith("http")) {
-        const type = classify(name, group, next);
-        const seriesInfo = type === "series" ? extractSeriesInfo(name) : null;
+        const result = classifyEntry({ name, group, url: next });
+        const type = result.type;
+        const ep = result.episode || (type === "series" ? parseEpisode(name) : null);
         channels.push({
           name,
           url: next,
           logo,
           group,
           type,
-          seriesName: seriesInfo?.seriesName,
-          season: seriesInfo?.season,
-          episode: seriesInfo?.episode
+          seriesName: ep?.show,
+          season: ep?.season,
+          episode: ep?.episode
         });
         const existing = groups.get(group);
-        if (existing) existing.count++;
-        else groups.set(group, { count: 1, type });
+        if (existing) {
+          existing.count++;
+          // Prefer the most common type for the category, or series/movie if mixed
+          if (type === "series" || (type === "movie" && existing.type === "live")) existing.type = type;
+        } else {
+          groups.set(group, { count: 1, type });
+        }
         i++;
       }
     }
