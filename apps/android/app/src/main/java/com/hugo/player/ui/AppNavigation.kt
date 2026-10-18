@@ -40,6 +40,7 @@ fun NavHostController.openPlayer(request: PlaybackRequest) {
  */
 @Composable
 fun AppNavigation() {
+    UpdateCheckerHost()
     val context = LocalContext.current
     val nav = rememberNavController()
     val identity = remember { DeviceIdentity.get(context) }
@@ -58,68 +59,78 @@ fun AppNavigation() {
                 navArgument("refresh") { type = NavType.StringType; nullable = true; defaultValue = null },
             ),
         ) { backStack ->
+            val openId = backStack.arguments?.getString("open")?.takeIf { it.isNotBlank() }
+            val doRefresh = backStack.arguments?.getString("refresh") == "1"
             PlaylistScreen(
-                onOpen = { _, _ ->
-                    nav.navigate("home") {
-                        popUpTo("playlists?open={open}&refresh={refresh}") { inclusive = false }
-                        launchSingleTop = true
-                    }
+                onOpenPlaylist = { id, name ->
+                    nav.navigate("home/${enc(id)}/${enc(name)}")
                 },
-                onSettings = { nav.navigate("settings") },
-                autoOpenId = backStack.arguments?.getString("open")?.takeIf { it.isNotBlank() && it != "null" },
-                autoRefresh = backStack.arguments?.getString("refresh") == "1",
+                onOpenSettings = { nav.navigate("settings") },
+                autoOpenId = openId,
+                forceRefresh = doRefresh,
             )
         }
-        composable("home") {
-            val playlistId = LiveTvCache.playlistId ?: ""
+        composable("home/{playlistId}/{playlistName}") { backStack ->
+            val playlistId = dec(backStack.arguments?.getString("playlistId") ?: "")
+            val playlistName = dec(backStack.arguments?.getString("playlistName") ?: "")
             HomeScreen(
                 playlistId = playlistId,
-                playlistName = LiveTvCache.playlistName ?: "Playlist",
+                playlistName = playlistName,
                 onNavigate = { route ->
                     when {
-                        route == "live" -> nav.navigate("live/$playlistId")
-                        route == "movies" -> nav.navigate("movies/$playlistId")
-                        route == "series" -> nav.navigate("series/$playlistId")
                         route == "playlists" -> nav.goToPlaylists()
-                        route == "refresh" -> nav.goToPlaylists("refresh=1&open=${enc(playlistId)}")
-                        route.startsWith("recent:") -> nav.goToPlaylists("open=${enc(route.removePrefix("recent:"))}&refresh=")
-                        else -> nav.navigate(route)
+                        route == "settings" -> nav.navigate("settings")
+                        route == "live" -> nav.navigate("live/${enc(playlistId)}")
+                        route == "movies" -> nav.navigate("movies/${enc(playlistId)}")
+                        route == "series" -> nav.navigate("series/${enc(playlistId)}")
+                        route == "refresh" -> nav.goToPlaylists("open=${enc(playlistId)}&refresh=1")
+                        route.startsWith("recent:") -> {
+                            val id = route.removePrefix("recent:")
+                            nav.navigate("home/${enc(id)}/${enc(id)}")
+                        }
                     }
-                }
+                },
             )
         }
         composable("live/{playlistId}") { backStack ->
-            val playlistId = backStack.arguments?.getString("playlistId") ?: ""
-            BrowseScreen(playlistId, BrowseType.LIVE, onPlay = { url, title -> nav.openPlayer(PlaybackRequest(url = url, title = title, subtitle = "TV ao Vivo", isLive = true)) }, onOpenSeries = {}, onBack = { nav.popBackStack() })
+            val playlistId = dec(backStack.arguments?.getString("playlistId") ?: "")
+            BrowseScreen(playlistId, BrowseType.LIVE, onPlay = { url, title -> nav.openPlayer(PlaybackRequest(url = url, title = title, subtitle = "Ao vivo", isLive = true)) }, onOpenSeries = {}, onBack = { nav.popBackStack() })
         }
         composable("movies/{playlistId}") { backStack ->
-            val playlistId = backStack.arguments?.getString("playlistId") ?: ""
+            val playlistId = dec(backStack.arguments?.getString("playlistId") ?: "")
             BrowseScreen(playlistId, BrowseType.MOVIES, onPlay = { url, title -> nav.openPlayer(PlaybackRequest(url = url, title = title, subtitle = "Filme", isLive = false)) }, onOpenSeries = {}, onBack = { nav.popBackStack() })
         }
         composable("series/{playlistId}") { backStack ->
-            val playlistId = backStack.arguments?.getString("playlistId") ?: ""
-            BrowseScreen(
-                playlistId, BrowseType.SERIES,
-                onPlay = { url, title -> nav.openPlayer(url, title) },
-                onOpenSeries = { name -> nav.navigate("seriesDetail/${enc(playlistId)}/${enc(name)}") },
+            val playlistId = dec(backStack.arguments?.getString("playlistId") ?: "")
+            BrowseScreen(playlistId, BrowseType.SERIES, onPlay = { _, _ -> }, onOpenSeries = { seriesId, name, logo ->
+                nav.navigate("series-detail/${enc(playlistId)}/${enc(seriesId)}/${enc(name)}/${enc(logo ?: "")}")
+            }, onBack = { nav.popBackStack() })
+        }
+        composable("series-detail/{playlistId}/{seriesId}/{name}/{logo}") { backStack ->
+            val playlistId = dec(backStack.arguments?.getString("playlistId") ?: "")
+            val seriesId = dec(backStack.arguments?.getString("seriesId") ?: "")
+            val name = dec(backStack.arguments?.getString("name") ?: "")
+            val logo = dec(backStack.arguments?.getString("logo") ?: "").ifBlank { null }
+            SeriesDetailScreen(
+                playlistId = playlistId,
+                seriesId = seriesId,
+                seriesName = name,
+                seriesLogo = logo,
+                onPlay = { req -> nav.openPlayer(req) },
                 onBack = { nav.popBackStack() },
             )
         }
-        composable("seriesDetail/{playlistId}/{name}") { backStack ->
-            val playlistId = dec(backStack.arguments?.getString("playlistId") ?: "")
-            val name = dec(backStack.arguments?.getString("name") ?: "")
-            SeriesDetailScreen(playlistId, name, onPlay = { req -> nav.openPlayer(req) }, onBack = { nav.popBackStack() })
+        composable("settings") {
+            SettingsScreen(onBack = { nav.popBackStack() })
         }
-        composable("settings") { SettingsScreen(identity.deviceId, identity.deviceKey, onBack = { nav.popBackStack() }) }
         composable("play") {
-            val req = remember { PlaybackSession.current }
-            if (req != null) PlayerScreen(req, onBack = { nav.popBackStack() })
-            else LaunchedEffect(Unit) { nav.popBackStack() }
+            PlayerScreen(onBack = { nav.popBackStack() })
         }
         composable("player/{url}/{title}") { backStack ->
             val url = dec(backStack.arguments?.getString("url") ?: "")
-            val title = dec(backStack.arguments?.getString("title") ?: "Canal")
-            PlayerScreen(url, title, onBack = { nav.popBackStack() })
+            val title = dec(backStack.arguments?.getString("title") ?: "")
+            PlaybackSession.current = PlaybackRequest(url = url, title = title)
+            PlayerScreen(onBack = { nav.popBackStack() })
         }
     }
 }
