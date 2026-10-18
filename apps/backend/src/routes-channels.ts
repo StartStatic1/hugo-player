@@ -34,6 +34,16 @@ channelsRouter.get("/series-episodes", async (req, res) => {
   }
 });
 
+
+channelsRouter.get("/version", (_req, res) => {
+  res.json({
+    versionCode: 2,
+    versionName: "0.2.0",
+    notes: "Séries com episódios reais, correções de UI e estabilidade.",
+    apkUrl: "https://github.com/StartStatic1/hugo-player/releases/latest/download/app-release.apk",
+  });
+});
+
 channelsRouter.get("/", async (req, res) => {
   const playlistUrl = req.query.url as string;
   const page = parseInt(req.query.page as string) || 0;
