@@ -366,7 +366,11 @@ fun PlaylistScreen(
 
     if (showAdd) {
         var name by remember { mutableStateOf("") }
+        var isXtream by remember { mutableStateOf(false) }
         var url by remember { mutableStateOf("") }
+        var host by remember { mutableStateOf("") }
+        var user by remember { mutableStateOf("") }
+        var pass by remember { mutableStateOf("") }
         var err by remember { mutableStateOf<String?>(null) }
         var busy by remember { mutableStateOf(false) }
         AlertDialog(
@@ -375,11 +379,25 @@ fun PlaylistScreen(
             title = { Text("Adicionar playlist", color = Color.White) },
             text = {
                 Column {
-                    Text("Também é possível adicionar pelo site (Xtream e PIN).", color = HugoColors.TextMuted, fontSize = 13.sp)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("Tipo:", color = Color.White, fontSize = 14.sp)
+                        Spacer(Modifier.width(12.dp))
+                        FilterChip(selected = !isXtream, onClick = { isXtream = false }, label = { Text("M3U") })
+                        Spacer(Modifier.width(8.dp))
+                        FilterChip(selected = isXtream, onClick = { isXtream = true }, label = { Text("Xtream") })
+                    }
                     Spacer(Modifier.height(10.dp))
                     HugoTextField(name, { name = it }, "Nome")
                     Spacer(Modifier.height(10.dp))
-                    HugoTextField(url, { url = it.trim() }, "URL M3U", keyboardType = KeyboardType.Uri)
+                    if (isXtream) {
+                        HugoTextField(host, { host = it.trim() }, "Host (ex: http://servidor.com:8080)", keyboardType = KeyboardType.Uri)
+                        Spacer(Modifier.height(8.dp))
+                        HugoTextField(user, { user = it.trim() }, "Usuário")
+                        Spacer(Modifier.height(8.dp))
+                        HugoTextField(pass, { pass = it }, "Senha")
+                    } else {
+                        HugoTextField(url, { url = it.trim() }, "URL M3U", keyboardType = KeyboardType.Uri)
+                    }
                     err?.let { Spacer(Modifier.height(8.dp)); Text(it, color = Color(0xFFF87171), fontSize = 13.sp) }
                 }
             },
@@ -387,11 +405,16 @@ fun PlaylistScreen(
                 Button(
                     enabled = !busy,
                     onClick = {
-                        if (name.isBlank() || url.length < 8) { err = "Preencha o nome e a URL."; return@Button }
+                        val finalUrl = if (isXtream) {
+                            val h = host.trimEnd('/')
+                            if (h.isBlank() || user.isBlank() || pass.isBlank()) { err = "Preencha host, usuário e senha."; return@Button }
+                            "$h/get.php?username=$user&password=$pass&type=m3u_plus&output=ts"
+                        } else url
+                        if (name.isBlank() || finalUrl.length < 8) { err = "Preencha os campos."; return@Button }
                         busy = true
                         scope.launch {
                             try {
-                                PlaylistRepository.add(identity.deviceId, identity.deviceKey, name.trim(), url)
+                                PlaylistRepository.add(identity.deviceId, identity.deviceKey, name.trim(), finalUrl)
                                 showAdd = false
                                 toast = "Playlist adicionada"
                                 reload()
