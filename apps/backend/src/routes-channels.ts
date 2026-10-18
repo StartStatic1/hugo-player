@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { classifyEntry, parseEpisode } from "./content/classify.js";
+import { parseXtreamUrl, buildCatalogFromXtream } from "./content/xtream.js";
 
 export const channelsRouter = Router();
 
@@ -15,6 +16,41 @@ channelsRouter.get("/", async (req, res) => {
   if (!playlistUrl) return res.status(400).json({ error: "missing_url" });
 
   try {
+    // Prefer Xtream API when the URL contains credentials
+    const xt = parseXtreamUrl(playlistUrl);
+    if (xt) {
+      const fetchJson = async (url: string) => {
+        const r = await fetch(url, { headers: { "User-Agent": "TiviMate/4.7.0" } });
+        if (!r.ok) throw new Error("upstream_" + r.status);
+        return r.json();
+      };
+      const catalog = await buildCatalogFromXtream(xt, fetchJson);
+      const channels: any[] = [];
+      for (const it of catalog.live.items) channels.push({ name: it.name, url: it.url, logo: it.logo, group: it.group, type: "live" });
+      for (const it of catalog.movies.items) channels.push({ name: it.name, url: it.url, logo: it.poster, group: it.group, type: "movie" });
+      for (const it of catalog.series.items) channels.push({ name: it.name, url: "", logo: it.cover, group: it.group, type: "series", seriesName: it.name, seriesId: it.seriesId });
+      const categories = [
+        ...catalog.live.categories.map((c, i) => ({ name: c.name, count: c.count, type: "live", position: i })),
+        ...catalog.movies.categories.map((c, i) => ({ name: c.name, count: c.count, type: "movie", position: i })),
+        ...catalog.series.categories.map((c, i) => ({ name: c.name, count: c.count, type: "series", position: i })),
+      ];
+      const data = { channels, categories, stats: catalog.stats, timestamp: Date.now() };
+      playlistCache.set(playlistUrl, data);
+      let filtered = channels;
+      if (type && type !== "all") filtered = filtered.filter((c: any) => c.type === type);
+      if (group) filtered = filtered.filter((c: any) => c.group === group);
+      const start = page * limit;
+      return res.json({
+        channels: filtered.slice(start, start + limit),
+        categories,
+        total: filtered.length,
+        page,
+        limit,
+        hasMore: start + limit < filtered.length,
+        source: "xtream",
+      });
+    }
+
     const cached = playlistCache.get(playlistUrl);
     let data;
     if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
