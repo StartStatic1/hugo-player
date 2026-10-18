@@ -35,6 +35,12 @@ channelsRouter.get("/series-episodes", async (req, res) => {
 });
 
 
+
+channelsRouter.get("/latest.apk", (_req, res) => {
+  // Placeholder: point to the latest release or serve a local file
+  res.redirect("https://github.com/StartStatic1/hugo-player/releases/latest/download/app-release.apk");
+});
+
 channelsRouter.get("/version", (_req, res) => {
   res.json({
     versionCode: 2,
