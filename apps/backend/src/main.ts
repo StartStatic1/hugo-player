@@ -11,6 +11,8 @@ import { tmdbRouter } from "./routes-tmdb.js";
 import { recoveryRouter } from "./routes-recovery.js";
 import { channelsRouter } from "./routes-channels.js";
 import { createPlaylistRouter, type StoredPlaylist } from "./routes-playlists.js";
+import { createEpgRouter } from "./routes-epg.js";
+import type { PlaylistResolver } from "./routes-catalog.js";
 
 const PORT = Number(process.env.PORT ?? 8080);
 const DATA_FILE = path.resolve(process.env.DATA_FILE ?? "./data/db.json");
@@ -102,15 +104,21 @@ app.post("/devices/register", async (req, res) => {
   if (existing) {
     if (!verifyKey(deviceKey, existing)) return res.status(409).json({ error: "device_already_registered" });
     existing.lastSeenAt = now.toISOString();
+    existing.platform = platform;
+    if (appVersion) existing.appVersion = appVersion;
     await persist();
     return res.json({ registered: true, created: false });
   }
   const { salt, hash } = hashKey(deviceKey);
   const device: Device = {
-    deviceId, keyHash: hash, keySalt: salt, platform,
-    appVersion: appVersion ?? "unknown",
+    deviceId,
+    keyHash: hash,
+    keySalt: salt,
+    platform,
+    appVersion: appVersion ?? "",
     license: { type: "trial", expiresAt: new Date(now.getTime() + TRIAL_DAYS * 86400000).toISOString() },
-    createdAt: now.toISOString(), lastSeenAt: now.toISOString()
+    createdAt: now.toISOString(),
+    lastSeenAt: now.toISOString(),
   };
   db.devices[deviceId] = device;
   await persist();
@@ -139,7 +147,7 @@ app.get("/devices/status", requireDevice, (req, res) => {
     deviceId: device.deviceId,
     platform: device.platform,
     license: { type: expired ? "expired" : device.license.type, expiresAt: device.license.expiresAt },
-    playlists: db.playlists.filter(p => p.deviceId === device.deviceId).length,
+    playlists: db.playlists.filter((p) => p.deviceId === device.deviceId).length,
     createdAt: device.createdAt,
     lastSeenAt: device.lastSeenAt,
   });
@@ -147,10 +155,24 @@ app.get("/devices/status", requireDevice, (req, res) => {
 
 app.use("/playlists", createPlaylistRouter({
   playlists: () => db.playlists,
-  setPlaylists: next => { db.playlists = next; },
+  setPlaylists: (next) => { db.playlists = next; },
   persist,
   authenticate: (id, key) => authDevice(id, key)?.deviceId ?? null,
 }));
+
+const resolvePlaylist: PlaylistResolver = (req) => {
+  const device = authDevice(req.header("x-device-id"), req.header("x-device-key"));
+  const playlistId = String(req.query.playlistId || "");
+  if (playlistId && device) {
+    const p = db.playlists.find((x) => x.id === playlistId && x.deviceId === device.deviceId);
+    if (!p) return "unauthorized";
+    return { type: p.type, url: p.url };
+  }
+  const url = String(req.query.url || "");
+  if (url) return { type: (req.query.type as "m3u" | "xtream") || "m3u", url };
+  return null;
+};
+app.use("/epg", createEpgRouter(resolvePlaylist));
 
 app.use((_req, res) => res.status(404).json({ error: "not_found" }));
 
