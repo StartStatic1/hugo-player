@@ -44,13 +44,15 @@ channelsRouter.get("/latest.apk", (_req, res) => {
 channelsRouter.get("/version", (_req, res) => {
   try {
     const fs = require("fs");
-    const path = require("path");
     const file = "/root/hugo-player/apps/backend/update.json";
     if (fs.existsSync(file)) {
       const data = JSON.parse(fs.readFileSync(file, "utf8"));
       return res.json(data);
     }
-  } catch {}
+  } catch (e: any) {
+    console.error("update.json error:", e.message);
+    return res.json({ error: e.message, versionCode: 2 });
+  }
   res.json({
     versionCode: 2,
     versionName: "0.2.0",
