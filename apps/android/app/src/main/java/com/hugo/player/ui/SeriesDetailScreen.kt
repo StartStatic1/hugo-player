@@ -66,6 +66,7 @@ fun SeriesDetailScreen(
     val context = LocalContext.current
     val repo = remember { CatalogRepository.get(context) }
     var episodes by remember { mutableStateOf<List<ChannelEntity>?>(null) }
+    var errorMsg by remember { mutableStateOf<String?>(null) }
     var selectedSeason by rememberSaveable { mutableStateOf<Int?>(null) }
     val firstEpisodeFocus = remember { FocusRequester() }
     val listState = rememberLazyListState()
@@ -103,7 +104,7 @@ fun SeriesDetailScreen(
                 }
                 episodes = list
             } catch (ex: Exception) {
-                android.util.Log.e("HugoSeries", "episodes fetch failed: " + ex.message + " url=" + endpoint)
+                errorMsg = "Erro ao carregar episódios: ${ex.message}\nURL: $endpoint"
                 episodes = local
             }
         } else {
