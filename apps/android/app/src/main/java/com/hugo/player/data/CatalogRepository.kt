@@ -71,7 +71,7 @@ class CatalogRepository(context: Context) {
         conn.readTimeout = 180000
         if (conn.responseCode !in 200..299) {
             val err = conn.errorStream?.bufferedReader()?.use { it.readText() }.orEmpty()
-            val apiErr = Regex("\"error\"\s*:\s*\"([^\"]+)\"").find(err)?.groupValues?.get(1)
+            val apiErr = Regex("\"error\"\\s*:\\s*\"([^\"]+)\"").find(err)?.groupValues?.get(1)
             conn.disconnect()
             throw Exception(
                 when {
@@ -98,9 +98,14 @@ class CatalogRepository(context: Context) {
                         reader.beginArray()
                         while (reader.hasNext()) {
                             reader.beginObject()
-                            var name = "Canal"; var url = ""; var logo: String? = null
-                            var group = "Outros"; var type = "live"
-                            var seriesName: String? = null; var season: Int? = null; var episode: Int? = null
+                            var name = "Canal"
+                            var url = ""
+                            var logo: String? = null
+                            var group = "Outros"
+                            var type = "live"
+                            var seriesName: String? = null
+                            var season: Int? = null
+                            var episode: Int? = null
                             while (reader.hasNext()) {
                                 when (reader.nextName()) {
                                     "name" -> name = reader.nextString()
@@ -121,7 +126,19 @@ class CatalogRepository(context: Context) {
                                 season = season ?: parsed?.season ?: 1
                                 episode = episode ?: parsed?.episode
                             }
-                            channels.add(ChannelEntity(name = name, url = url, logo = logo, group = group, type = type, playlistId = playlistId, seriesName = seriesName, season = season, episode = episode))
+                            channels.add(
+                                ChannelEntity(
+                                    name = name,
+                                    url = url,
+                                    logo = logo,
+                                    group = group,
+                                    type = type,
+                                    playlistId = playlistId,
+                                    seriesName = seriesName,
+                                    season = season,
+                                    episode = episode,
+                                )
+                            )
                             total++
                             if (channels.size >= 800) {
                                 dao.insertChannels(channels.toList())
@@ -137,7 +154,9 @@ class CatalogRepository(context: Context) {
                         var pos = 0
                         while (reader.hasNext()) {
                             reader.beginObject()
-                            var cname = ""; var ccount = 0; var ctype = "live"
+                            var cname = ""
+                            var ccount = 0
+                            var ctype = "live"
                             while (reader.hasNext()) {
                                 when (reader.nextName()) {
                                     "name" -> cname = reader.nextString()
@@ -147,7 +166,15 @@ class CatalogRepository(context: Context) {
                                 }
                             }
                             reader.endObject()
-                            categories.add(CategoryEntity(name = cname, count = ccount, type = ctype, playlistId = playlistId, position = pos++))
+                            categories.add(
+                                CategoryEntity(
+                                    name = cname,
+                                    count = ccount,
+                                    type = ctype,
+                                    playlistId = playlistId,
+                                    position = pos++,
+                                )
+                            )
                         }
                         reader.endArray()
                         if (categories.isNotEmpty()) dao.insertCategories(categories)
