@@ -378,7 +378,7 @@ fun PlaylistScreen(
             containerColor = HugoColors.Card,
             title = { Text("Adicionar playlist", color = Color.White) },
             text = {
-                Column {
+                Column(Modifier.verticalScroll(rememberScrollState())) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text("Tipo:", color = Color.White, fontSize = 14.sp)
                         Spacer(Modifier.width(12.dp))
@@ -391,7 +391,7 @@ fun PlaylistScreen(
                     Spacer(Modifier.height(10.dp))
                     if (isXtream) {
                         HugoTextField(host, { host = it.trim() }, "Host", keyboardType = KeyboardType.Uri)
-                        Spacer(Modifier.height(6.dp))
+                        Spacer(Modifier.height(4.dp))
                         Text("Ex: http://servidor.com:8080", color = HugoColors.TextMuted, fontSize = 11.sp)
                         Spacer(Modifier.height(8.dp))
                         HugoTextField(user, { user = it.trim() }, "Usuário")
@@ -401,6 +401,7 @@ fun PlaylistScreen(
                         HugoTextField(url, { url = it.trim() }, "URL M3U", keyboardType = KeyboardType.Uri)
                     }
                     err?.let { Spacer(Modifier.height(8.dp)); Text(it, color = Color(0xFFF87171), fontSize = 13.sp) }
+                    Spacer(Modifier.height(8.dp))
                 }
             },
             confirmButton = {
