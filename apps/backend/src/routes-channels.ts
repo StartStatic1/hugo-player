@@ -75,7 +75,9 @@ channelsRouter.get("/version", (_req, res) => {
 channelsRouter.get("/", async (req, res) => {
   const playlistUrl = req.query.url as string;
   const page = parseInt(String(req.query.page || "0"), 10) || 0;
-  const limit = Math.min(parseInt(String(req.query.limit || "50"), 10) || 50, 200);
+  // Sync do app pede limit=80000; o teto antigo de 200 cortava filmes/séries (só vinha live)
+  const rawLimit = parseInt(String(req.query.limit || "50"), 10) || 50;
+  const limit = Math.min(Math.max(rawLimit, 1), 100_000);
   const type = req.query.type as string | undefined;
   const group = req.query.group as string | undefined;
   if (!playlistUrl) return res.status(400).json({ error: "missing_playlist" });
