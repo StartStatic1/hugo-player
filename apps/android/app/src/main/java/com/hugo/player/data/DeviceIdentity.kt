@@ -122,4 +122,25 @@ object DeviceIdentity {
             0
         }
     }
+
+    /** Restaura um Device ID + Key anteriores (valida no servidor). */
+    suspend fun restore(context: Context, deviceId: String, deviceKey: String): Boolean {
+        val id = deviceId.trim().uppercase()
+        val key = deviceKey.trim().uppercase()
+        if (id.length < 10 || key.length < 4) return false
+        return try {
+            // Tenta listar playlists com o par informado para validar
+            PlaylistRepository.list(id, key)
+            val p = prefs(context)
+            p.edit().apply {
+                putString("deviceId", id)
+                putString("deviceKey", key)
+                putBoolean("deviceRegistered", true)
+                putBoolean("activationDone", true)
+            }.commit()
+            true
+        } catch (e: Exception) {
+            false
+        }
+    }
 }

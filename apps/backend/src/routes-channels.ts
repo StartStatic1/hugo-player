@@ -9,7 +9,7 @@ const CACHE_TTL = 10 * 60 * 1000;
 channelsRouter.get("/", async (req, res) => {
   const playlistUrl = req.query.url as string;
   const page = parseInt(req.query.page as string) || 0;
-  const limit = Math.min(parseInt(req.query.limit as string) || 200, 100000);
+  const limit = Math.min(parseInt(req.query.limit as string) || 200, 500000);
   const type = req.query.type as string;
   const group = req.query.group as string;
   if (!playlistUrl) return res.status(400).json({ error: "missing_url" });
@@ -82,7 +82,7 @@ function parseM3U(content: string) {
           logo,
           group,
           type,
-          seriesName: ep?.show,
+          seriesName: ep?.show || (type === "series" ? name.trim() : undefined),
           season: ep?.season,
           episode: ep?.episode
         });

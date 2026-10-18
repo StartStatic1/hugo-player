@@ -64,7 +64,7 @@ class CatalogRepository(context: Context) {
         onProgress("Baixando lista...")
         onFraction(null)
         val encoded = java.net.URLEncoder.encode(playlistUrl, "UTF-8")
-        val endpoint = "${HugoApi.baseUrl}/channels?url=$encoded&limit=100000"
+        val endpoint = "${HugoApi.baseUrl}/channels?url=$encoded&limit=250000"
         val conn = URL(endpoint).openConnection() as java.net.HttpURLConnection
         conn.connectTimeout = 30000
         conn.readTimeout = 180000

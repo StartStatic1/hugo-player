@@ -499,7 +499,7 @@ private fun summaryLine(s: PlaylistRepository.LocalSummary?, pl: RemotePlaylist)
     val parts = buildList {
         if (s.live > 0) add("${nf.format(s.live)} canais")
         if (s.movies > 0) add("${nf.format(s.movies)} filmes")
-        if (s.series > 0) add("${nf.format(s.series)} episódios")
+        if (s.series > 0) add("${nf.format(s.series)} séries")
     }
     val ago = s.syncedAt?.let { " · atualizada " + DateUtils.getRelativeTimeSpanString(it, System.currentTimeMillis(), DateUtils.MINUTE_IN_MILLIS) } ?: ""
     return lock + parts.joinToString(" · ") + ago

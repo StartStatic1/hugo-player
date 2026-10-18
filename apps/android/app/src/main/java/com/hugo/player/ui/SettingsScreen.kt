@@ -50,6 +50,28 @@ fun SettingsScreen(deviceId: String?, deviceKey: String?, onBack: () -> Unit) {
             }
         }
 
+        Section("Restaurar dispositivo") {
+            var restoreId by remember { mutableStateOf("") }
+            var restoreKey by remember { mutableStateOf("") }
+            var restoring by remember { mutableStateOf(false) }
+            Text("Se você desinstalou o app e perdeu o Device ID, cole aqui o ID e a Key antigos.", color = HugoColors.TextMuted, fontSize = 12.sp)
+            Spacer(Modifier.height(8.dp))
+            OutlinedTextField(value = restoreId, onValueChange = { restoreId = it }, label = { Text("Device ID") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+            Spacer(Modifier.height(6.dp))
+            OutlinedTextField(value = restoreKey, onValueChange = { restoreKey = it }, label = { Text("Device Key") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+            Spacer(Modifier.height(10.dp))
+            Button(onClick = {
+                restoring = true
+                kotlinx.coroutines.GlobalScope.launch {
+                    val ok = com.hugo.player.data.DeviceIdentity.restore(appContext, restoreId, restoreKey)
+                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                        restoring = false
+                        message = if (ok) "Dispositivo restaurado. Reinicie o app." else "ID ou Key inválidos."
+                    }
+                }
+            }, enabled = !restoring) { Text(if (restoring) "Restaurando..." else "Restaurar") }
+        }
+
         Section("Cache da lista") {
             Text("A lista fica salva no aparelho e abre na hora. Depois do prazo, é baixada de novo.", color = HugoColors.TextMuted, fontSize = 12.sp)
             Spacer(Modifier.height(8.dp))

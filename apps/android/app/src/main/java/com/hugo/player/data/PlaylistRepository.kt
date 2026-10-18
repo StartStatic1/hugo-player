@@ -75,7 +75,7 @@ object PlaylistRepository {
         return LocalSummary(
             live = repo.count(playlistId, "live"),
             movies = repo.count(playlistId, "movie"),
-            series = repo.count(playlistId, "series"),
+            series = repo.seriesCount(playlistId, null, null),
             syncedAt = syncedAt(context, playlistId),
         )
     }

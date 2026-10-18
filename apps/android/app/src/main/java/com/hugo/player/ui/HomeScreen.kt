@@ -64,7 +64,7 @@ fun HomeScreen(playlistId: String, playlistName: String, onNavigate: (String) ->
     val liveFocus = remember { FocusRequester() }
 
     LaunchedEffect(playlistId) {
-        counts = Triple(repo.count(playlistId, "live"), repo.count(playlistId, "movie"), repo.count(playlistId, "series"))
+        counts = Triple(repo.count(playlistId, "live"), repo.count(playlistId, "movie"), repo.seriesCount(playlistId, null, null))
     }
     LaunchedEffect(Unit) {
         runCatching { liveFocus.requestFocus() }
@@ -104,7 +104,7 @@ fun HomeScreen(playlistId: String, playlistName: String, onNavigate: (String) ->
         Row(horizontalArrangement = Arrangement.spacedBy(16.dp), modifier = Modifier.fillMaxWidth()) {
             MainTile("TV ao Vivo", countLabel(counts.first, "canais"), Icons.Default.LiveTv, LiveBrush, Modifier.weight(1f).focusRequester(liveFocus)) { onNavigate("live") }
             MainTile("Filmes", countLabel(counts.second, "filmes"), Icons.Default.Movie, MoviesBrush, Modifier.weight(1f)) { onNavigate("movies") }
-            MainTile("Séries", countLabel(counts.third, "episódios"), Icons.Default.VideoLibrary, SeriesBrush, Modifier.weight(1f)) { onNavigate("series") }
+            MainTile("Séries", countLabel(counts.third, "séries"), Icons.Default.VideoLibrary, SeriesBrush, Modifier.weight(1f)) { onNavigate("series") }
         }
 
         Spacer(Modifier.height(16.dp))
