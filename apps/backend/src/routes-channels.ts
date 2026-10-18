@@ -1,11 +1,38 @@
 import { Router } from "express";
 import { classifyEntry, parseEpisode } from "./content/classify.js";
-import { parseXtreamUrl, buildCatalogFromXtream } from "./content/xtream.js";
+import { parseXtreamUrl, buildCatalogFromXtream, fetchSeriesInfo } from "./content/xtream.js";
 
 export const channelsRouter = Router();
 
 const playlistCache = new Map<string, { channels: any[]; categories: any[]; stats: any; timestamp: number }>();
 const CACHE_TTL = 10 * 60 * 1000;
+
+
+channelsRouter.get("/series-episodes", async (req, res) => {
+  const playlistUrl = req.query.url as string;
+  const seriesId = parseInt(req.query.seriesId as string);
+  if (!playlistUrl || !seriesId) return res.status(400).json({ error: "missing_params" });
+  const xt = parseXtreamUrl(playlistUrl);
+  if (!xt) return res.status(400).json({ error: "not_xtream" });
+  try {
+    const fetchJson = async (url: string) => {
+      const r = await fetch(url, { headers: { "User-Agent": "TiviMate/4.7.0" } });
+      if (!r.ok) throw new Error("upstream_" + r.status);
+      return r.json();
+    };
+    const info = await fetchSeriesInfo(xt, seriesId, fetchJson);
+    const episodes = info.seasons.flatMap(s => s.episodes.map(e => ({
+      name: e.title || `${info.name} S${String(s.number).padStart(2,"0")}E${String(e.number).padStart(2,"0")}`,
+      url: e.url,
+      season: s.number,
+      episode: e.number,
+      logo: info.cover,
+    })));
+    res.json({ name: info.name, cover: info.cover, plot: info.plot, episodes });
+  } catch (e: any) {
+    res.status(502).json({ error: e.message || "series_info_failed" });
+  }
+});
 
 channelsRouter.get("/", async (req, res) => {
   const playlistUrl = req.query.url as string;
