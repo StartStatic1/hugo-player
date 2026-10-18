@@ -162,7 +162,7 @@ fun SeriesDetailScreen(
                     contentAlignment = Alignment.Center
                 ) {
                     errorMsg?.let { Text(it, color = Color(0xFFF87171), fontSize = 12.sp, modifier = Modifier.padding(8.dp)) }
-            Text("Sinopse disponível em breve", color = HugoColors.TextMuted, fontSize = 12.sp, modifier = Modifier.padding(bottom = 8.dp))
+            Text(local.firstOrNull()?.name ?: "Sinopse não disponível", color = HugoColors.TextMuted, fontSize = 12.sp, modifier = Modifier.padding(bottom = 8.dp))
             Text(seriesName, color = HugoColors.TextDim, fontSize = 14.sp, modifier = Modifier.padding(12.dp))
                     if (poster != null) SubcomposeAsyncImage(model = poster, contentDescription = seriesName, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
                 }
@@ -170,7 +170,7 @@ fun SeriesDetailScreen(
             Spacer(Modifier.width(28.dp))
             Column(Modifier.weight(1f)) {
                 errorMsg?.let { Text(it, color = Color(0xFFF87171), fontSize = 12.sp, modifier = Modifier.padding(8.dp)) }
-            Text("Sinopse disponível em breve", color = HugoColors.TextMuted, fontSize = 12.sp, modifier = Modifier.padding(bottom = 8.dp))
+            Text(local.firstOrNull()?.name ?: "Sinopse não disponível", color = HugoColors.TextMuted, fontSize = 12.sp, modifier = Modifier.padding(bottom = 8.dp))
             Text(seriesName, color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 Spacer(Modifier.height(4.dp))
                 Text(
