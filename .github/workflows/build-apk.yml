@@ -29,9 +29,23 @@ jobs:
           chmod +x gradlew
           ./gradlew assembleDebug testDebugUnitTest
 
-      - name: Upload APK
+      - name: Upload Debug APK
         uses: actions/upload-artifact@v4
         with:
           name: hugo-player-debug
           path: apps/android/app/build/outputs/apk/debug/app-debug.apk
           retention-days: 14
+
+      - name: Build Release APK
+        if: success()
+        working-directory: apps/android
+        run: |
+          ./gradlew assembleRelease
+
+      - name: Upload Release APK
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hugo-player-release
+          path: apps/android/app/build/outputs/apk/release/app-release.apk
+          retention-days: 30
