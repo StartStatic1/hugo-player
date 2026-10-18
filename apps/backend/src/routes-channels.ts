@@ -38,7 +38,19 @@ channelsRouter.get("/series-episodes", async (req, res) => {
 
 
 channelsRouter.get("/latest.apk", (_req, res) => {
-  // Placeholder: point to the latest release or serve a local file
+  const localPaths = [
+    "/root/hugo-player/apps/backend/public/latest.apk",
+    "/root/hugo-player/apps/backend/latest.apk",
+    "/var/www/hugo/latest.apk",
+  ];
+  for (const p of localPaths) {
+    if (fs.existsSync(p)) {
+      res.setHeader("Content-Type", "application/vnd.android.package-archive");
+      res.setHeader("Content-Disposition", 'attachment; filename="hugo-player.apk"');
+      return res.sendFile(p);
+    }
+  }
+  // Fallback: GitHub Releases
   res.redirect("https://github.com/StartStatic1/hugo-player/releases/latest/download/app-release.apk");
 });
 
@@ -63,14 +75,13 @@ channelsRouter.get("/version", (_req, res) => {
 
 channelsRouter.get("/", async (req, res) => {
   const playlistUrl = req.query.url as string;
-  const page = parseInt(req.query.page as string) || 0;
-  const limit = Math.min(parseInt(req.query.limit as string) || 200, 500000);
-  const type = req.query.type as string;
-  const group = req.query.group as string;
-  if (!playlistUrl) return res.status(400).json({ error: "missing_url" });
+  const page = parseInt(String(req.query.page || "0"), 10) || 0;
+  const limit = Math.min(parseInt(String(req.query.limit || "50"), 10) || 50, 200);
+  const type = req.query.type as string | undefined;
+  const group = req.query.group as string | undefined;
+  if (!playlistUrl) return res.status(400).json({ error: "missing_playlist" });
 
   try {
-    // Prefer Xtream API when the URL contains credentials
     const xt = parseXtreamUrl(playlistUrl);
     if (xt) {
       const fetchJson = async (url: string) => {
@@ -79,10 +90,11 @@ channelsRouter.get("/", async (req, res) => {
         return r.json();
       };
       const catalog = await buildCatalogFromXtream(xt, fetchJson);
-      const channels: any[] = [];
-      for (const it of catalog.live.items) channels.push({ name: it.name, url: it.url, logo: it.logo, group: it.group, type: "live" });
-      for (const it of catalog.movies.items) channels.push({ name: it.name, url: it.url, logo: it.poster, group: it.group, type: "movie" });
-      for (const it of catalog.series.items) channels.push({ name: it.name, url: `xtream://series/${it.seriesId}`, logo: it.cover, group: it.group, type: "series", seriesName: it.name, seriesId: it.seriesId, episodeCount: it.episodeCount, plot: it.plot });
+      const channels = [
+        ...catalog.live.channels,
+        ...catalog.movies.channels,
+        ...catalog.series.channels,
+      ];
       const categories = [
         ...catalog.live.categories.map((c, i) => ({ name: c.name, count: c.count, type: "live", position: i })),
         ...catalog.movies.categories.map((c, i) => ({ name: c.name, count: c.count, type: "movie", position: i })),
@@ -148,58 +160,34 @@ channelsRouter.get("/", async (req, res) => {
 });
 
 function parseM3U(content: string) {
-  const lines = content.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
-  const channels: { name: string; url: string; logo?: string; group?: string; type: string; seriesName?: string; season?: number; episode?: number }[] = [];
-  const groups = new Map<string, { count: number; type: string }>();
-
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
+  const lines = content.split(/\r?\n/);
+  const channels: any[] = [];
+  const catMap = new Map<string, number>();
+  let current: any = null;
+  for (const raw of lines) {
+    const line = raw.trim();
     if (line.startsWith("#EXTINF")) {
-      const nameMatch = line.match(/,(.+)$/);
-      const logoMatch = line.match(/tvg-logo="([^"]+)"/i);
-      const groupMatch = line.match(/group-title="([^"]+)"/i);
-      const name = nameMatch ? nameMatch[1].trim() : "Canal";
-      const logo = logoMatch ? logoMatch[1] : undefined;
-      const group = groupMatch ? groupMatch[1].trim() : "Outros";
-      const next = lines[i + 1];
-      if (next && !next.startsWith("#") && next.startsWith("http")) {
-        const result = classifyEntry({ name, group, url: next });
-        const type = result.type;
-        const ep = result.episode || (type === "series" ? parseEpisode(name) : null);
-        channels.push({
-          name,
-          url: next,
-          logo,
-          group,
-          type,
-          seriesName: ep?.show || (type === "series" ? name.trim() : undefined),
-          season: ep?.season,
-          episode: ep?.episode
-        });
-        const existing = groups.get(group);
-        if (existing) {
-          existing.count++;
-          // Prefer the most common type for the category, or series/movie if mixed
-          if (type === "series" || (type === "movie" && existing.type === "live")) existing.type = type;
-        } else {
-          groups.set(group, { count: 1, type });
-        }
-        i++;
-      }
+      const nameMatch = line.match(/,(.*)$/);
+      const groupMatch = line.match(/group-title="([^"]*)"/i);
+      const logoMatch = line.match(/tvg-logo="([^"]*)"/i);
+      const name = (nameMatch?.[1] || "").trim();
+      const group = (groupMatch?.[1] || "Geral").trim();
+      const logo = logoMatch?.[1] || "";
+      const classified = classifyEntry(name, group);
+      current = { name, group, logo, type: classified.type, ...parseEpisode(name) };
+      catMap.set(group, (catMap.get(group) || 0) + 1);
+    } else if (line && !line.startsWith("#") && current) {
+      current.url = line;
+      channels.push(current);
+      current = null;
     }
   }
-
-  const categories = Array.from(groups.entries())
-    .map(([name, info]) => ({ name, count: info.count, type: info.type }))
-    .sort((a, b) => b.count - a.count);
-
-  return {
-    channels,
-    categories,
-    stats: {
-      live: channels.filter(c => c.type === "live").length,
-      movies: channels.filter(c => c.type === "movie").length,
-      series: channels.filter(c => c.type === "series").length
-    }
+  const categories = Array.from(catMap.entries()).map(([name, count], i) => ({ name, count, position: i }));
+  const stats = {
+    total: channels.length,
+    live: channels.filter(c => c.type === "live").length,
+    movie: channels.filter(c => c.type === "movie").length,
+    series: channels.filter(c => c.type === "series").length,
   };
+  return { channels, categories, stats, timestamp: Date.now() };
 }
