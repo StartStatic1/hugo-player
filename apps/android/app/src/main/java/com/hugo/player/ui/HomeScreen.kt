@@ -55,7 +55,30 @@ private val SeriesBrush = Brush.linearGradient(listOf(Color(0xFF0891B2), Color(0
  * Rotas emitidas: live, movies, series, playlists, settings, refresh, recent:<id>.
  */
 @Composable
-fun HomeScreen(playlistId: String, playlistName: String, onNavigate: (String) -> Unit) {
+fun HomeScreen(
+
+    var updateInfo by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(Unit) {
+        try {
+            val url = "${com.hugo.player.data.HugoApi.baseUrl}/channels/version"
+            val text = java.net.URL(url).openConnection().getInputStream().bufferedReader().use { it.readText() }
+            val json = org.json.JSONObject(text)
+            val remote = json.optInt("versionCode", 1)
+            val local = com.hugo.player.BuildConfig.VERSION_CODE
+            if (remote > local) {
+                updateInfo = json.optString("notes", "Nova versão disponível")
+            }
+        } catch (_: Exception) {}
+    }
+    updateInfo?.let { notes ->
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { updateInfo = null },
+            title = { androidx.compose.material3.Text("Atualização disponível") },
+            text = { androidx.compose.material3.Text(notes) },
+            confirmButton = { androidx.compose.material3.TextButton(onClick = { updateInfo = null }) { androidx.compose.material3.Text("OK") } }
+        )
+    }
+playlistId: String, playlistName: String, onNavigate: (String) -> Unit) {
     val context = LocalContext.current
     val repo = remember { CatalogRepository.get(context) }
     var counts by remember { mutableStateOf(Triple(-1, -1, -1)) }
