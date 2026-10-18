@@ -59,3 +59,10 @@ jobs:
           git add apps/backend/update.json
           git commit -m "chore: auto update version" || true
           git push || true
+
+      - name: Notify build result
+        if: always()
+        run: |
+          STATUS="${{ job.status }}"
+          echo "Build $STATUS" 
+          # Add Telegram or other notification here when token is available
