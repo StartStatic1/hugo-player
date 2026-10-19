@@ -143,18 +143,13 @@ class CatalogRepository(context: Context) {
         onProgress: (String) -> Unit = {},
         onFraction: (Float?) -> Unit = {},
     ) = withContext(Dispatchers.IO) {
-        onProgress("Baixando lista...")
+        onProgress("Baixando lista no aparelho...")
         onFraction(null)
-        val encoded = java.net.URLEncoder.encode(playlistUrl, "UTF-8")
-        val endpoint = "${HugoApi.baseUrl}/channels?url=$encoded&limit=80000"
-        val conn = URL(endpoint).openConnection() as java.net.HttpURLConnection
-        conn.connectTimeout = 30000
-        conn.readTimeout = 180000
-
-        var input: java.io.InputStream
-        if (conn.responseCode in 200..299) {
-            input = conn.inputStream
-        } else {
+        // Always download on device so the VPS never talks to the provider (avoids 403)
+        val m3u = downloadM3uOnDevice(playlistUrl)
+        onProgress("Organizando lista...")
+        var input: java.io.InputStream = postM3uToServer(m3u)
+        if (false) { // keep old path for reference
             val err = conn.errorStream?.bufferedReader()?.use { it.readText() }.orEmpty()
             val apiErr = Regex("\"error\"\\s*:\\s*\"([^\"]+)\"").find(err)?.groupValues?.get(1)
             val code = conn.responseCode
