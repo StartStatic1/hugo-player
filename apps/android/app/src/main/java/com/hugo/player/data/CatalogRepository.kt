@@ -112,13 +112,23 @@ class CatalogRepository(context: Context) {
         conn.setRequestProperty("Content-Type", "text/plain; charset=utf-8")
         conn.setRequestProperty("Accept", "application/json")
         try {
-            conn.outputStream.use { os -> os.write(m3u.toByteArray(Charsets.UTF_8)) }
+            // Stream in chunks to avoid OOM
+            val bytes = m3u.toByteArray(Charsets.UTF_8)
+            conn.outputStream.use { os ->
+                var offset = 0
+                val chunk = 64 * 1024
+                while (offset < bytes.size) {
+                    val end = minOf(offset + chunk, bytes.size)
+                    os.write(bytes, offset, end - offset)
+                    offset = end
+                }
+            }
             if (conn.responseCode !in 200..299) {
                 val err = conn.errorStream?.bufferedReader()?.use { it.readText() }.orEmpty()
                 throw Exception("servidor não processou a lista (${conn.responseCode}) $err")
             }
-            val bytes = conn.inputStream.use { it.readBytes() }
-            return bytes.inputStream()
+            val responseBytes = conn.inputStream.use { it.readBytes() }
+            return responseBytes.inputStream()
         } finally {
             conn.disconnect()
         }
