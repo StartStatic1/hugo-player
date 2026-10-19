@@ -23,6 +23,7 @@ import com.hugo.player.BuildConfig
 import com.hugo.player.data.AppSettings
 import com.hugo.player.data.DiskCache
 import com.hugo.player.data.HugoApi
+import com.hugo.player.player.StreamTypes
 import com.hugo.player.ui.components.HugoColors
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -175,8 +176,8 @@ fun SettingsScreen(deviceId: String, deviceKey: String, onBack: () -> Unit) {
                     colors = ButtonDefaults.buttonColors(containerColor = HugoColors.Accent),
                 ) { Text("Salvar") }
                 OutlinedButton(onClick = {
-                    ua = AppSettings.DEFAULT_UA
-                    AppSettings.userAgent = AppSettings.DEFAULT_UA
+                    ua = StreamTypes.DEFAULT_USER_AGENT
+                    AppSettings.userAgent = StreamTypes.DEFAULT_USER_AGENT
                     message = "User-Agent padrão"
                 }) { Text("Padrão") }
             }
