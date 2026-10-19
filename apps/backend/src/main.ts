@@ -75,6 +75,27 @@ function verifyKey(key: string, device: Device): boolean {
   }
 }
 
+function findDevice(id: string): Device | undefined {
+  const raw = id.trim();
+  return (
+    db.devices[raw] ||
+    db.devices[raw.toUpperCase()] ||
+    db.devices[raw.toLowerCase()] ||
+    Object.values(db.devices).find((d) => d.deviceId.toUpperCase() === raw.toUpperCase())
+  );
+}
+
+function authDevice(id: string | undefined, key: string | undefined): Device | null {
+  if (!id || !key) return null;
+  const device = findDevice(id);
+  if (!device) return null;
+  const k = key.trim();
+  if (verifyKey(k, device) || verifyKey(k.toUpperCase(), device) || verifyKey(k.toLowerCase(), device)) {
+    return device;
+  }
+  return null;
+}
+
 const registerSchema = z.object({
   deviceId: z.string().min(4).max(128),
   deviceKey: z.string().min(4).max(64),
@@ -88,7 +109,6 @@ app.set("trust proxy", 1);
 app.use(helmet());
 app.use(cors({ origin: true }));
 app.use(express.json({ limit: "32kb" }));
-// M3U enviada pelo app (fallback 403) — text/plain até 100 MB (listas IPTV grandes)
 app.use("/channels/from-m3u", express.text({ type: ["text/*", "application/octet-stream", "text/plain"], limit: "100mb" }));
 app.use(rateLimit({ windowMs: 60_000, limit: 200 }));
 
@@ -103,20 +123,36 @@ app.get("/health", (_req, res) => {
 app.post("/devices/register", async (req, res) => {
   const parsed = registerSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "validation_error", details: parsed.error.flatten() });
-  const { deviceId, deviceKey, platform, appVersion } = parsed.data;
+  const deviceId = parsed.data.deviceId.trim();
+  const deviceKey = parsed.data.deviceKey.trim();
+  const platform = parsed.data.platform;
+  const appVersion = parsed.data.appVersion;
   const now = new Date();
-  const existing = db.devices[deviceId];
+  const storeKey = deviceId.toUpperCase();
+  const existing = findDevice(deviceId);
   if (existing) {
-    if (!verifyKey(deviceKey, existing)) return res.status(409).json({ error: "device_already_registered" });
+    if (verifyKey(deviceKey, existing) || verifyKey(deviceKey.toUpperCase(), existing)) {
+      existing.lastSeenAt = now.toISOString();
+      existing.platform = platform;
+      if (appVersion) existing.appVersion = appVersion;
+      db.devices[storeKey] = existing;
+      await persist();
+      return res.json({ registered: true, created: false });
+    }
+    // Mesmo ID com key nova (reinstall): re-vincula
+    const { salt, hash } = hashKey(deviceKey);
+    existing.keyHash = hash;
+    existing.keySalt = salt;
     existing.lastSeenAt = now.toISOString();
     existing.platform = platform;
     if (appVersion) existing.appVersion = appVersion;
+    db.devices[storeKey] = existing;
     await persist();
-    return res.json({ registered: true, created: false });
+    return res.json({ registered: true, created: false, keyRotated: true });
   }
   const { salt, hash } = hashKey(deviceKey);
   const device: Device = {
-    deviceId,
+    deviceId: storeKey,
     keyHash: hash,
     keySalt: salt,
     platform,
@@ -125,18 +161,10 @@ app.post("/devices/register", async (req, res) => {
     createdAt: now.toISOString(),
     lastSeenAt: now.toISOString(),
   };
-  db.devices[deviceId] = device;
+  db.devices[storeKey] = device;
   await persist();
   res.status(201).json({ registered: true, created: true });
 });
-
-function authDevice(id: string | undefined, key: string | undefined): Device | null {
-  if (!id || !key) return null;
-  const device = db.devices[id.toUpperCase()] ?? db.devices[id];
-  if (!device) return null;
-  if (!verifyKey(key, device) && !verifyKey(key.toUpperCase(), device)) return null;
-  return device;
-}
 
 function requireDevice(req: Request, res: Response, next: NextFunction) {
   const device = authDevice(req.header("x-device-id"), req.header("x-device-key"));
@@ -156,7 +184,7 @@ app.get("/devices/status", requireDevice, (req, res) => {
       type: expired ? "expired" : device.license.type,
       expiresAt: device.license.expiresAt,
     },
-    playlists: db.playlists.filter((p) => p.deviceId === device.deviceId).length,
+    playlists: db.playlists.filter((p) => p.deviceId.toUpperCase() === device.deviceId.toUpperCase()).length,
     createdAt: device.createdAt,
     lastSeenAt: device.lastSeenAt,
   });
@@ -178,7 +206,9 @@ const resolvePlaylist: PlaylistResolver = (req) => {
   const device = authDevice(req.header("x-device-id"), req.header("x-device-key"));
   const playlistId = String(req.query.playlistId || "");
   if (playlistId && device) {
-    const p = db.playlists.find((x) => x.id === playlistId && x.deviceId === device.deviceId);
+    const p = db.playlists.find(
+      (x) => x.id === playlistId && x.deviceId.toUpperCase() === device.deviceId.toUpperCase(),
+    );
     if (!p) return "unauthorized";
     return { type: p.type, url: p.url };
   }
