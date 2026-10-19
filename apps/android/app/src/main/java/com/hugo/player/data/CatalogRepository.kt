@@ -65,7 +65,7 @@ class CatalogRepository(context: Context) {
     }
 
     /** Limite de lista baixada no aparelho (só fallback 403). Evita OOM. */
-    private val maxClientM3uBytes = 100L * 1024 * 1024
+    private val maxClientM3uBytes = 40L * 1024 * 1024
 
     /**
      * Fallback: provedor bloqueou o IP do VPS (403).
@@ -112,16 +112,17 @@ class CatalogRepository(context: Context) {
         conn.setRequestProperty("Content-Type", "text/plain; charset=utf-8")
         conn.setRequestProperty("Accept", "application/json")
         try {
-            // Stream in chunks to avoid OOM
-            val bytes = m3u.toByteArray(Charsets.UTF_8)
+            // Write in small chunks without holding full byte array
             conn.outputStream.use { os ->
-                var offset = 0
-                val chunk = 64 * 1024
-                while (offset < bytes.size) {
-                    val end = minOf(offset + chunk, bytes.size)
-                    os.write(bytes, offset, end - offset)
-                    offset = end
+                val writer = os.bufferedWriter(Charsets.UTF_8)
+                var i = 0
+                val step = 32 * 1024
+                while (i < m3u.length) {
+                    val end = minOf(i + step, m3u.length)
+                    writer.write(m3u, i, end - i)
+                    i = end
                 }
+                writer.flush()
             }
             if (conn.responseCode !in 200..299) {
                 val err = conn.errorStream?.bufferedReader()?.use { it.readText() }.orEmpty()
