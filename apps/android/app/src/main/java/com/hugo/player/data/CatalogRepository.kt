@@ -84,15 +84,17 @@ class CatalogRepository(context: Context) {
             if (code !in 200..299) {
                 throw Exception("provedor recusou no aparelho ($code)")
             }
-            val len = conn.contentLengthLong
-            if (len > maxClientM3uBytes) {
-                throw Exception("lista grande demais para baixar no aparelho (${len / 1_000_000} MB)")
+            // Stream to temp file to avoid holding full list in memory
+            val tmp = java.io.File.createTempFile("hugo_m3u", ".m3u")
+            conn.inputStream.use { input ->
+                tmp.outputStream().use { output -> input.copyTo(output, 64 * 1024) }
             }
-            val bytes = conn.inputStream.use { it.readBytes() }
-            if (bytes.size > maxClientM3uBytes) {
+            if (tmp.length() > maxClientM3uBytes) {
+                tmp.delete()
                 throw Exception("lista grande demais para baixar no aparelho")
             }
-            val text = bytes.toString(Charsets.UTF_8)
+            val text = tmp.readText(Charsets.UTF_8)
+            tmp.delete()
             if (!text.contains("#EXTINF")) {
                 throw Exception("lista inválida (sem canais)")
             }
