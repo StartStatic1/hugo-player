@@ -2,7 +2,7 @@
 import { isIP } from "node:net";
 import { gunzipSync } from "node:zlib";
 
-export const IPTV_USER_AGENT = process.env.IPTV_USER_AGENT ?? "TiviMate/4.7.0 (Android 11; NVIDIA SHIELD TV Pro)";
+export const IPTV_USER_AGENT = process.env.IPTV_USER_AGENT ?? "VLC/3.0.20 LibVLC/3.0.20";
 const MAX_BYTES = Number(process.env.MAX_PLAYLIST_BYTES ?? 200 * 1024 * 1024);
 
 export class UpstreamError extends Error {
@@ -80,49 +80,23 @@ export async function fetchJson(url: string, timeoutMs = 45_000): Promise<unknow
   try {
     return JSON.parse(text);
   } catch {
-    throw new UpstreamError(502, "upstream_invalid_json");
+    throw new UpstreamError(502, "invalid_json");
   }
 }
 
-/** Cache simples em memória com TTL e limite de entradas (LRU aproximado). */
-export class TtlCache<V> {
-  private map = new Map<string, { value: V; expires: number }>();
-  private inflight = new Map<string, Promise<V>>();
-  constructor(private ttlMs: number, private maxEntries = 20) {}
-
-  get(key: string): V | undefined {
+export class TtlCache<T> {
+  private map = new Map<string, { value: T; expires: number }>();
+  constructor(private ttlMs: number, private max = 50) {}
+  async getOrLoad(key: string, load: () => Promise<T>, force = false): Promise<T> {
+    const now = Date.now();
     const hit = this.map.get(key);
-    if (!hit) return undefined;
-    if (hit.expires < Date.now()) {
-      this.map.delete(key);
-      return undefined;
+    if (!force && hit && hit.expires > now) return hit.value;
+    const value = await load();
+    if (this.map.size >= this.max) {
+      const first = this.map.keys().next().value;
+      if (first) this.map.delete(first);
     }
-    this.map.delete(key);
-    this.map.set(key, hit);
-    return hit.value;
-  }
-
-  set(key: string, value: V) {
-    this.map.delete(key);
-    this.map.set(key, { value, expires: Date.now() + this.ttlMs });
-    while (this.map.size > this.maxEntries) this.map.delete(this.map.keys().next().value as string);
-  }
-
-  /** Busca no cache ou executa loader (deduplicando requisições simultâneas). */
-  async getOrLoad(key: string, loader: () => Promise<V>, force = false): Promise<V> {
-    if (!force) {
-      const v = this.get(key);
-      if (v !== undefined) return v;
-    }
-    const running = this.inflight.get(key);
-    if (running) return running;
-    const p = loader()
-      .then((v) => {
-        this.set(key, v);
-        return v;
-      })
-      .finally(() => this.inflight.delete(key));
-    this.inflight.set(key, p);
-    return p;
+    this.map.set(key, { value, expires: now + this.ttlMs });
+    return value;
   }
 }
