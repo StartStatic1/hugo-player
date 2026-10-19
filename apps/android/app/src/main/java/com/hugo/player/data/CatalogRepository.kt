@@ -41,13 +41,12 @@ object SeriesParser {
     }
 }
 
-
-    private fun JsonReader.nextStringOrNull(): String? {
-        return if (peek() == JsonToken.NULL) { nextNull(); null } else nextString()
-    }
-    private fun JsonReader.nextIntOrNull(): Int? {
-        return if (peek() == JsonToken.NULL) { nextNull(); null } else nextInt()
-    }
+private fun JsonReader.nextStringOrNull(): String? {
+    return if (peek() == JsonToken.NULL) { nextNull(); null } else nextString()
+}
+private fun JsonReader.nextIntOrNull(): Int? {
+    return if (peek() == JsonToken.NULL) { nextNull(); null } else nextInt()
+}
 
 class CatalogRepository(context: Context) {
     private val db = HugoDatabase.get(context)
@@ -65,6 +64,66 @@ class CatalogRepository(context: Context) {
         fun clearAll() {}
     }
 
+    /** Limite de lista baixada no aparelho (só fallback 403). Evita OOM. */
+    private val maxClientM3uBytes = 40L * 1024 * 1024
+
+    /**
+     * Fallback: provedor bloqueou o IP do VPS (403).
+     * Baixa a M3U no aparelho (como TV Smarters) e manda o texto ao backend só para classificar.
+     * NÃO é o caminho padrão — só quando o servidor devolve upstream_403.
+     */
+    private fun downloadM3uOnDevice(playlistUrl: String): String {
+        val conn = URL(playlistUrl).openConnection() as java.net.HttpURLConnection
+        conn.instanceFollowRedirects = true
+        conn.connectTimeout = 30_000
+        conn.readTimeout = 180_000
+        conn.setRequestProperty("User-Agent", "VLC/3.0.20 LibVLC/3.0.20")
+        conn.setRequestProperty("Accept", "*/*")
+        try {
+            val code = conn.responseCode
+            if (code !in 200..299) {
+                throw Exception("provedor recusou no aparelho ($code)")
+            }
+            val len = conn.contentLengthLong
+            if (len > maxClientM3uBytes) {
+                throw Exception("lista grande demais para baixar no aparelho (${len / 1_000_000} MB)")
+            }
+            val bytes = conn.inputStream.use { it.readBytes() }
+            if (bytes.size > maxClientM3uBytes) {
+                throw Exception("lista grande demais para baixar no aparelho")
+            }
+            val text = bytes.toString(Charsets.UTF_8)
+            if (!text.contains("#EXTINF")) {
+                throw Exception("lista inválida (sem canais)")
+            }
+            return text
+        } finally {
+            conn.disconnect()
+        }
+    }
+
+    private fun postM3uToServer(m3u: String): java.io.InputStream {
+        val endpoint = "${HugoApi.baseUrl}/channels/from-m3u?limit=80000"
+        val conn = URL(endpoint).openConnection() as java.net.HttpURLConnection
+        conn.requestMethod = "POST"
+        conn.doOutput = true
+        conn.connectTimeout = 30_000
+        conn.readTimeout = 180_000
+        conn.setRequestProperty("Content-Type", "text/plain; charset=utf-8")
+        conn.setRequestProperty("Accept", "application/json")
+        try {
+            conn.outputStream.use { os -> os.write(m3u.toByteArray(Charsets.UTF_8)) }
+            if (conn.responseCode !in 200..299) {
+                val err = conn.errorStream?.bufferedReader()?.use { it.readText() }.orEmpty()
+                throw Exception("servidor não processou a lista (${conn.responseCode}) $err")
+            }
+            val bytes = conn.inputStream.use { it.readBytes() }
+            return bytes.inputStream()
+        } finally {
+            conn.disconnect()
+        }
+    }
+
     suspend fun syncPlaylist(
         playlistId: String,
         playlistUrl: String,
@@ -78,24 +137,39 @@ class CatalogRepository(context: Context) {
         val conn = URL(endpoint).openConnection() as java.net.HttpURLConnection
         conn.connectTimeout = 30000
         conn.readTimeout = 180000
-        if (conn.responseCode !in 200..299) {
+
+        var input: java.io.InputStream
+        if (conn.responseCode in 200..299) {
+            input = conn.inputStream
+        } else {
             val err = conn.errorStream?.bufferedReader()?.use { it.readText() }.orEmpty()
             val apiErr = Regex("\"error\"\\s*:\\s*\"([^\"]+)\"").find(err)?.groupValues?.get(1)
+            val code = conn.responseCode
             conn.disconnect()
-            throw Exception(
-                when {
-                    apiErr == "timeout" || conn.responseCode == 504 -> "o servidor da lista demorou demais"
-                    apiErr == "empty_playlist" -> "lista vazia ou inválida"
-                    apiErr?.startsWith("upstream_") == true -> "o provedor recusou a lista (${apiErr.removePrefix("upstream_")})"
-                    else -> "HTTP ${conn.responseCode}"
-                }
-            )
+            val is403 = apiErr == "upstream_403" || code == 403 ||
+                (apiErr?.startsWith("upstream_") == true && apiErr.contains("403"))
+            if (!is403) {
+                throw Exception(
+                    when {
+                        apiErr == "timeout" || code == 504 -> "o servidor da lista demorou demais"
+                        apiErr == "empty_playlist" -> "lista vazia ou inválida"
+                        apiErr?.startsWith("upstream_") == true ->
+                            "o provedor recusou a lista (${apiErr.removePrefix("upstream_")})"
+                        else -> "HTTP $code"
+                    }
+                )
+            }
+            onProgress("Provedor bloqueou o servidor. Baixando no aparelho...")
+            val m3u = downloadM3uOnDevice(playlistUrl)
+            onProgress("Organizando lista...")
+            input = postM3uToServer(m3u)
         }
+
         onProgress("Lendo lista...")
         dao.deleteChannels(playlistId)
         dao.deleteCategories(playlistId)
 
-        val reader = JsonReader(conn.inputStream.bufferedReader())
+        val reader = JsonReader(input.bufferedReader())
         reader.isLenient = true
         val channels = ArrayList<ChannelEntity>(800)
         var total = 0
@@ -119,30 +193,33 @@ class CatalogRepository(context: Context) {
                                 when (reader.nextName()) {
                                     "name" -> name = reader.nextStringOrNull() ?: "Canal"
                                     "url" -> url = reader.nextStringOrNull() ?: ""
-                                    "logo" -> logo = reader.nextStringOrNull()?.takeIf { it.isNotEmpty() }
+                                    "logo" -> logo = reader.nextStringOrNull()
                                     "group" -> group = reader.nextStringOrNull() ?: "Outros"
                                     "type" -> type = reader.nextStringOrNull() ?: "live"
-                                    "seriesName" -> seriesName = reader.nextStringOrNull()?.takeIf { it.isNotBlank() }
-                                    "season" -> season = reader.nextIntOrNull()?.takeIf { it > 0 }
-                                    "episode" -> episode = reader.nextIntOrNull()?.takeIf { it > 0 }
+                                    "seriesName" -> seriesName = reader.nextStringOrNull()
+                                    "season" -> season = reader.nextIntOrNull()
+                                    "episode" -> episode = reader.nextIntOrNull()
                                     else -> reader.skipValue()
                                 }
                             }
                             reader.endObject()
-                            if (type == "series" && seriesName.isNullOrBlank()) {
-                                val parsed = SeriesParser.parse(name)
-                                seriesName = parsed?.seriesName ?: name.trim()
-                                season = season ?: parsed?.season ?: 1
-                                episode = episode ?: parsed?.episode
+                            if (url.isBlank()) continue
+                            if (seriesName == null && type == "series") {
+                                SeriesParser.parse(name)?.let {
+                                    seriesName = it.seriesName
+                                    season = season ?: it.season
+                                    episode = episode ?: it.episode
+                                }
                             }
                             channels.add(
                                 ChannelEntity(
+                                    id = 0,
+                                    playlistId = playlistId,
                                     name = name,
                                     url = url,
                                     logo = logo,
-                                    group = group,
+                                    groupTitle = group,
                                     type = type,
-                                    playlistId = playlistId,
                                     seriesName = seriesName,
                                     season = season,
                                     episode = episode,
@@ -152,7 +229,6 @@ class CatalogRepository(context: Context) {
                             if (channels.size >= 800) {
                                 dao.insertChannels(channels.toList())
                                 channels.clear()
-                                onProgress("Salvando... $total")
                             }
                         }
                         reader.endArray()
@@ -163,7 +239,7 @@ class CatalogRepository(context: Context) {
                         var pos = 0
                         while (reader.hasNext()) {
                             reader.beginObject()
-                            var cname = ""
+                            var cname = "Outros"
                             var ccount = 0
                             var ctype = "live"
                             while (reader.hasNext()) {
@@ -193,15 +269,15 @@ class CatalogRepository(context: Context) {
             }
             reader.endObject()
         } finally {
-            reader.close()
-            conn.disconnect()
+            try { reader.close() } catch (_: Exception) {}
+            try { conn.disconnect() } catch (_: Exception) {}
+            try { input.close() } catch (_: Exception) {}
         }
         if (channels.isNotEmpty()) dao.insertChannels(channels)
         onFraction(1f)
         onProgress("Pronto! $total itens")
     }
 
-    /** Apaga do aparelho o catálogo salvo de uma playlist. */
     suspend fun deletePlaylist(playlistId: String) = withContext(Dispatchers.IO) {
         dao.deleteChannels(playlistId)
         dao.deleteCategories(playlistId)
@@ -213,7 +289,6 @@ class CatalogRepository(context: Context) {
             else dao.getByType(playlistId, type, pageSize, page * pageSize)
         }
 
-    /** Página para as abas (categoria e busca opcionais). Ao vivo mantém a ordem original. */
     suspend fun page(playlistId: String, type: String, group: String?, query: String?, page: Int, pageSize: Int = PAGE_SIZE): List<ChannelEntity> =
         withContext(Dispatchers.IO) {
             dao.page(playlistId, type, group, query?.trim()?.takeIf { it.isNotEmpty() }, type == "live", pageSize, page * pageSize)
