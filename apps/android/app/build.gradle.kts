@@ -16,7 +16,7 @@ android {
         versionCode = 13
         versionName = "0.5.8"
         // Servidor da API; para testar contra outro: ./gradlew assembleDebug -PhugoApiUrl=http://10.0.2.2:8080
-        val apiUrl = (project.findProperty("hugoApiUrl") as String?) ?: "http://65.21.48.50:8080"
+        val apiUrl = (project.findProperty("hugoApiUrl") as String?) ?: "https://api-hugo.streamflixvip.online"
         buildConfigField("String", "API_BASE_URL", "\"$apiUrl\"")
     }
 

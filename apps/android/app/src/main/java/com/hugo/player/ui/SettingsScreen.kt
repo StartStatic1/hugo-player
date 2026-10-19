@@ -1,5 +1,8 @@
 package com.hugo.player.ui
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -35,6 +38,12 @@ fun SettingsScreen(deviceId: String, deviceKey: String, onBack: () -> Unit) {
     var licenseType by remember { mutableStateOf<String?>(null) }
     var licenseExpires by remember { mutableStateOf<String?>(null) }
 
+    fun copy(label: String, value: String) {
+        val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        cm.setPrimaryClip(ClipData.newPlainText(label, value))
+        message = "$label copiado"
+    }
+
     LaunchedEffect(Unit) {
         DiskCache.init(context)
         cacheSize = DiskCache.sizeBytes()
@@ -67,10 +76,15 @@ fun SettingsScreen(deviceId: String, deviceKey: String, onBack: () -> Unit) {
 
         Section("App e licença") {
             Text("Versão ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})", color = Color.White, fontSize = 14.sp)
+            Spacer(Modifier.height(10.dp))
+
+            CopyableRow("Device ID", deviceId) { copy("Device ID", deviceId) }
             Spacer(Modifier.height(6.dp))
-            Text("Device ID: $deviceId", color = Color.White, fontSize = 13.sp)
-            Text("Device Key: $deviceKey", color = HugoColors.Accent, fontSize = 13.sp)
-            Spacer(Modifier.height(8.dp))
+            CopyableRow("Device Key", deviceKey, valueColor = HugoColors.Accent) { copy("Device Key", deviceKey) }
+            Spacer(Modifier.height(6.dp))
+            CopyableRow("API", HugoApi.baseUrl, valueColor = HugoColors.TextMuted) { copy("API", HugoApi.baseUrl) }
+
+            Spacer(Modifier.height(10.dp))
             when (licenseType) {
                 null -> Text("Licença: carregando...", color = HugoColors.TextMuted, fontSize = 13.sp)
                 "trial" -> Text(
@@ -88,8 +102,6 @@ fun SettingsScreen(deviceId: String, deviceKey: String, onBack: () -> Unit) {
                 "expired" -> Text("Licença: expirada", color = Color(0xFFF87171), fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
                 else -> Text("Licença: $licenseType", color = HugoColors.TextMuted, fontSize = 13.sp)
             }
-            Spacer(Modifier.height(4.dp))
-            Text("API: ${HugoApi.baseUrl}", color = HugoColors.TextMuted, fontSize = 11.sp)
         }
 
         Section("Cache do catálogo") {
@@ -173,6 +185,28 @@ fun SettingsScreen(deviceId: String, deviceKey: String, onBack: () -> Unit) {
             Text(it, color = HugoColors.Accent, fontSize = 13.sp)
         }
         Spacer(Modifier.height(32.dp))
+    }
+}
+
+@Composable
+private fun CopyableRow(
+    label: String,
+    value: String,
+    valueColor: Color = Color.White,
+    onCopy: () -> Unit,
+) {
+    Row(
+        Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(label, color = HugoColors.TextMuted, fontSize = 11.sp)
+            Text(value, color = valueColor, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+        }
+        OutlinedButton(
+            onClick = onCopy,
+            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+        ) { Text("Copiar", fontSize = 12.sp) }
     }
 }
 
