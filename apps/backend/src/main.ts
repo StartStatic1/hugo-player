@@ -59,30 +59,36 @@ function persist(): Promise<void> {
   return writeChain;
 }
 
-function hashKey(key: string, salt: string): string {
-  return scryptSync(key, salt, 32).toString("hex");
+function hashKey(key: string): { salt: string; hash: string } {
+  const salt = randomBytes(16).toString("hex");
+  const hash = scryptSync(key, salt, 32).toString("hex");
+  return { salt, hash };
 }
 
-function verifyKey(key: string, salt: string, hash: string): boolean {
+function verifyKey(key: string, device: Device): boolean {
   try {
-    const a = Buffer.from(hashKey(key, salt), "hex");
-    const b = Buffer.from(hash, "hex");
+    const a = Buffer.from(scryptSync(key, device.keySalt, 32).toString("hex"), "hex");
+    const b = Buffer.from(device.keyHash, "hex");
     return a.length === b.length && timingSafeEqual(a, b);
   } catch {
     return false;
   }
 }
 
-function newDeviceKey(): string {
-  return randomBytes(4).toString("hex").toUpperCase();
-}
+const registerSchema = z.object({
+  deviceId: z.string().min(4).max(128),
+  deviceKey: z.string().min(4).max(64),
+  platform: z.string().max(64),
+  appVersion: z.string().max(32).optional(),
+});
 
 const app = express();
+app.disable("x-powered-by");
 app.set("trust proxy", 1);
 app.use(helmet());
 app.use(cors({ origin: true }));
 app.use(express.json({ limit: "32kb" }));
-// M3U enviada pelo app (fallback 403) — só text/plain, limite 40 MB
+// M3U enviada pelo app (fallback 403) — text/plain até 40 MB
 app.use("/channels/from-m3u", express.text({ type: ["text/*", "application/octet-stream", "text/plain"], limit: "40mb" }));
 app.use(rateLimit({ windowMs: 60_000, limit: 200 }));
 
@@ -90,84 +96,98 @@ app.use("/tmdb", tmdbRouter);
 app.use("/recovery", recoveryRouter);
 app.use("/channels", channelsRouter);
 
-app.get("/health", (_req, res) => res.json({ ok: true }));
+app.get("/health", (_req, res) => {
+  res.json({ status: "ok", time: new Date().toISOString() });
+});
 
 app.post("/devices/register", async (req, res) => {
-  const schema = z.object({
-    deviceId: z.string().min(4).max(128),
-    platform: z.string().max(64).optional(),
-    appVersion: z.string().max(32).optional(),
-  });
-  const parsed = schema.safeParse(req.body);
-  if (!parsed.success) return res.status(400).json({ error: "invalid_body" });
-  const { deviceId, platform = "android", appVersion = "0" } = parsed.data;
+  const parsed = registerSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: "validation_error", details: parsed.error.flatten() });
+  const { deviceId, deviceKey, platform, appVersion } = parsed.data;
+  const now = new Date();
   const existing = db.devices[deviceId];
   if (existing) {
-    existing.lastSeenAt = new Date().toISOString();
-    existing.appVersion = appVersion;
+    if (!verifyKey(deviceKey, existing)) return res.status(409).json({ error: "device_already_registered" });
+    existing.lastSeenAt = now.toISOString();
+    existing.platform = platform;
+    if (appVersion) existing.appVersion = appVersion;
     await persist();
-    return res.json({
-      deviceId,
-      alreadyRegistered: true,
-      license: existing.license,
-    });
+    return res.json({ registered: true, created: false });
   }
-  const key = newDeviceKey();
-  const salt = randomBytes(16).toString("hex");
-  const expires = new Date();
-  expires.setDate(expires.getDate() + TRIAL_DAYS);
-  db.devices[deviceId] = {
+  const { salt, hash } = hashKey(deviceKey);
+  const device: Device = {
     deviceId,
-    keyHash: hashKey(key, salt),
+    keyHash: hash,
     keySalt: salt,
     platform,
-    appVersion,
-    license: { type: "trial", expiresAt: expires.toISOString() },
-    createdAt: new Date().toISOString(),
-    lastSeenAt: new Date().toISOString(),
+    appVersion: appVersion ?? "",
+    license: { type: "trial", expiresAt: new Date(now.getTime() + TRIAL_DAYS * 86400000).toISOString() },
+    createdAt: now.toISOString(),
+    lastSeenAt: now.toISOString(),
   };
+  db.devices[deviceId] = device;
   await persist();
-  res.json({ deviceId, deviceKey: key, license: db.devices[deviceId].license });
+  res.status(201).json({ registered: true, created: true });
 });
 
-app.get("/devices/status", (req, res) => {
-  const deviceId = String(req.headers["x-device-id"] || "");
-  const deviceKey = String(req.headers["x-device-key"] || "");
-  const d = db.devices[deviceId];
-  if (!d || !verifyKey(deviceKey, d.keySalt, d.keyHash)) {
-    return res.status(401).json({ error: "unauthorized" });
-  }
-  d.lastSeenAt = new Date().toISOString();
-  res.json({ deviceId, license: d.license });
-});
+function authDevice(id: string | undefined, key: string | undefined): Device | null {
+  if (!id || !key) return null;
+  const device = db.devices[id.toUpperCase()] ?? db.devices[id];
+  if (!device || !verifyKey(key.toUpperCase(), device) && !verifyKey(key, device)) return null;
+  return device;
+}
 
-const resolvePlaylist: PlaylistResolver = (id) => db.playlists.find((p) => p.id === id) ?? null;
+function requireDevice(req: Request, res: Response, next: NextFunction) {
+  const device = authDevice(req.header("x-device-id"), req.header("x-device-key"));
+  if (!device) return res.status(401).json({ error: "invalid_credentials" });
+  (req as any).device = device;
+  next();
+}
+
+app.get("/devices/status", requireDevice, (req, res) => {
+  const device = (req as any).device as Device;
+  const expiresAt = device.license.expiresAt ? new Date(device.license.expiresAt) : null;
+  const expired = expiresAt !== null && expiresAt.getTime() < Date.now();
+  res.json({
+    deviceId: device.deviceId,
+    platform: device.platform,
+    license: {
+      type: expired ? "expired" : device.license.type,
+      expiresAt: device.license.expiresAt,
+    },
+    playlists: db.playlists.filter((p) => p.deviceId === device.deviceId).length,
+    createdAt: device.createdAt,
+    lastSeenAt: device.lastSeenAt,
+  });
+});
 
 app.use(
   "/playlists",
   createPlaylistRouter({
-    list: () => db.playlists,
-    get: (id) => db.playlists.find((p) => p.id === id),
-    save: async (p) => {
-      const i = db.playlists.findIndex((x) => x.id === p.id);
-      if (i >= 0) db.playlists[i] = p;
-      else db.playlists.push(p);
-      await persist();
+    playlists: () => db.playlists,
+    setPlaylists: (next) => {
+      db.playlists = next;
     },
-    remove: async (id) => {
-      db.playlists = db.playlists.filter((p) => p.id !== id);
-      await persist();
-    },
+    persist,
+    authenticate: (id, key) => authDevice(id, key)?.deviceId ?? null,
   }),
 );
 
+const resolvePlaylist: PlaylistResolver = (req) => {
+  const device = authDevice(req.header("x-device-id"), req.header("x-device-key"));
+  const playlistId = String(req.query.playlistId || "");
+  if (playlistId && device) {
+    const p = db.playlists.find((x) => x.id === playlistId && x.deviceId === device.deviceId);
+    if (!p) return "unauthorized";
+    return { type: p.type, url: p.url };
+  }
+  const url = String(req.query.url || "");
+  if (url) return { type: (req.query.type as "m3u" | "xtream") || "m3u", url };
+  return null;
+};
 app.use("/epg", createEpgRouter(resolvePlaylist));
 
 app.use((_req, res) => res.status(404).json({ error: "not_found" }));
-app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
-  console.error(err);
-  res.status(500).json({ error: err?.message || "internal_error" });
-});
 
 await loadDb();
-app.listen(PORT, () => console.log(`hugo-api on :${PORT}`));
+app.listen(PORT, () => console.log(`Hugo Player API on port ${PORT}`));
