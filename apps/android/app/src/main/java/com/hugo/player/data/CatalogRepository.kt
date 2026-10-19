@@ -65,11 +65,11 @@ class CatalogRepository(context: Context) {
     }
 
     /** Limite de lista baixada no aparelho (só fallback 403). Evita OOM. */
-    private val maxClientM3uBytes = 40L * 1024 * 1024
+    private val maxClientM3uBytes = 100L * 1024 * 1024
 
     /**
      * Fallback: provedor bloqueou o IP do VPS (403).
-     * Baixa a M3U no aparelho (como TV Smarters) e manda o texto ao backend só para classificar.
+     * Baixa a M3U no aparelho e manda o texto ao backend só para classificar.
      * NÃO é o caminho padrão — só quando o servidor devolve upstream_403.
      */
     private fun downloadM3uOnDevice(playlistUrl: String): String {
@@ -213,13 +213,13 @@ class CatalogRepository(context: Context) {
                             }
                             channels.add(
                                 ChannelEntity(
-                                    id = 0,
-                                    playlistId = playlistId,
+                                    id = 0L,
                                     name = name,
                                     url = url,
                                     logo = logo,
-                                    groupTitle = group,
+                                    group = group,
                                     type = type,
+                                    playlistId = playlistId,
                                     seriesName = seriesName,
                                     season = season,
                                     episode = episode,
