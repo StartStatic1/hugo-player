@@ -23,7 +23,7 @@ import com.hugo.player.BuildConfig
 import com.hugo.player.data.AppSettings
 import com.hugo.player.data.DiskCache
 import com.hugo.player.data.HugoApi
-import com.hugo.player.ui.theme.HugoColors
+import com.hugo.player.ui.components.HugoColors
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
@@ -235,7 +235,7 @@ private fun Section(title: String, content: @Composable ColumnScope.() -> Unit) 
 
 @Composable
 private fun Chip(label: String, selected: Boolean, onClick: () -> Unit) {
-    val bg = if (selected) HugoColors.Accent else HugoColors.Card2
+    val bg = if (selected) HugoColors.Accent else HugoColors.CardAlt
     val fg = if (selected) Color.White else HugoColors.TextMuted
     Button(
         onClick = onClick,
