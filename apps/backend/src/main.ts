@@ -88,8 +88,8 @@ app.set("trust proxy", 1);
 app.use(helmet());
 app.use(cors({ origin: true }));
 app.use(express.json({ limit: "32kb" }));
-// M3U enviada pelo app (fallback 403) — text/plain até 40 MB
-app.use("/channels/from-m3u", express.text({ type: ["text/*", "application/octet-stream", "text/plain"], limit: "40mb" }));
+// M3U enviada pelo app (fallback 403) — text/plain até 100 MB (listas IPTV grandes)
+app.use("/channels/from-m3u", express.text({ type: ["text/*", "application/octet-stream", "text/plain"], limit: "100mb" }));
 app.use(rateLimit({ windowMs: 60_000, limit: 200 }));
 
 app.use("/tmdb", tmdbRouter);
@@ -133,7 +133,8 @@ app.post("/devices/register", async (req, res) => {
 function authDevice(id: string | undefined, key: string | undefined): Device | null {
   if (!id || !key) return null;
   const device = db.devices[id.toUpperCase()] ?? db.devices[id];
-  if (!device || !verifyKey(key.toUpperCase(), device) && !verifyKey(key, device)) return null;
+  if (!device) return null;
+  if (!verifyKey(key, device) && !verifyKey(key.toUpperCase(), device)) return null;
   return device;
 }
 
