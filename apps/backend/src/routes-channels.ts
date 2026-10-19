@@ -102,7 +102,7 @@ channelsRouter.post("/from-m3u", async (req, res) => {
     if (!text || !text.includes("#EXTINF")) {
       return res.status(422).json({ error: "empty_playlist" });
     }
-    if (text.length > 40 * 1024 * 1024) {
+    if (text.length > 100 * 1024 * 1024) {
       return res.status(413).json({ error: "playlist_too_large" });
     }
     const data = parseM3U(text);
