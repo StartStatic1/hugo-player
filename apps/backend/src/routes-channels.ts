@@ -20,7 +20,7 @@ channelsRouter.get("/series-episodes", async (req, res) => {
   if (!xt) return res.status(400).json({ error: "not_xtream" });
   try {
     const fetchJson = async (url: string) => {
-      const r = await fetch(url, { headers: { "User-Agent": "TiviMate/4.7.0" } });
+      const r = await fetch(url, { headers: { "User-Agent": "VLC/3.0.20 LibVLC/3.0.20" } });
       if (!r.ok) throw new Error("upstream_" + r.status);
       return r.json();
     };
@@ -56,12 +56,6 @@ channelsRouter.get("/latest.apk", (_req, res) => {
   res.redirect("https://github.com/StartStatic1/hugo-player/releases/latest/download/app-release.apk");
 });
 
-/**
- * Versão do app para o popup de update.
- * Lê SEMPRE do GitHub (update.json no main) — igual StreamFlix:
- * quando o CI publica, o app vê a versão nova sem git pull no VPS.
- * Fallback: arquivo local no servidor.
- */
 channelsRouter.get("/version", async (_req, res) => {
   try {
     const r = await fetch(UPDATE_JSON_REMOTE, {
@@ -105,48 +99,89 @@ channelsRouter.get("/", async (req, res) => {
   try {
     const xt = parseXtreamUrl(playlistUrl);
     if (xt) {
-      const fetchJson = async (url: string) => {
-        const r = await fetch(url, { headers: { "User-Agent": "TiviMate/4.7.0" } });
-        if (!r.ok) throw new Error("upstream_" + r.status);
-        return r.json();
-      };
-      const catalog = await buildCatalogFromXtream(xt, fetchJson);
-      const channels: any[] = [];
-      for (const it of catalog.live.items)
-        channels.push({ name: it.name, url: it.url, logo: it.logo, group: it.group, type: "live" });
-      for (const it of catalog.movies.items)
-        channels.push({ name: it.name, url: it.url, logo: it.poster, group: it.group, type: "movie" });
-      for (const it of catalog.series.items)
-        channels.push({
-          name: it.name,
-          url: `xtream://series/${it.seriesId}`,
-          logo: it.cover,
-          group: it.group,
-          type: "series",
-          seriesName: it.name,
-          seriesId: it.seriesId,
-          episodeCount: it.episodeCount,
-          plot: it.plot,
-        });
-      const categories = [
-        ...catalog.live.categories.map((c, i) => ({ name: c.name, count: c.count, type: "live", position: i })),
-        ...catalog.movies.categories.map((c, i) => ({ name: c.name, count: c.count, type: "movie", position: i })),
-        ...catalog.series.categories.map((c, i) => ({ name: c.name, count: c.count, type: "series", position: i })),
-      ];
-      const data = { channels, categories, stats: catalog.stats, timestamp: Date.now() };
+      const ua = "VLC/3.0.20 LibVLC/3.0.20";
+      let usedSource = "xtream";
+      let data: { channels: any[]; categories: any[]; stats: any; timestamp: number } | null = null;
+      try {
+        const fetchJson = async (url: string) => {
+          const r = await fetch(url, { headers: { "User-Agent": ua, Accept: "*/*" } });
+          if (!r.ok) throw new Error("upstream_" + r.status);
+          return r.json();
+        };
+        const catalog = await buildCatalogFromXtream(xt, fetchJson);
+        if (catalog.stats.live + catalog.stats.movies + catalog.stats.series > 0) {
+          const channels: any[] = [];
+          for (const it of catalog.live.items)
+            channels.push({ name: it.name, url: it.url, logo: it.logo, group: it.group, type: "live" });
+          for (const it of catalog.movies.items)
+            channels.push({ name: it.name, url: it.url, logo: it.poster, group: it.group, type: "movie" });
+          for (const it of catalog.series.items)
+            channels.push({
+              name: it.name,
+              url: `xtream://series/${it.seriesId}`,
+              logo: it.cover,
+              group: it.group,
+              type: "series",
+              seriesName: it.name,
+              seriesId: it.seriesId,
+              episodeCount: it.episodeCount,
+              plot: it.plot,
+            });
+          const categories = [
+            ...catalog.live.categories.map((c, i) => ({ name: c.name, count: c.count, type: "live", position: i })),
+            ...catalog.movies.categories.map((c, i) => ({ name: c.name, count: c.count, type: "movie", position: i })),
+            ...catalog.series.categories.map((c, i) => ({ name: c.name, count: c.count, type: "series", position: i })),
+          ];
+          data = { channels, categories, stats: catalog.stats, timestamp: Date.now() };
+        }
+      } catch (e: any) {
+        console.warn("xtream api failed, trying get.php M3U:", e?.message);
+      }
+      if (!data) {
+        const m3uUrl =
+          `${xt.baseUrl}/get.php?username=${encodeURIComponent(xt.username)}` +
+          `&password=${encodeURIComponent(xt.password)}&type=m3u_plus&output=ts`;
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 180000);
+        try {
+          const response = await fetch(m3uUrl, {
+            signal: controller.signal,
+            redirect: "follow",
+            headers: { "User-Agent": ua, Accept: "*/*" },
+          });
+          if (!response.ok) {
+            return res.status(502).json({
+              error: `upstream_${response.status}`,
+              hint:
+                response.status === 403
+                  ? "Provedor bloqueou o IP do servidor (comum em VPS). O app no celular funciona; o painel barre data center."
+                  : undefined,
+            });
+          }
+          const text = await response.text();
+          if (!text || !text.includes("#EXTINF")) {
+            return res.status(422).json({ error: "empty_playlist" });
+          }
+          const parsed = parseM3U(text);
+          data = { ...parsed, timestamp: Date.now() };
+          usedSource = "m3u_fallback";
+        } finally {
+          clearTimeout(timeout);
+        }
+      }
       playlistCache.set(playlistUrl, data);
-      let filtered = channels;
+      let filtered = data.channels;
       if (type && type !== "all") filtered = filtered.filter((c: any) => c.type === type);
       if (group) filtered = filtered.filter((c: any) => c.group === group);
       const start = page * limit;
       return res.json({
         channels: filtered.slice(start, start + limit),
-        categories,
+        categories: data.categories,
         total: filtered.length,
         page,
         limit,
         hasMore: start + limit < filtered.length,
-        source: "xtream",
+        source: usedSource,
       });
     }
 
@@ -159,7 +194,7 @@ channelsRouter.get("/", async (req, res) => {
       const timeout = setTimeout(() => controller.abort(), 180000);
       const response = await fetch(playlistUrl, {
         signal: controller.signal,
-        headers: { "User-Agent": "TiviMate/4.7.0 (Android 11; NVIDIA SHIELD TV Pro)" },
+        headers: { "User-Agent": "VLC/3.0.20 LibVLC/3.0.20" },
       });
       clearTimeout(timeout);
       if (!response.ok) return res.status(502).json({ error: `upstream_${response.status}` });
