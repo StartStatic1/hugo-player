@@ -8,6 +8,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -79,9 +81,9 @@ fun SettingsScreen(deviceId: String, deviceKey: String, onBack: () -> Unit) {
             Spacer(Modifier.height(10.dp))
 
             CopyableRow("Device ID", deviceId) { copy("Device ID", deviceId) }
-            Spacer(Modifier.height(6.dp))
+            Spacer(Modifier.height(4.dp))
             CopyableRow("Device Key", deviceKey, valueColor = HugoColors.Accent) { copy("Device Key", deviceKey) }
-            Spacer(Modifier.height(6.dp))
+            Spacer(Modifier.height(4.dp))
             CopyableRow("API", HugoApi.baseUrl, valueColor = HugoColors.TextMuted) { copy("API", HugoApi.baseUrl) }
 
             Spacer(Modifier.height(10.dp))
@@ -203,10 +205,17 @@ private fun CopyableRow(
             Text(label, color = HugoColors.TextMuted, fontSize = 11.sp)
             Text(value, color = valueColor, fontSize = 13.sp, fontWeight = FontWeight.Medium)
         }
-        OutlinedButton(
+        IconButton(
             onClick = onCopy,
-            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
-        ) { Text("Copiar", fontSize = 12.sp) }
+            modifier = Modifier.size(32.dp),
+        ) {
+            Icon(
+                Icons.Outlined.ContentCopy,
+                contentDescription = "Copiar $label",
+                tint = HugoColors.TextMuted,
+                modifier = Modifier.size(16.dp),
+            )
+        }
     }
 }
 
