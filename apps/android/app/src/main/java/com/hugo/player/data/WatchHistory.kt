@@ -12,6 +12,7 @@ import org.json.JSONObject
 object WatchHistory {
     private const val PREFS = "hugo_watch"
     private const val KEY_FAVS = "favorites"
+    private const val KEY_FAV_META = "fav_meta"
     private const val KEY_PROGRESS = "progress"
     private const val MAX_CONTINUE = 30
 
@@ -29,6 +30,14 @@ object WatchHistory {
         val fraction: Float
             get() = if (durationMs > 0) (positionMs.toFloat() / durationMs).coerceIn(0f, 1f) else 0f
     }
+
+    data class FavoriteItem(
+        val key: String,
+        val title: String,
+        val url: String,
+        val logo: String?,
+        val playlistId: String,
+    )
 
     private fun prefs(ctx: Context): SharedPreferences =
         ctx.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -60,11 +69,33 @@ object WatchHistory {
         return nowFav
     }
 
+    fun saveFavoriteMeta(ctx: Context, key: String, title: String, url: String, logo: String?, playlistId: String) {
+        val p = prefs(ctx)
+        val root = JSONObject(p.getString(KEY_FAV_META, "{}"))
+        root.put(key, JSONObject().put("title", title).put("url", url).put("logo", logo ?: "").put("playlistId", playlistId))
+        p.edit().putString(KEY_FAV_META, root.toString()).apply()
+    }
+
     fun favoriteKeys(ctx: Context): Set<String> {
         val arr = JSONArray(prefs(ctx).getString(KEY_FAVS, "[]"))
         val out = mutableSetOf<String>()
         for (i in 0 until arr.length()) out.add(arr.optString(i))
         return out
+    }
+
+    fun listFavorites(ctx: Context): List<FavoriteItem> {
+        val keys = favoriteKeys(ctx)
+        val root = JSONObject(prefs(ctx).getString(KEY_FAV_META, "{}"))
+        return keys.mapNotNull { k ->
+            val o = root.optJSONObject(k) ?: return@mapNotNull null
+            FavoriteItem(
+                key = k,
+                title = o.optString("title"),
+                url = o.optString("url"),
+                logo = o.optString("logo").takeIf { it.isNotBlank() },
+                playlistId = o.optString("playlistId"),
+            )
+        }
     }
 
     // ── Continuar assistindo ──────────────────────────────────────
@@ -81,7 +112,6 @@ object WatchHistory {
         logo: String? = null,
     ) {
         if (isLive) return
-        // Ignora início (<15s) ou quase no fim (>92%)
         if (positionMs < 15_000) {
             removeProgress(ctx, key)
             return
@@ -103,7 +133,6 @@ object WatchHistory {
                 .put("updatedAt", System.currentTimeMillis())
                 .put("logo", logo ?: ""),
         )
-        // Limita quantidade
         if (root.length() > MAX_CONTINUE) {
             val sorted = root.keys().asSequence().map { k ->
                 k to root.getJSONObject(k).optLong("updatedAt")
