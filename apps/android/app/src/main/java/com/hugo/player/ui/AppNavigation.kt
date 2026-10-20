@@ -1,7 +1,22 @@
 package com.hugo.player.ui
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.navArgument
@@ -9,8 +24,12 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.hugo.player.data.DeviceIdentity
+import com.hugo.player.data.WatchHistory
 import com.hugo.player.player.PlaybackRequest
 import com.hugo.player.player.PlaybackSession
+import com.hugo.player.ui.components.FocusSurface
+import com.hugo.player.ui.components.HugoColors
+import com.hugo.player.ui.components.HugoIconButton
 import java.net.URLDecoder
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
@@ -83,6 +102,14 @@ fun AppNavigation() {
                         route == "series" -> nav.navigate("series/$playlistId")
                         route == "playlists" -> nav.goToPlaylists()
                         route == "refresh" -> nav.goToPlaylists("refresh=1&open=${enc(playlistId)}")
+                        route == "favorites" -> nav.navigate("favorites")
+                        route.startsWith("continue:") -> {
+                            val key = route.removePrefix("continue:")
+                            val item = WatchHistory.listContinue(context).find { it.key == key }
+                            if (item != null) {
+                                nav.openPlayer(PlaybackRequest(url = item.url, title = item.title, playlistId = item.playlistId, logo = item.logo))
+                            }
+                        }
                         route.startsWith("recent:") -> nav.goToPlaylists("open=${enc(route.removePrefix("recent:"))}&refresh=")
                         else -> nav.navigate(route)
                     }
@@ -112,6 +139,7 @@ fun AppNavigation() {
             SeriesDetailScreen(playlistId, name, onPlay = { req -> nav.openPlayer(req.copy(playlistId = playlistId)) }, onBack = { nav.popBackStack() })
         }
         composable("settings") { SettingsScreen(identity.deviceId, identity.deviceKey, onBack = { nav.popBackStack() }) }
+        composable("favorites") { FavoritesScreen(onBack = { nav.popBackStack() }) }
         composable("play") {
             val req = remember { PlaybackSession.current }
             if (req != null) PlayerScreen(req, onBack = { nav.popBackStack() })
@@ -121,6 +149,43 @@ fun AppNavigation() {
             val url = dec(backStack.arguments?.getString("url") ?: "")
             val title = dec(backStack.arguments?.getString("title") ?: "")
             PlayerScreen(PlaybackRequest(url = url, title = title), onBack = { nav.popBackStack() })
+        }
+    }
+}
+
+@Composable
+private fun FavoritesScreen(onBack: () -> Unit) {
+    val context = LocalContext.current
+    val keys = remember { WatchHistory.favoriteKeys(context) }
+
+    Column(Modifier.fillMaxSize().background(HugoColors.Background)) {
+        Row(
+            Modifier.fillMaxWidth().background(HugoColors.Panel).padding(horizontal = 16.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            HugoIconButton(Icons.AutoMirrored.Filled.ArrowBack, "Voltar", onClick = onBack)
+            Spacer(Modifier.width(12.dp))
+            Text("Favoritos", color = Color.White, fontSize = 19.sp, fontWeight = FontWeight.Bold)
+        }
+        if (keys.isEmpty()) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text("Nenhum favorito ainda.\nFavorite filmes e séries para aparecerem aqui.", color = HugoColors.TextMuted, fontSize = 14.sp)
+            }
+        } else {
+            LazyColumn(
+                contentPadding = PaddingValues(16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                items(keys.toList()) { key ->
+                    FocusSurface(
+                        onClick = {},
+                        modifier = Modifier.fillMaxWidth().height(56.dp),
+                        shape = RoundedCornerShape(10.dp),
+                    ) {
+                        Text(key, color = Color.White, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(12.dp))
+                    }
+                }
+            }
         }
     }
 }
