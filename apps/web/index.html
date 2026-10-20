@@ -34,19 +34,9 @@ body {
 a { color: var(--primary); }
 .hidden { display: none !important; }
 .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .5px; }
-
-/* Top bar */
-.topbar {
-  position: sticky; top: 0; z-index: 10;
-  display: flex; align-items: center; justify-content: space-between; gap: 16px;
-  padding: 14px 28px; background: #07080fcc; backdrop-filter: blur(10px);
-  border-bottom: 1px solid var(--border);
-}
+.topbar { position: sticky; top: 0; z-index: 10; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 28px; background: #07080fcc; backdrop-filter: blur(10px); border-bottom: 1px solid var(--border); }
 .brand { display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 20px; letter-spacing: -.3px; }
-.brand .mark {
-  width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center;
-  background: linear-gradient(135deg, var(--primary), var(--pink)); box-shadow: 0 6px 24px #8b5cf655;
-}
+.brand .mark { width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; background: linear-gradient(135deg, var(--primary), var(--pink)); box-shadow: 0 6px 24px #8b5cf655; }
 .brand span { color: var(--primary); }
 .session { display: flex; align-items: center; gap: 12px; color: var(--muted); font-size: 13px; }
 .badge { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; background: var(--card2); border: 1px solid var(--border); color: var(--muted); }
@@ -54,47 +44,34 @@ a { color: var(--primary); }
 .badge.premium { color: var(--ok); border-color: #34d39940; background: #34d39914; }
 .badge.expired { color: var(--err); border-color: #f8717140; background: #f8717114; }
 .badge.lock { color: #c4b5fd; border-color: #8b5cf640; background: #8b5cf614; }
-
 .wrap { max-width: 1100px; margin: 0 auto; padding: 32px 24px 80px; }
 .card { background: linear-gradient(180deg, var(--card), #0f111b); border: 1px solid var(--border); border-radius: var(--radius); padding: 26px; }
 h1 { font-size: 28px; margin: 0 0 6px; letter-spacing: -.5px; }
 h2 { font-size: 18px; margin: 0 0 4px; }
 .desc { color: var(--muted); font-size: 14px; margin: 0 0 20px; line-height: 1.5; }
-
-/* Forms */
 label { display: block; font-size: 12px; color: var(--muted); margin: 14px 0 6px; font-weight: 600; text-transform: uppercase; letter-spacing: .6px; }
-input {
-  width: 100%; padding: 13px 14px; border-radius: 12px; border: 1px solid var(--border);
-  background: var(--bg2); color: var(--text); font-size: 15px; transition: border-color .15s, box-shadow .15s;
-}
+input { width: 100%; padding: 13px 14px; border-radius: 12px; border: 1px solid var(--border); background: var(--bg2); color: var(--text); font-size: 15px; }
 input:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px #8b5cf633; }
 .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .hint { color: var(--muted); font-size: 12px; margin-top: 6px; }
-button { font: inherit; cursor: pointer; border: none; border-radius: 12px; transition: transform .05s, background .15s, opacity .15s; }
-button:active { transform: translateY(1px); }
+button { font: inherit; cursor: pointer; border: none; border-radius: 12px; }
 button:disabled { opacity: .55; cursor: not-allowed; }
 .btn { padding: 13px 18px; font-weight: 650; font-size: 15px; background: var(--primary); color: #fff; }
 .btn:hover:not(:disabled) { background: var(--primary2); }
 .btn.block { width: 100%; margin-top: 20px; }
 .btn.ghost { background: transparent; color: var(--muted); border: 1px solid var(--border); }
-.btn.ghost:hover:not(:disabled) { color: var(--text); border-color: #334155; background: #ffffff08; }
 .btn.danger { background: #dc2626; }
-.btn.danger:hover:not(:disabled) { background: #b91c1c; }
 .btn.sm { padding: 8px 12px; font-size: 13px; border-radius: 10px; }
 .icon-btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 11px; font-size: 13px; font-weight: 600; border-radius: 10px; background: var(--card2); color: var(--text); border: 1px solid var(--border); }
-.icon-btn:hover { border-color: #3b4560; background: #1e2235; }
 .icon-btn.del:hover { border-color: #dc262680; color: var(--err); }
 .seg { display: inline-flex; padding: 4px; background: var(--bg2); border: 1px solid var(--border); border-radius: 12px; gap: 4px; }
 .seg button { padding: 8px 14px; border-radius: 9px; background: transparent; color: var(--muted); font-weight: 600; font-size: 13px; }
 .seg button.on { background: var(--primary); color: #fff; }
-.check { display: flex; align-items: center; gap: 10px; margin-top: 16px; color: var(--text); font-size: 14px; cursor: pointer; text-transform: none; letter-spacing: 0; font-weight: 500; }
+.check { display: flex; align-items: center; gap: 10px; margin-top: 16px; color: var(--text); font-size: 14px; cursor: pointer; }
 .check input { width: 18px; height: 18px; accent-color: var(--primary); }
-
 .status { margin-top: 14px; padding: 12px 14px; border-radius: 10px; font-size: 14px; display: none; }
 .status.ok { background: #10b98118; color: var(--ok); display: block; }
 .status.err { background: #ef444418; color: var(--err); display: block; }
-
-/* Login */
 .login { display: grid; grid-template-columns: 1.1fr 1fr; gap: 28px; align-items: center; min-height: calc(100vh - 160px); }
 .hero h1 { font-size: 40px; line-height: 1.1; }
 .hero h1 em { font-style: normal; background: linear-gradient(90deg, var(--primary), var(--pink)); -webkit-background-clip: text; background-clip: text; color: transparent; }
@@ -102,16 +79,10 @@ button:disabled { opacity: .55; cursor: not-allowed; }
 .step { background: #ffffff06; border: 1px solid var(--border); border-radius: 14px; padding: 14px; font-size: 13px; color: var(--muted); }
 .step b { display: block; color: var(--text); font-size: 14px; margin-bottom: 4px; }
 .step i { font-style: normal; color: var(--primary); font-weight: 800; margin-right: 6px; }
-
-/* Dashboard */
 .dash-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; margin-bottom: 22px; flex-wrap: wrap; }
 .grid { display: grid; grid-template-columns: 380px 1fr; gap: 22px; align-items: start; }
 .pl-list { display: grid; gap: 12px; }
-.pl {
-  display: grid; grid-template-columns: 48px 1fr auto; gap: 14px; align-items: center;
-  padding: 16px; border-radius: 14px; background: var(--card); border: 1px solid var(--border);
-}
-.pl:hover { border-color: #2c3550; }
+.pl { display: grid; grid-template-columns: 48px 1fr auto; gap: 14px; align-items: center; padding: 16px; border-radius: 14px; background: var(--card); border: 1px solid var(--border); }
 .pl .ico { width: 48px; height: 48px; border-radius: 12px; display: grid; place-items: center; font-size: 22px; background: linear-gradient(135deg, #8b5cf633, #ec489933); }
 .pl .name { font-weight: 700; font-size: 16px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pl .meta { color: var(--muted); font-size: 12px; margin-top: 4px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
@@ -121,24 +92,14 @@ button:disabled { opacity: .55; cursor: not-allowed; }
 .empty .big { font-size: 36px; margin-bottom: 8px; }
 .skeleton { height: 82px; border-radius: 14px; background: linear-gradient(90deg, var(--card) 0%, var(--card2) 50%, var(--card) 100%); background-size: 200% 100%; animation: sh 1.2s infinite; }
 @keyframes sh { to { background-position: -200% 0; } }
-
-/* Modal */
 .modal-bg { position: fixed; inset: 0; background: #000a; backdrop-filter: blur(4px); display: grid; place-items: center; z-index: 50; padding: 20px; }
 .modal { width: 100%; max-width: 420px; }
 .modal .actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 22px; }
-.toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); padding: 12px 18px; border-radius: 12px; background: var(--card2); border: 1px solid var(--border); font-size: 14px; z-index: 60; box-shadow: 0 10px 40px #0008; }
+.toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); padding: 12px 18px; border-radius: 12px; background: var(--card2); border: 1px solid var(--border); font-size: 14px; z-index: 60; }
 .toast.ok { border-color: #34d39955; color: var(--ok); }
 .toast.err { border-color: #f8717155; color: var(--err); }
 .footer { text-align: center; color: var(--muted); font-size: 12px; margin-top: 40px; }
-
-@media (max-width: 880px) {
-  .login, .grid { grid-template-columns: 1fr; }
-  .hero h1 { font-size: 30px; }
-  .pl { grid-template-columns: 40px 1fr; }
-  .pl .actions { grid-column: 1 / -1; justify-content: flex-start; }
-  .topbar { padding: 12px 16px; }
-  .session .who { display: none; }
-}
+@media (max-width: 880px) { .login, .grid { grid-template-columns: 1fr; } .hero h1 { font-size: 30px; } .pl { grid-template-columns: 40px 1fr; } .pl .actions { grid-column: 1 / -1; } .topbar { padding: 12px 16px; } }
 </style>
 </head>
 <body>
@@ -150,13 +111,11 @@ button:disabled { opacity: .55; cursor: not-allowed; }
     <button class="btn ghost sm" id="logoutBtn" type="button">Sair</button>
   </div>
 </header>
-
 <main class="wrap">
-  <!-- LOGIN -->
   <section id="loginView" class="login">
     <div class="hero">
       <h1>Gerencie suas listas no <em>Hugo Player</em></h1>
-      <p class="desc">Entre com o Device ID e a Device Key que aparecem na tela do aplicativo para adicionar, renomear, proteger com PIN ou excluir suas playlists.</p>
+      <p class="desc">Entre com o Device ID e a Device Key que aparecem na tela do aplicativo.</p>
       <div class="steps">
         <div class="step"><b><i>1</i>Abra o app</b>No celular ou na TV</div>
         <div class="step"><b><i>2</i>Copie ID e Key</b>Mostrados na tela inicial</div>
@@ -174,8 +133,6 @@ button:disabled { opacity: .55; cursor: not-allowed; }
       <div class="status" id="loginStatus"></div>
     </form>
   </section>
-
-  <!-- DASHBOARD -->
   <section id="dashView" class="hidden">
     <div class="dash-head">
       <div>
@@ -184,12 +141,10 @@ button:disabled { opacity: .55; cursor: not-allowed; }
       </div>
       <button class="btn ghost sm" id="refreshBtn" type="button">↻ Atualizar</button>
     </div>
-
     <div class="grid">
       <form class="card" id="addForm" autocomplete="off">
         <h2>Adicionar playlist</h2>
-        <p class="desc">Cole a URL M3U ou use os dados do seu servidor Xtream.</p>
-        <div class="seg" role="tablist">
+        <div class="seg">
           <button type="button" class="on" data-type="m3u">URL M3U</button>
           <button type="button" data-type="xtream">Xtream Codes</button>
         </div>
@@ -200,34 +155,28 @@ button:disabled { opacity: .55; cursor: not-allowed; }
           <input id="plUrl" placeholder="http://servidor.com/get.php?..." inputmode="url">
         </div>
         <div id="xtFields" class="hidden">
-          <label for="xtHost">Servidor (host:porta)</label>
-          <input id="xtHost" placeholder="http://servidor.com:8080" inputmode="url">
+          <label for="xtHost">Servidor</label>
+          <input id="xtHost" placeholder="http://servidor.com:8080">
           <div class="row">
-            <div><label for="xtUser">Usuário</label><input id="xtUser" autocomplete="off"></div>
-            <div><label for="xtPass">Senha</label><input id="xtPass" type="password" autocomplete="new-password"></div>
+            <div><label for="xtUser">Usuário</label><input id="xtUser"></div>
+            <div><label for="xtPass">Senha</label><input id="xtPass" type="password"></div>
           </div>
         </div>
         <label class="check"><input type="checkbox" id="plPinOn"> Proteger com PIN</label>
         <div id="pinFields" class="hidden">
           <label for="plPin">PIN (4 a 8 dígitos)</label>
-          <input id="plPin" class="mono" inputmode="numeric" maxlength="8" placeholder="••••">
-          <div class="hint">O PIN será pedido para ver, editar ou excluir esta lista.</div>
+          <input id="plPin" class="mono" inputmode="numeric" maxlength="8">
         </div>
         <button class="btn block" id="addBtn" type="submit">Adicionar playlist</button>
         <div class="status" id="addStatus"></div>
       </form>
-
-      <div>
-        <div class="pl-list" id="plList"></div>
-      </div>
+      <div><div class="pl-list" id="plList"></div></div>
     </div>
   </section>
   <div class="footer">Hugo Player • Ativação segura por dispositivo</div>
 </main>
-
-<!-- MODAL GENÉRICO -->
 <div class="modal-bg hidden" id="modalBg">
-  <form class="card modal" id="modalForm" autocomplete="off">
+  <form class="card modal" id="modalForm">
     <h2 id="mTitle"></h2>
     <p class="desc" id="mDesc"></p>
     <div id="mBody"></div>
@@ -238,20 +187,18 @@ button:disabled { opacity: .55; cursor: not-allowed; }
     </div>
   </form>
 </div>
-
 <script>
 "use strict";
-const API = (new URLSearchParams(location.search).get("api") || window.HUGO_API || "https://api-hugo.streamflixvip.online").replace(/\/+$/, "");
+const API = (new URLSearchParams(location.search).get("api") || "https://api-hugo.streamflixvip.online").replace(/\/+$/, "");
 const $ = id => document.getElementById(id);
 const ERRORS = {
   invalid_credentials: "Device ID ou Key incorretos.",
-  device_already_registered: "Device Key incorreta para este dispositivo.",
   invalid_pin: "PIN incorreto.",
   pin_required: "Esta playlist exige PIN.",
   too_many_pin_attempts: "Muitas tentativas. Aguarde um minuto.",
   playlist_not_found: "Playlist não encontrada.",
   invalid_url: "URL inválida.",
-  validation_error: "Verifique os campos preenchidos.",
+  validation_error: "Verifique os campos preenchidos."
 };
 let session = null;
 let playlists = [];
@@ -259,49 +206,53 @@ const unlocked = {};
 let addType = "m3u";
 
 function esc(s) {
-  return String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&", "<": "<", ">": ">", '"': """, "'": "&#39;" }[c]));
+  return String(s == null ? "" : s).replace(/[&<>"']/g, function(c) {
+    return {"&":"&","<":"<",">":">",'"':""","'":"&#39;"}[c];
+  });
 }
 function friendly(err) {
   if (err && err.details && err.details.fieldErrors) {
-    const f = Object.values(err.details.fieldErrors).flat()[0];
+    var f = Object.values(err.details.fieldErrors).flat()[0];
     if (f) return f;
   }
   return ERRORS[err && err.error] || (err && err.error) || "Erro inesperado.";
 }
-async function api(method, path, body, extraHeaders = {}) {
-  const headers = { "Content-Type": "application/json", ...extraHeaders };
+async function api(method, path, body, extraHeaders) {
+  extraHeaders = extraHeaders || {};
+  var headers = Object.assign({"Content-Type": "application/json"}, extraHeaders);
   if (session) { headers["x-device-id"] = session.deviceId; headers["x-device-key"] = session.deviceKey; }
-  let res;
+  var res;
   try {
-    res = await fetch(API + path, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
-  } catch {
+    res = await fetch(API + path, { method: method, headers: headers, body: body === undefined ? undefined : JSON.stringify(body) });
+  } catch (e) {
     throw { error: "Sem conexão com o servidor." };
   }
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw { status: res.status, ...data };
+  var data = await res.json().catch(function(){ return {}; });
+  if (!res.ok) throw Object.assign({ status: res.status }, data);
   return data;
 }
 function show(el, msg, type) { el.textContent = msg; el.className = "status " + type; }
 function clear(el) { el.textContent = ""; el.className = "status"; }
-let toastTimer;
-function toast(msg, type = "ok") {
-  document.querySelectorAll(".toast").forEach(t => t.remove());
-  const t = document.createElement("div");
+var toastTimer;
+function toast(msg, type) {
+  type = type || "ok";
+  document.querySelectorAll(".toast").forEach(function(t){ t.remove(); });
+  var t = document.createElement("div");
   t.className = "toast " + type; t.textContent = msg; document.body.appendChild(t);
-  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.remove(), 3200);
+  clearTimeout(toastTimer); toastTimer = setTimeout(function(){ t.remove(); }, 3200);
 }
 
-$("loginForm").addEventListener("submit", async e => {
+$("loginForm").addEventListener("submit", async function(e) {
   e.preventDefault();
-  const deviceId = $("deviceId").value.trim().toUpperCase();
-  const deviceKey = $("deviceKey").value.trim().toUpperCase();
-  const st = $("loginStatus"); clear(st);
+  var deviceId = $("deviceId").value.trim().toUpperCase();
+  var deviceKey = $("deviceKey").value.trim().toUpperCase();
+  var st = $("loginStatus"); clear(st);
   if (!deviceId || deviceKey.length < 4) return show(st, "Preencha o Device ID e a Device Key.", "err");
   $("loginBtn").disabled = true; $("loginBtn").textContent = "Entrando...";
   try {
     session = null;
-    await api("POST", "/devices/register", { deviceId, deviceKey, platform: "web" });
-    session = { deviceId, deviceKey };
+    await api("POST", "/devices/register", { deviceId: deviceId, deviceKey: deviceKey, platform: "web" });
+    session = { deviceId: deviceId, deviceKey: deviceKey };
     sessionStorage.setItem("hugo.session", JSON.stringify(session));
     await enterDashboard();
   } catch (err) {
@@ -311,20 +262,20 @@ $("loginForm").addEventListener("submit", async e => {
     $("loginBtn").disabled = false; $("loginBtn").textContent = "Entrar";
   }
 });
-$("logoutBtn").addEventListener("click", () => {
+$("logoutBtn").addEventListener("click", function() {
   session = null; playlists = [];
-  Object.keys(unlocked).forEach(k => delete unlocked[k]);
+  Object.keys(unlocked).forEach(function(k){ delete unlocked[k]; });
   sessionStorage.removeItem("hugo.session");
   $("dashView").classList.add("hidden"); $("session").classList.add("hidden");
   $("loginView").classList.remove("hidden");
 });
 
 async function enterDashboard() {
-  const status = await api("GET", "/devices/status").catch(() => null);
+  var status = await api("GET", "/devices/status").catch(function(){ return null; });
   $("whoId").textContent = session.deviceId;
-  const lic = status && status.license ? status.license : { type: "trial" };
-  const label = { trial: "Teste", premium: "Premium", expired: "Expirada" }[lic.type] || lic.type;
-  const until = lic.expiresAt ? " até " + new Date(lic.expiresAt).toLocaleDateString("pt-BR") : "";
+  var lic = status && status.license ? status.license : { type: "trial" };
+  var label = { trial: "Teste", premium: "Premium", expired: "Expirada" }[lic.type] || lic.type;
+  var until = lic.expiresAt ? " até " + new Date(lic.expiresAt).toLocaleDateString("pt-BR") : "";
   $("licBadge").className = "badge " + lic.type; $("licBadge").textContent = "Licença: " + label + until;
   $("loginView").classList.add("hidden");
   $("dashView").classList.remove("hidden"); $("session").classList.remove("hidden");
@@ -332,84 +283,73 @@ async function enterDashboard() {
 }
 
 async function loadPlaylists() {
-  const box = $("plList");
+  var box = $("plList");
   box.innerHTML = '<div class="skeleton"></div><div class="skeleton"></div>';
   try {
-    const data = await api("GET", "/playlists");
+    var data = await api("GET", "/playlists");
     playlists = data.playlists || [];
     render();
   } catch (err) {
-    if (err.status === 401) { $("logoutBtn").click(); return show($("loginStatus"), "Sessão expirada. Entre novamente.", "err"); }
+    if (err.status === 401) { $("logoutBtn").click(); return show($("loginStatus"), "Sessão expirada.", "err"); }
     box.innerHTML = '<div class="empty"><div class="big">⚠️</div>' + esc(friendly(err)) + '</div>';
   }
 }
 function render() {
-  const box = $("plList");
-  $("dashSub").textContent = playlists.length
-    ? playlists.length + (playlists.length === 1 ? " playlist salva." : " playlists salvas.") + " As mudanças aparecem no app ao atualizar."
-    : "Tudo o que você mudar aqui aparece no app ao atualizar a lista.";
+  var box = $("plList");
+  $("dashSub").textContent = playlists.length ? playlists.length + " playlist(s) salva(s)." : "Adicione sua primeira playlist.";
   if (!playlists.length) {
     box.innerHTML = '<div class="empty"><div class="big">📺</div><b>Nenhuma playlist ainda</b><br>Adicione a primeira no formulário ao lado.</div>';
     return;
   }
-  box.innerHTML = playlists.map(p => {
-    const u = unlocked[p.id];
-    const lock = p.hasPin ? '<span class="badge lock">🔒 PIN</span>' : '';
-    const url = u ? esc(u.url) : (p.hasPin ? '<i>protegida por PIN</i>' : '');
-    return `<div class="pl">
-      <div class="ico">${p.type === 'xtream' ? '📡' : '📺'}</div>
-      <div>
-        <div class="name">${esc(p.name)}</div>
-        <div class="meta"><span class="badge">${p.type}</span>${lock}</div>
-        <div class="url">${url}</div>
-      </div>
-      <div class="actions">
-        ${p.hasPin && !u ? `<button class="icon-btn" data-act="unlock" data-id="${p.id}">Desbloquear</button>` : ''}
-        <button class="icon-btn" data-act="rename" data-id="${p.id}">Renomear</button>
-        <button class="icon-btn" data-act="pin" data-id="${p.id}">${p.hasPin ? 'Mudar PIN' : 'Definir PIN'}</button>
-        ${p.hasPin ? `<button class="icon-btn" data-act="unpin" data-id="${p.id}">Remover PIN</button>` : ''}
-        <button class="icon-btn del" data-act="del" data-id="${p.id}">Excluir</button>
-      </div>
-    </div>`;
+  box.innerHTML = playlists.map(function(p) {
+    var u = unlocked[p.id];
+    var lock = p.hasPin ? '<span class="badge lock">🔒 PIN</span>' : '';
+    var url = u ? esc(u.url) : (p.hasPin ? '<i>protegida por PIN</i>' : '');
+    return '<div class="pl"><div class="ico">' + (p.type === 'xtream' ? '📡' : '📺') + '</div><div><div class="name">' + esc(p.name) + '</div><div class="meta"><span class="badge">' + p.type + '</span>' + lock + '</div><div class="url">' + url + '</div></div><div class="actions">' +
+      (p.hasPin && !u ? '<button class="icon-btn" data-act="unlock" data-id="' + p.id + '">Desbloquear</button>' : '') +
+      '<button class="icon-btn" data-act="rename" data-id="' + p.id + '">Renomear</button>' +
+      '<button class="icon-btn" data-act="pin" data-id="' + p.id + '">' + (p.hasPin ? 'Mudar PIN' : 'Definir PIN') + '</button>' +
+      (p.hasPin ? '<button class="icon-btn" data-act="unpin" data-id="' + p.id + '">Remover PIN</button>' : '') +
+      '<button class="icon-btn del" data-act="del" data-id="' + p.id + '">Excluir</button></div></div>';
   }).join('');
 }
 
-$("plList").addEventListener("click", async e => {
-  const btn = e.target.closest("[data-act]");
+$("plList").addEventListener("click", async function(e) {
+  var btn = e.target.closest("[data-act]");
   if (!btn) return;
-  const id = btn.dataset.id;
-  const act = btn.dataset.act;
-  const p = playlists.find(x => x.id === id);
+  var id = btn.dataset.id;
+  var act = btn.dataset.act;
+  var p = playlists.find(function(x){ return x.id === id; });
   if (!p) return;
-  if (act === "unlock") openModal("Desbloquear", "Digite o PIN desta playlist.", `<label>PIN</label><input id="mPin" class="mono" inputmode="numeric" maxlength="8">`, async () => {
-    const pin = $("mPin").value.trim();
-    const data = await api("POST", "/playlists/" + id + "/unlock", { pin });
-    unlocked[id] = { pin, url: data.url };
+  if (act === "unlock") openModal("Desbloquear", "Digite o PIN.", '<label>PIN</label><input id="mPin" class="mono" maxlength="8">', async function() {
+    var pin = $("mPin").value.trim();
+    var data = await api("POST", "/playlists/" + id + "/unlock", { pin: pin });
+    unlocked[id] = { pin: pin, url: data.url };
     render();
   });
-  if (act === "rename") openModal("Renomear", "Novo nome para esta playlist.", `<label>Nome</label><input id="mName" value="${esc(p.name)}" maxlength="80">`, async () => {
-    const name = $("mName").value.trim();
-    const headers = unlocked[id] ? { "x-playlist-pin": unlocked[id].pin } : {};
-    await api("PATCH", "/playlists/" + id, { name }, headers);
+  if (act === "rename") openModal("Renomear", "Novo nome.", '<label>Nome</label><input id="mName" value="' + esc(p.name) + '" maxlength="80">', async function() {
+    var name = $("mName").value.trim();
+    var headers = unlocked[id] ? { "x-playlist-pin": unlocked[id].pin } : {};
+    await api("PATCH", "/playlists/" + id, { name: name }, headers);
     toast("Renomeada.");
     await loadPlaylists();
   });
-  if (act === "pin") openModal(p.hasPin ? "Mudar PIN" : "Definir PIN", "4 a 8 dígitos.", `<label>PIN</label><input id="mPin" class="mono" inputmode="numeric" maxlength="8">${p.hasPin ? '<label>PIN atual</label><input id="mOld" class="mono" inputmode="numeric" maxlength="8">' : ''}`, async () => {
-    const pin = $("mPin").value.trim();
-    const headers = unlocked[id] ? { "x-playlist-pin": unlocked[id].pin } : {};
-    await api("POST", "/playlists/" + id + "/pin", { pin }, headers);
+  if (act === "pin") openModal(p.hasPin ? "Mudar PIN" : "Definir PIN", "4 a 8 dígitos.", '<label>PIN</label><input id="mPin" class="mono" maxlength="8">', async function() {
+    var pin = $("mPin").value.trim();
+    var headers = unlocked[id] ? { "x-playlist-pin": unlocked[id].pin } : {};
+    await api("POST", "/playlists/" + id + "/pin", { pin: pin }, headers);
     toast("PIN atualizado.");
     await loadPlaylists();
   });
-  if (act === "unpin") openModal("Remover PIN", "Confirma a remoção do PIN?", `<label>PIN atual</label><input id="mPin" class="mono" inputmode="numeric" maxlength="8">`, async () => {
-    const headers = { "x-playlist-pin": $("mPin").value.trim() };
+  if (act === "unpin") openModal("Remover PIN", "Confirma?", '<label>PIN atual</label><input id="mPin" class="mono" maxlength="8">', async function() {
+    var headers = { "x-playlist-pin": $("mPin").value.trim() };
     await api("DELETE", "/playlists/" + id + "/pin", {}, headers);
     delete unlocked[id];
     toast("PIN removido.");
     await loadPlaylists();
   });
-  if (act === "del") openModal("Excluir playlist", "Isso não pode ser desfeito.", p.hasPin ? `<label>PIN</label><input id="mPin" class="mono" inputmode="numeric" maxlength="8">` : "", async () => {
-    const headers = p.hasPin ? { "x-playlist-pin": $("mPin").value.trim() } : (unlocked[id] ? { "x-playlist-pin": unlocked[id].pin } : {});
+  if (act === "del") openModal("Excluir", "Isso não pode ser desfeito.", p.hasPin ? '<label>PIN</label><input id="mPin" class="mono" maxlength="8">' : "", async function() {
+    var headers = p.hasPin ? { "x-playlist-pin": $("mPin").value.trim() } : (unlocked[id] ? { "x-playlist-pin": unlocked[id].pin } : {});
     await api("DELETE", "/playlists/" + id, {}, headers);
     delete unlocked[id];
     toast("Excluída.");
@@ -422,11 +362,10 @@ function openModal(title, desc, body, onOk) {
   $("mDesc").textContent = desc;
   $("mBody").innerHTML = body || "";
   clear($("mStatus"));
-  $("mOk").textContent = "OK";
   $("modalBg").classList.remove("hidden");
-  const first = $("mBody").querySelector("input");
-  if (first) setTimeout(() => first.focus(), 50);
-  const handler = async e => {
+  var first = $("mBody").querySelector("input");
+  if (first) setTimeout(function(){ first.focus(); }, 50);
+  var handler = async function(e) {
     e.preventDefault();
     $("mOk").disabled = true;
     try { await onOk(); $("modalBg").classList.add("hidden"); }
@@ -434,26 +373,26 @@ function openModal(title, desc, body, onOk) {
     finally { $("mOk").disabled = false; $("modalForm").removeEventListener("submit", handler); }
   };
   $("modalForm").addEventListener("submit", handler);
-  $("mCancel").onclick = () => { $("modalBg").classList.add("hidden"); $("modalForm").removeEventListener("submit", handler); };
+  $("mCancel").onclick = function() { $("modalBg").classList.add("hidden"); $("modalForm").removeEventListener("submit", handler); };
 }
 
-$("addForm").addEventListener("submit", async e => {
+$("addForm").addEventListener("submit", async function(e) {
   e.preventDefault();
-  const st = $("addStatus"); clear(st);
-  const name = $("plName").value.trim();
-  let url = "";
+  var st = $("addStatus"); clear(st);
+  var name = $("plName").value.trim();
+  var url = "";
   if (addType === "m3u") url = $("plUrl").value.trim();
   else {
-    const host = $("xtHost").value.trim().replace(/\/+$/, "");
-    const user = $("xtUser").value.trim();
-    const pass = $("xtPass").value.trim();
+    var host = $("xtHost").value.trim().replace(/\/+$/, "");
+    var user = $("xtUser").value.trim();
+    var pass = $("xtPass").value.trim();
     if (!host || !user || !pass) return show(st, "Preencha host, usuário e senha.", "err");
     url = host + "/get.php?username=" + encodeURIComponent(user) + "&password=" + encodeURIComponent(pass) + "&type=m3u_plus&output=ts";
   }
   if (!url) return show(st, "Informe a URL.", "err");
-  const body = { name, type: addType, url };
+  var body = { name: name, type: addType, url: url };
   if ($("plPinOn").checked) {
-    const pin = $("plPin").value.trim();
+    var pin = $("plPin").value.trim();
     if (pin.length < 4) return show(st, "PIN precisa de 4 a 8 dígitos.", "err");
     body.pin = pin;
   }
@@ -468,22 +407,22 @@ $("addForm").addEventListener("submit", async e => {
   finally { $("addBtn").disabled = false; }
 });
 
-document.querySelectorAll(".seg button").forEach(b => {
-  b.addEventListener("click", () => {
-    document.querySelectorAll(".seg button").forEach(x => x.classList.remove("on"));
+document.querySelectorAll(".seg button").forEach(function(b) {
+  b.addEventListener("click", function() {
+    document.querySelectorAll(".seg button").forEach(function(x){ x.classList.remove("on"); });
     b.classList.add("on");
     addType = b.dataset.type;
     $("m3uFields").classList.toggle("hidden", addType !== "m3u");
     $("xtFields").classList.toggle("hidden", addType !== "xtream");
   });
 });
-$("plPinOn").addEventListener("change", e => $("pinFields").classList.toggle("hidden", !e.target.checked));
+$("plPinOn").addEventListener("change", function(e) { $("pinFields").classList.toggle("hidden", !e.target.checked); });
 $("refreshBtn").addEventListener("click", loadPlaylists);
 
 try {
-  const saved = JSON.parse(sessionStorage.getItem("hugo.session") || "null");
+  var saved = JSON.parse(sessionStorage.getItem("hugo.session") || "null");
   if (saved && saved.deviceId && saved.deviceKey) { session = saved; enterDashboard(); }
-} catch {}
+} catch (e) {}
 </script>
 </body>
 </html>
