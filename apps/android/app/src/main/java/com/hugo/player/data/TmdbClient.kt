@@ -5,7 +5,7 @@ import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.net.URLEncoder
 
-/** Chama o proxy TMDB do VPS (/tmdb/*). A chave fica no servidor. */
+/** Chama o proxy TMDB do VPS. A chave fica no servidor. */
 object TmdbClient {
     data class Info(
         val overview: String?,
