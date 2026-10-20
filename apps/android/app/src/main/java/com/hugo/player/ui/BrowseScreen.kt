@@ -43,6 +43,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.hugo.player.data.CatalogRepository
 import com.hugo.player.data.db.CategoryEntity
+import com.hugo.player.data.db.ChannelEntity
 import com.hugo.player.ui.components.ChannelLogo
 import com.hugo.player.ui.components.CategoryRow
 import com.hugo.player.ui.components.FocusSurface
@@ -61,7 +62,6 @@ enum class BrowseType(val dbType: String, val title: String, val unit: String, v
     SERIES("series", "Séries", "séries", Color(0xFF06B6D4), Icons.Default.VideoLibrary),
 }
 
-/** Item exibido na grade (canal, filme ou série agrupada). */
 data class BrowseItem(
     val key: String,
     val title: String,
@@ -69,12 +69,9 @@ data class BrowseItem(
     val subtitle: String?,
     val url: String?,
     val seriesName: String? = null,
+    val channel: ChannelEntity? = null,
 )
 
-/**
- * Estado das abas (fica no back stack: voltar do player mantém lista e rolagem).
- * Paginação de 100 em 100; filtro por categoria e busca no banco local (Room).
- */
 class BrowseViewModel(app: Application) : AndroidViewModel(app) {
     private val repo = CatalogRepository.get(app)
     private var playlistId = ""
@@ -89,7 +86,6 @@ class BrowseViewModel(app: Application) : AndroidViewModel(app) {
     var total by mutableIntStateOf(0); private set
     var initialLoading by mutableStateOf(true); private set
     var loadingMore by mutableStateOf(false); private set
-    /** Incrementado a cada troca de filtro: a tela volta a grade para o topo. */
     var resetToken by mutableIntStateOf(0); private set
 
     private var page = 0
@@ -160,17 +156,10 @@ class BrowseViewModel(app: Application) : AndroidViewModel(app) {
 
     private suspend fun fetch(p: Int): List<BrowseItem> = when (type) {
         BrowseType.SERIES -> repo.seriesPage(playlistId, selectedGroup, query, p).map {
-            BrowseItem(
-                key = "s:" + it.seriesName,
-                title = it.seriesName,
-                image = it.logo,
-                subtitle = null,
-                url = null,
-                seriesName = it.seriesName,
-            )
+            BrowseItem(key = "s:" + it.seriesName, title = it.seriesName, image = it.logo, subtitle = null, url = null, seriesName = it.seriesName)
         }
         else -> repo.page(playlistId, type.dbType, selectedGroup, query, p).map {
-            BrowseItem(key = "c:${it.id}", title = it.name, image = it.logo, subtitle = null, url = it.url)
+            BrowseItem(key = "c:${it.id}", title = it.name, image = it.logo, subtitle = null, url = it.url, channel = it)
         }
     }
 }
@@ -181,6 +170,7 @@ fun BrowseScreen(
     type: BrowseType,
     onPlay: (url: String, title: String) -> Unit,
     onOpenSeries: (seriesName: String) -> Unit,
+    onOpenMovie: (ChannelEntity) -> Unit,
     onBack: () -> Unit,
 ) {
     val vm: BrowseViewModel = viewModel()
@@ -193,12 +183,10 @@ fun BrowseScreen(
     var handledReset by rememberSaveable { mutableIntStateOf(-1) }
     val nf = remember { NumberFormat.getIntegerInstance(Locale("pt", "BR")) }
 
-    // Volta ao topo quando muda categoria/busca (mas não ao voltar do player)
     LaunchedEffect(vm.resetToken) {
         if (handledReset != -1 && handledReset != vm.resetToken) gridState.scrollToItem(0)
         handledReset = vm.resetToken
     }
-    // Carrega mais ao chegar perto do fim
     LaunchedEffect(gridState) {
         snapshotFlow {
             val last = gridState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1
@@ -207,7 +195,6 @@ fun BrowseScreen(
     }
 
     Column(Modifier.fillMaxSize().background(HugoColors.Background)) {
-        // Topo: voltar, título, busca
         Row(
             Modifier.fillMaxWidth().background(HugoColors.Panel).padding(horizontal = 16.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically
@@ -249,7 +236,6 @@ fun BrowseScreen(
         }
 
         Row(Modifier.fillMaxSize()) {
-            // Sidebar de categorias (estreita)
             LazyColumn(
                 state = catState,
                 modifier = Modifier.width(190.dp).fillMaxHeight().background(HugoColors.Panel),
@@ -260,16 +246,10 @@ fun BrowseScreen(
                     CategoryRow("Todos", vm.allCount.takeIf { it > 0 }, vm.selectedGroup == null, type.accent) { vm.selectGroup(null) }
                 }
                 items(vm.categories, key = { it.name }) { cat ->
-                    CategoryRow(
-                        cat.name,
-                        cat.count.takeIf { type != BrowseType.SERIES },
-                        vm.selectedGroup == cat.name,
-                        type.accent
-                    ) { vm.selectGroup(cat.name) }
+                    CategoryRow(cat.name, cat.count.takeIf { type != BrowseType.SERIES }, vm.selectedGroup == cat.name, type.accent) { vm.selectGroup(cat.name) }
                 }
             }
 
-            // Grade de conteúdo
             Box(Modifier.weight(1f).fillMaxHeight()) {
                 when {
                     vm.initialLoading && vm.items.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -294,8 +274,11 @@ fun BrowseScreen(
                         itemsIndexed(vm.items, key = { _, it -> it.key }) { index, item ->
                             val mod = if (index == 0) Modifier.focusRequester(gridFocus) else Modifier
                             val click = {
-                                if (item.seriesName != null) onOpenSeries(item.seriesName)
-                                else item.url?.let { onPlay(it, item.title) }
+                                when {
+                                    item.seriesName != null -> onOpenSeries(item.seriesName)
+                                    type == BrowseType.MOVIES && item.channel != null -> onOpenMovie(item.channel)
+                                    else -> item.url?.let { onPlay(it, item.title) }
+                                }
                                 Unit
                             }
                             if (type == BrowseType.LIVE) LiveCard(item, mod, click)
@@ -313,7 +296,6 @@ fun BrowseScreen(
     }
 }
 
-/** Card de canal ao vivo no mesmo formato vertical dos pôsteres: logo em cima, nome embaixo. */
 @Composable
 private fun LiveCard(item: BrowseItem, modifier: Modifier, onClick: () -> Unit) {
     FocusSurface(onClick = onClick, modifier = modifier, focusScale = 1.07f) { focused ->
