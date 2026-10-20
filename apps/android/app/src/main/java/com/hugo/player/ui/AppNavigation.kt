@@ -1,6 +1,8 @@
 package com.hugo.player.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -177,7 +179,11 @@ private fun FavoritesScreen(onOpen: (WatchHistory.FavoriteItem) -> Unit, onBack:
             ) {
                 items(items, key = { it.key }) { fav ->
                     Box {
-                        Column(Modifier.fillMaxWidth().clickableNoRipple { onOpen(fav) }) {
+                        Column(
+                            Modifier
+                                .fillMaxWidth()
+                                .clickable(indication = null, interactionSource = remember { MutableInteractionSource() }) { onOpen(fav) }
+                        ) {
                             Box(Modifier.fillMaxWidth().aspectRatio(2f / 3f).clip(RoundedCornerShape(10.dp)).background(HugoColors.Card)) {
                                 fav.logo?.let { SubcomposeAsyncImage(model = it, contentDescription = fav.title, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize()) }
                             }
@@ -195,7 +201,3 @@ private fun FavoritesScreen(onOpen: (WatchHistory.FavoriteItem) -> Unit, onBack:
         }
     }
 }
-
-@Composable
-private fun Modifier.clickableNoRipple(onClick: () -> Unit): Modifier =
-    this.then(Modifier.clickable(indication = null, interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }, onClick = onClick))
