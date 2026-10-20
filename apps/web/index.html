@@ -241,8 +241,7 @@ button:disabled { opacity: .55; cursor: not-allowed; }
 
 <script>
 "use strict";
-// Endereço da API: ?api=https://... > window.HUGO_API > padrão do servidor.
-const API = (new URLSearchParams(location.search).get("api") || window.HUGO_API || "http://65.21.48.50:8080").replace(/\/+$/, "");
+const API = (new URLSearchParams(location.search).get("api") || window.HUGO_API || "https://api-hugo.streamflixvip.online").replace(/\/+$/, "");
 const $ = id => document.getElementById(id);
 const ERRORS = {
   invalid_credentials: "Device ID ou Key incorretos.",
@@ -254,13 +253,13 @@ const ERRORS = {
   invalid_url: "URL inválida.",
   validation_error: "Verifique os campos preenchidos.",
 };
-let session = null;      // { deviceId, deviceKey }
+let session = null;
 let playlists = [];
-const unlocked = {};     // id -> { pin, url }  (só em memória)
+const unlocked = {};
 let addType = "m3u";
 
 function esc(s) {
-  return String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  return String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&", "<": "<", ">": ">", '"': """, "'": "&#39;" }[c]));
 }
 function friendly(err) {
   if (err && err.details && err.details.fieldErrors) {
@@ -292,7 +291,6 @@ function toast(msg, type = "ok") {
   clearTimeout(toastTimer); toastTimer = setTimeout(() => t.remove(), 3200);
 }
 
-/* ---------- Login ---------- */
 $("loginForm").addEventListener("submit", async e => {
   e.preventDefault();
   const deviceId = $("deviceId").value.trim().toUpperCase();
@@ -333,7 +331,6 @@ async function enterDashboard() {
   await loadPlaylists();
 }
 
-/* ---------- Lista ---------- */
 async function loadPlaylists() {
   const box = $("plList");
   box.innerHTML = '<div class="skeleton"></div><div class="skeleton"></div>';
@@ -357,182 +354,136 @@ function render() {
   }
   box.innerHTML = playlists.map(p => {
     const u = unlocked[p.id];
-    const locked = p.protected && !u;
-    const url = p.url || (u && u.url);
-    const date = new Date(p.updatedAt || p.createdAt).toLocaleDateString("pt-BR");
-    return `<div class="pl" data-id="${esc(p.id)}">
-      <div class="ico">${p.protected ? "🔒" : "📺"}</div>
-      <div style="min-width:0">
+    const lock = p.hasPin ? '<span class="badge lock">🔒 PIN</span>' : '';
+    const url = u ? esc(u.url) : (p.hasPin ? '<i>protegida por PIN</i>' : '');
+    return `<div class="pl">
+      <div class="ico">${p.type === 'xtream' ? '📡' : '📺'}</div>
+      <div>
         <div class="name">${esc(p.name)}</div>
-        <div class="meta">
-          <span class="badge">${p.type === "xtream" ? "Xtream" : "Lista"}</span>
-          ${p.protected ? '<span class="badge lock">Protegida por PIN</span>' : ""}
-          <span>Atualizada em ${esc(date)}</span>
-        </div>
-        ${locked ? "" : `<div class="url mono">${esc(maskUrl(url))}</div>`}
+        <div class="meta"><span class="badge">${p.type}</span>${lock}</div>
+        <div class="url">${url}</div>
       </div>
       <div class="actions">
-        ${locked ? `<button class="icon-btn" data-act="unlock">🔓 Desbloquear</button>` : ""}
-        <button class="icon-btn" data-act="rename">✏️ Renomear</button>
-        <button class="icon-btn" data-act="pin">${p.protected ? "🔑 PIN" : "🔒 Definir PIN"}</button>
-        <button class="icon-btn del" data-act="delete">🗑 Excluir</button>
+        ${p.hasPin && !u ? `<button class="icon-btn" data-act="unlock" data-id="${p.id}">Desbloquear</button>` : ''}
+        <button class="icon-btn" data-act="rename" data-id="${p.id}">Renomear</button>
+        <button class="icon-btn" data-act="pin" data-id="${p.id}">${p.hasPin ? 'Mudar PIN' : 'Definir PIN'}</button>
+        ${p.hasPin ? `<button class="icon-btn" data-act="unpin" data-id="${p.id}">Remover PIN</button>` : ''}
+        <button class="icon-btn del" data-act="del" data-id="${p.id}">Excluir</button>
       </div>
     </div>`;
-  }).join("");
+  }).join('');
 }
-function maskUrl(url) {
-  if (!url) return "";
-  try {
-    const u = new URL(url);
-    if (u.searchParams.has("password")) u.searchParams.set("password", "••••");
-    return u.toString().replace(/%E2%80%A2/g, "•");
-  } catch { return url; }
-}
-$("plList").addEventListener("click", e => {
-  const btn = e.target.closest("button[data-act]"); if (!btn) return;
-  const p = playlists.find(x => x.id === btn.closest(".pl").dataset.id); if (!p) return;
-  ({ unlock: unlockFlow, rename: renameFlow, pin: pinFlow, delete: deleteFlow })[btn.dataset.act](p);
-});
-$("refreshBtn").addEventListener("click", loadPlaylists);
 
-/* ---------- Adicionar ---------- */
-document.querySelectorAll(".seg button").forEach(b => b.addEventListener("click", () => {
-  addType = b.dataset.type;
-  document.querySelectorAll(".seg button").forEach(x => x.classList.toggle("on", x === b));
-  $("m3uFields").classList.toggle("hidden", addType !== "m3u");
-  $("xtFields").classList.toggle("hidden", addType !== "xtream");
-}));
-$("plPinOn").addEventListener("change", () => $("pinFields").classList.toggle("hidden", !$("plPinOn").checked));
+$("plList").addEventListener("click", async e => {
+  const btn = e.target.closest("[data-act]");
+  if (!btn) return;
+  const id = btn.dataset.id;
+  const act = btn.dataset.act;
+  const p = playlists.find(x => x.id === id);
+  if (!p) return;
+  if (act === "unlock") openModal("Desbloquear", "Digite o PIN desta playlist.", `<label>PIN</label><input id="mPin" class="mono" inputmode="numeric" maxlength="8">`, async () => {
+    const pin = $("mPin").value.trim();
+    const data = await api("POST", "/playlists/" + id + "/unlock", { pin });
+    unlocked[id] = { pin, url: data.url };
+    render();
+  });
+  if (act === "rename") openModal("Renomear", "Novo nome para esta playlist.", `<label>Nome</label><input id="mName" value="${esc(p.name)}" maxlength="80">`, async () => {
+    const name = $("mName").value.trim();
+    const headers = unlocked[id] ? { "x-playlist-pin": unlocked[id].pin } : {};
+    await api("PATCH", "/playlists/" + id, { name }, headers);
+    toast("Renomeada.");
+    await loadPlaylists();
+  });
+  if (act === "pin") openModal(p.hasPin ? "Mudar PIN" : "Definir PIN", "4 a 8 dígitos.", `<label>PIN</label><input id="mPin" class="mono" inputmode="numeric" maxlength="8">${p.hasPin ? '<label>PIN atual</label><input id="mOld" class="mono" inputmode="numeric" maxlength="8">' : ''}`, async () => {
+    const pin = $("mPin").value.trim();
+    const headers = unlocked[id] ? { "x-playlist-pin": unlocked[id].pin } : {};
+    await api("POST", "/playlists/" + id + "/pin", { pin }, headers);
+    toast("PIN atualizado.");
+    await loadPlaylists();
+  });
+  if (act === "unpin") openModal("Remover PIN", "Confirma a remoção do PIN?", `<label>PIN atual</label><input id="mPin" class="mono" inputmode="numeric" maxlength="8">`, async () => {
+    const headers = { "x-playlist-pin": $("mPin").value.trim() };
+    await api("DELETE", "/playlists/" + id + "/pin", {}, headers);
+    delete unlocked[id];
+    toast("PIN removido.");
+    await loadPlaylists();
+  });
+  if (act === "del") openModal("Excluir playlist", "Isso não pode ser desfeito.", p.hasPin ? `<label>PIN</label><input id="mPin" class="mono" inputmode="numeric" maxlength="8">` : "", async () => {
+    const headers = p.hasPin ? { "x-playlist-pin": $("mPin").value.trim() } : (unlocked[id] ? { "x-playlist-pin": unlocked[id].pin } : {});
+    await api("DELETE", "/playlists/" + id, {}, headers);
+    delete unlocked[id];
+    toast("Excluída.");
+    await loadPlaylists();
+  });
+});
+
+function openModal(title, desc, body, onOk) {
+  $("mTitle").textContent = title;
+  $("mDesc").textContent = desc;
+  $("mBody").innerHTML = body || "";
+  clear($("mStatus"));
+  $("mOk").textContent = "OK";
+  $("modalBg").classList.remove("hidden");
+  const first = $("mBody").querySelector("input");
+  if (first) setTimeout(() => first.focus(), 50);
+  const handler = async e => {
+    e.preventDefault();
+    $("mOk").disabled = true;
+    try { await onOk(); $("modalBg").classList.add("hidden"); }
+    catch (err) { show($("mStatus"), friendly(err), "err"); }
+    finally { $("mOk").disabled = false; $("modalForm").removeEventListener("submit", handler); }
+  };
+  $("modalForm").addEventListener("submit", handler);
+  $("mCancel").onclick = () => { $("modalBg").classList.add("hidden"); $("modalForm").removeEventListener("submit", handler); };
+}
+
 $("addForm").addEventListener("submit", async e => {
   e.preventDefault();
   const st = $("addStatus"); clear(st);
   const name = $("plName").value.trim();
-  const body = { name, type: addType };
-  if (!name) return show(st, "Dê um nome para a playlist.", "err");
-  if (addType === "m3u") {
-    body.url = $("plUrl").value.trim();
-    if (!body.url) return show(st, "Cole a URL M3U.", "err");
-  } else {
-    body.url = $("xtHost").value.trim(); body.username = $("xtUser").value.trim(); body.password = $("xtPass").value;
-    if (!body.url || !body.username || !body.password) return show(st, "Preencha servidor, usuário e senha.", "err");
+  let url = "";
+  if (addType === "m3u") url = $("plUrl").value.trim();
+  else {
+    const host = $("xtHost").value.trim().replace(/\/+$/, "");
+    const user = $("xtUser").value.trim();
+    const pass = $("xtPass").value.trim();
+    if (!host || !user || !pass) return show(st, "Preencha host, usuário e senha.", "err");
+    url = host + "/get.php?username=" + encodeURIComponent(user) + "&password=" + encodeURIComponent(pass) + "&type=m3u_plus&output=ts";
   }
+  if (!url) return show(st, "Informe a URL.", "err");
+  const body = { name, type: addType, url };
   if ($("plPinOn").checked) {
-    body.pin = $("plPin").value.trim();
-    if (!/^\d{4,8}$/.test(body.pin)) return show(st, "O PIN deve ter de 4 a 8 dígitos.", "err");
+    const pin = $("plPin").value.trim();
+    if (pin.length < 4) return show(st, "PIN precisa de 4 a 8 dígitos.", "err");
+    body.pin = pin;
   }
   $("addBtn").disabled = true;
   try {
-    const res = await api("POST", "/playlists", body);
-    if (body.pin) unlocked[res.playlist.id] = { pin: body.pin, url: res.playlist.url };
-    $("addForm").reset(); $("pinFields").classList.add("hidden");
-    document.querySelector('.seg button[data-type="m3u"]').click();
-    toast("Playlist adicionada!");
+    await api("POST", "/playlists", body);
+    $("addForm").reset();
+    $("pinFields").classList.add("hidden");
+    show(st, "Playlist adicionada.", "ok");
     await loadPlaylists();
-  } catch (err) {
-    show(st, friendly(err), "err");
-  } finally { $("addBtn").disabled = false; }
+  } catch (err) { show(st, friendly(err), "err"); }
+  finally { $("addBtn").disabled = false; }
 });
 
-/* ---------- Modal ---------- */
-function modal({ title, desc, body = "", ok = "Salvar", danger = false, onSubmit }) {
-  $("mTitle").textContent = title; $("mDesc").textContent = desc || "";
-  $("mBody").innerHTML = body; clear($("mStatus"));
-  $("mOk").textContent = ok; $("mOk").className = "btn" + (danger ? " danger" : ""); $("mOk").disabled = false;
-  $("modalBg").classList.remove("hidden");
-  const first = $("mBody").querySelector("input"); (first || $("mOk")).focus();
-  $("modalForm").onsubmit = async e => {
-    e.preventDefault(); $("mOk").disabled = true;
-    try { await onSubmit(); closeModal(); }
-    catch (err) { show($("mStatus"), friendly(err), "err"); $("mOk").disabled = false; }
-  };
-}
-function closeModal() { $("modalBg").classList.add("hidden"); $("modalForm").onsubmit = null; }
-$("mCancel").addEventListener("click", closeModal);
-$("modalBg").addEventListener("click", e => { if (e.target === $("modalBg")) closeModal(); });
-document.addEventListener("keydown", e => { if (e.key === "Escape") closeModal(); });
-const pinInput = (id, label) => `<label for="${id}">${label}</label><input id="${id}" class="mono" inputmode="numeric" maxlength="8" placeholder="••••">`;
-function pinHeader(p, typed) {
-  const pin = typed ?? (unlocked[p.id] && unlocked[p.id].pin);
-  return pin ? { "x-playlist-pin": pin } : {};
-}
-function needsPinField(p) { return p.protected && !unlocked[p.id]; }
+document.querySelectorAll(".seg button").forEach(b => {
+  b.addEventListener("click", () => {
+    document.querySelectorAll(".seg button").forEach(x => x.classList.remove("on"));
+    b.classList.add("on");
+    addType = b.dataset.type;
+    $("m3uFields").classList.toggle("hidden", addType !== "m3u");
+    $("xtFields").classList.toggle("hidden", addType !== "xtream");
+  });
+});
+$("plPinOn").addEventListener("change", e => $("pinFields").classList.toggle("hidden", !e.target.checked));
+$("refreshBtn").addEventListener("click", loadPlaylists);
 
-function unlockFlow(p) {
-  modal({
-    title: "Desbloquear playlist", desc: `Digite o PIN de "${p.name}".`, ok: "Desbloquear",
-    body: pinInput("mPin", "PIN"),
-    onSubmit: async () => {
-      const pin = $("mPin").value.trim();
-      const res = await api("POST", `/playlists/${encodeURIComponent(p.id)}/verify-pin`, { pin });
-      unlocked[p.id] = { pin, url: res.playlist.url };
-      render();
-    },
-  });
-}
-function renameFlow(p) {
-  modal({
-    title: "Renomear playlist", ok: "Salvar",
-    body: `<label for="mName">Novo nome</label><input id="mName" maxlength="80" value="${esc(p.name)}">` + (needsPinField(p) ? pinInput("mPin", "PIN da playlist") : ""),
-    onSubmit: async () => {
-      const name = $("mName").value.trim();
-      if (!name) throw { error: "Digite um nome." };
-      const typed = $("mPin") ? $("mPin").value.trim() : undefined;
-      await api("PATCH", `/playlists/${encodeURIComponent(p.id)}`, { name }, pinHeader(p, typed));
-      if (typed) unlocked[p.id] = { pin: typed, url: unlocked[p.id] && unlocked[p.id].url };
-      toast("Nome atualizado."); await loadPlaylists();
-    },
-  });
-}
-function pinFlow(p) {
-  if (!p.protected) {
-    return modal({
-      title: "Proteger com PIN", desc: "O PIN será pedido para ver, editar ou excluir esta playlist (no site e no app).", ok: "Definir PIN",
-      body: pinInput("mNew", "Novo PIN (4 a 8 dígitos)") + pinInput("mNew2", "Confirmar PIN"),
-      onSubmit: async () => {
-        const a = $("mNew").value.trim(), b = $("mNew2").value.trim();
-        if (!/^\d{4,8}$/.test(a)) throw { error: "O PIN deve ter de 4 a 8 dígitos." };
-        if (a !== b) throw { error: "Os PINs não conferem." };
-        const res = await api("PATCH", `/playlists/${encodeURIComponent(p.id)}`, { newPin: a });
-        unlocked[p.id] = { pin: a, url: res.playlist.url };
-        toast("PIN definido."); await loadPlaylists();
-      },
-    });
-  }
-  modal({
-    title: "PIN da playlist", desc: "Troque o PIN ou remova a proteção.", ok: "Salvar",
-    body: (needsPinField(p) ? pinInput("mPin", "PIN atual") : "") + pinInput("mNew", "Novo PIN (deixe vazio para remover)"),
-    onSubmit: async () => {
-      const typed = $("mPin") ? $("mPin").value.trim() : undefined;
-      const n = $("mNew").value.trim();
-      if (n && !/^\d{4,8}$/.test(n)) throw { error: "O PIN deve ter de 4 a 8 dígitos." };
-      const res = await api("PATCH", `/playlists/${encodeURIComponent(p.id)}`, n ? { newPin: n } : { removePin: true }, pinHeader(p, typed));
-      if (n) unlocked[p.id] = { pin: n, url: res.playlist.url }; else delete unlocked[p.id];
-      toast(n ? "PIN alterado." : "Proteção removida."); await loadPlaylists();
-    },
-  });
-}
-function deleteFlow(p) {
-  modal({
-    title: "Excluir playlist?", desc: `"${p.name}" será removida deste dispositivo. Essa ação não pode ser desfeita.`, ok: "Excluir", danger: true,
-    body: needsPinField(p) ? pinInput("mPin", "PIN da playlist") : "",
-    onSubmit: async () => {
-      const typed = $("mPin") ? $("mPin").value.trim() : undefined;
-      await api("DELETE", `/playlists/${encodeURIComponent(p.id)}`, undefined, pinHeader(p, typed));
-      delete unlocked[p.id];
-      toast("Playlist excluída."); await loadPlaylists();
-    },
-  });
-}
-
-/* ---------- Sessão salva (só nesta aba) ---------- */
-(async () => {
-  const params = new URLSearchParams(location.search);
-  if (params.get("id")) $("deviceId").value = params.get("id");
-  try {
-    const saved = JSON.parse(sessionStorage.getItem("hugo.session") || "null");
-    if (saved && saved.deviceId && saved.deviceKey) { session = saved; await enterDashboard(); }
-  } catch { session = null; }
-})();
+try {
+  const saved = JSON.parse(sessionStorage.getItem("hugo.session") || "null");
+  if (saved && saved.deviceId && saved.deviceKey) { session = saved; enterDashboard(); }
+} catch {}
 </script>
 </body>
 </html>
