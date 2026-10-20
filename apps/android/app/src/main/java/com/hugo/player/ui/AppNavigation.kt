@@ -2,15 +2,18 @@ package com.hugo.player.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -30,7 +33,6 @@ import com.hugo.player.data.WatchHistory
 import com.hugo.player.data.db.ChannelEntity
 import com.hugo.player.player.PlaybackRequest
 import com.hugo.player.player.PlaybackSession
-import com.hugo.player.ui.components.FocusSurface
 import com.hugo.player.ui.components.HugoColors
 import com.hugo.player.ui.components.HugoIconButton
 import java.net.URLDecoder
@@ -41,10 +43,7 @@ private fun enc(s: String) = URLEncoder.encode(s, StandardCharsets.UTF_8.toStrin
 private fun dec(s: String) = URLDecoder.decode(s, StandardCharsets.UTF_8.toString())
 
 fun NavHostController.goToPlaylists(query: String = "open=&refresh=") {
-    navigate("playlists?$query") {
-        popUpTo(graph.id) { inclusive = true }
-        launchSingleTop = false
-    }
+    navigate("playlists?$query") { popUpTo(graph.id) { inclusive = true }; launchSingleTop = false }
 }
 
 fun NavHostController.openPlayer(url: String, title: String) = navigate("player/${enc(url)}/${enc(title)}")
@@ -81,12 +80,7 @@ fun AppNavigation() {
             ),
         ) { backStack ->
             PlaylistScreen(
-                onOpen = { _, _ ->
-                    nav.navigate("home") {
-                        popUpTo("playlists?open={open}&refresh={refresh}") { inclusive = false }
-                        launchSingleTop = true
-                    }
-                },
+                onOpen = { _, _ -> nav.navigate("home") { popUpTo("playlists?open={open}&refresh={refresh}") { inclusive = false }; launchSingleTop = true } },
                 onSettings = { nav.navigate("settings") },
                 autoOpenId = backStack.arguments?.getString("open")?.takeIf { it.isNotBlank() && it != "null" },
                 autoRefresh = backStack.arguments?.getString("refresh") == "1",
@@ -108,9 +102,7 @@ fun AppNavigation() {
                         route.startsWith("continue:") -> {
                             val key = route.removePrefix("continue:")
                             val item = WatchHistory.listContinue(context).find { it.key == key }
-                            if (item != null) {
-                                nav.openPlayer(PlaybackRequest(url = item.url, title = item.title, playlistId = item.playlistId, logo = item.logo))
-                            }
+                            if (item != null) nav.openPlayer(PlaybackRequest(url = item.url, title = item.title, playlistId = item.playlistId, logo = item.logo))
                         }
                         route.startsWith("recent:") -> nav.goToPlaylists("open=${enc(route.removePrefix("recent:"))}&refresh=")
                         else -> nav.navigate(route)
@@ -128,13 +120,7 @@ fun AppNavigation() {
         }
         composable("series/{playlistId}") { backStack ->
             val playlistId = backStack.arguments?.getString("playlistId") ?: ""
-            BrowseScreen(
-                playlistId, BrowseType.SERIES,
-                onPlay = { url, title -> nav.openPlayer(url, title) },
-                onOpenSeries = { name -> nav.navigate("seriesDetail/${enc(playlistId)}/${enc(name)}") },
-                onOpenMovie = {},
-                onBack = { nav.popBackStack() },
-            )
+            BrowseScreen(playlistId, BrowseType.SERIES, onPlay = { url, title -> nav.openPlayer(url, title) }, onOpenSeries = { name -> nav.navigate("seriesDetail/${enc(playlistId)}/${enc(name)}") }, onOpenMovie = {}, onBack = { nav.popBackStack() })
         }
         composable("seriesDetail/{playlistId}/{name}") { backStack ->
             val playlistId = dec(backStack.arguments?.getString("playlistId") ?: "")
@@ -144,25 +130,13 @@ fun AppNavigation() {
         composable("movieDetail") {
             val movie = remember { MovieSession.current }
             if (movie != null) {
-                MovieDetailScreen(
-                    movie = movie,
-                    onPlay = { req -> nav.openPlayer(req) },
-                    onOpenSimilar = { m ->
-                        MovieSession.current = m
-                        nav.navigate("movieDetail") { launchSingleTop = true }
-                    },
-                    onBack = { nav.popBackStack() },
-                )
-            } else {
-                LaunchedEffect(Unit) { nav.popBackStack() }
-            }
+                MovieDetailScreen(movie = movie, onPlay = { req -> nav.openPlayer(req) }, onOpenSimilar = { m -> MovieSession.current = m; nav.navigate("movieDetail") { launchSingleTop = true } }, onBack = { nav.popBackStack() })
+            } else LaunchedEffect(Unit) { nav.popBackStack() }
         }
         composable("settings") { SettingsScreen(identity.deviceId, identity.deviceKey, onBack = { nav.popBackStack() }) }
         composable("favorites") {
             FavoritesScreen(
-                onOpen = { fav ->
-                    nav.openMovie(ChannelEntity(name = fav.title, url = fav.url, logo = fav.logo, group = "", type = "movie", playlistId = fav.playlistId))
-                },
+                onOpen = { fav -> nav.openMovie(ChannelEntity(name = fav.title, url = fav.url, logo = fav.logo, group = "", type = "movie", playlistId = fav.playlistId)) },
                 onBack = { nav.popBackStack() },
             )
         }
@@ -182,37 +156,38 @@ fun AppNavigation() {
 @Composable
 private fun FavoritesScreen(onOpen: (WatchHistory.FavoriteItem) -> Unit, onBack: () -> Unit) {
     val context = LocalContext.current
-    val items = remember { WatchHistory.listFavorites(context) }
+    var items by remember { mutableStateOf(WatchHistory.listFavorites(context)) }
 
     Column(Modifier.fillMaxSize().background(HugoColors.Background)) {
-        Row(
-            Modifier.fillMaxWidth().background(HugoColors.Panel).padding(horizontal = 16.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
+        Row(Modifier.fillMaxWidth().background(HugoColors.Panel).padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
             HugoIconButton(Icons.AutoMirrored.Filled.ArrowBack, "Voltar", onClick = onBack)
             Spacer(Modifier.width(12.dp))
             Text("Favoritos", color = Color.White, fontSize = 19.sp, fontWeight = FontWeight.Bold)
         }
         if (items.isEmpty()) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("Nenhum favorito ainda.\nAbra um filme e toque em Favoritar.", color = HugoColors.TextMuted, fontSize = 14.sp)
+                Text("Nenhum favorito ainda.\nFavorite filmes, séries ou canais.", color = HugoColors.TextMuted, fontSize = 14.sp)
             }
         } else {
-            LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            LazyVerticalGrid(
+                columns = GridCells.Adaptive(120.dp),
+                contentPadding = PaddingValues(16.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
+            ) {
                 items(items, key = { it.key }) { fav ->
-                    FocusSurface(
-                        onClick = { onOpen(fav) },
-                        modifier = Modifier.fillMaxWidth().height(64.dp),
-                        shape = RoundedCornerShape(10.dp),
-                    ) {
-                        Row(Modifier.fillMaxSize().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Box(Modifier.width(40.dp).height(48.dp).background(HugoColors.Card, RoundedCornerShape(6.dp))) {
-                                fav.logo?.let {
-                                    SubcomposeAsyncImage(model = it, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
-                                }
+                    Box {
+                        Column(Modifier.fillMaxWidth().clickableNoRipple { onOpen(fav) }) {
+                            Box(Modifier.fillMaxWidth().aspectRatio(2f / 3f).clip(RoundedCornerShape(10.dp)).background(HugoColors.Card)) {
+                                fav.logo?.let { SubcomposeAsyncImage(model = it, contentDescription = fav.title, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize()) }
                             }
-                            Spacer(Modifier.width(12.dp))
-                            Text(fav.title, color = Color.White, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text(fav.title, color = Color.White, fontSize = 11.sp, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 4.dp, start = 2.dp, end = 2.dp))
+                        }
+                        IconButton(
+                            onClick = { WatchHistory.removeFavorite(context, fav.key); items = WatchHistory.listFavorites(context) },
+                            modifier = Modifier.align(Alignment.TopEnd).size(28.dp).offset(x = 4.dp, y = (-4).dp),
+                        ) {
+                            Icon(Icons.Default.Close, "Remover", tint = Color.White, modifier = Modifier.size(16.dp).background(Color(0xCC000000), RoundedCornerShape(50)))
                         }
                     }
                 }
@@ -220,3 +195,7 @@ private fun FavoritesScreen(onOpen: (WatchHistory.FavoriteItem) -> Unit, onBack:
         }
     }
 }
+
+@Composable
+private fun Modifier.clickableNoRipple(onClick: () -> Unit): Modifier =
+    this.then(Modifier.clickable(indication = null, interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }, onClick = onClick))
