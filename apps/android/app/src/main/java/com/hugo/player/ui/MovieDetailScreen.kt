@@ -12,8 +12,10 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
@@ -29,15 +31,13 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.SubcomposeAsyncImage
-import com.hugo.player.data.CatalogRepository
+import com.hugo.player.data.TmdbClient
 import com.hugo.player.data.WatchHistory
 import com.hugo.player.data.db.ChannelEntity
 import com.hugo.player.player.PlaybackRequest
 import com.hugo.player.ui.components.FocusSurface
 import com.hugo.player.ui.components.HugoColors
 import com.hugo.player.ui.components.HugoIconButton
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 
 private val yearRegex = Regex("\\((\\d{4})\\)|\\b(19|20)\\d{2}\\b")
 
@@ -49,7 +49,6 @@ private fun extractYear(title: String): String? {
 private fun cleanTitle(title: String): String =
     title.replace(yearRegex, "").replace(Regex("\\s+"), " ").trim().trimEnd('-', '|', ':')
 
-/** Sessão do filme aberto (evita URL longa na rota). */
 object MovieSession {
     @Volatile var current: ChannelEntity? = null
 }
@@ -62,82 +61,85 @@ fun MovieDetailScreen(
     onBack: () -> Unit,
 ) {
     val context = LocalContext.current
-    val repo = remember { CatalogRepository.get(context) }
     val key = remember(movie) { WatchHistory.contentKey(movie.playlistId, movie.url) }
     var isFav by remember { mutableStateOf(WatchHistory.isFavorite(context, key)) }
-    var similar by remember { mutableStateOf<List<ChannelEntity>>(emptyList()) }
+    var info by remember { mutableStateOf<TmdbClient.Info?>(null) }
+    var similar by remember { mutableStateOf<List<TmdbClient.Similar>>(emptyList()) }
+    var loading by remember { mutableStateOf(true) }
     val year = remember(movie.name) { extractYear(movie.name) }
     val title = remember(movie.name) { cleanTitle(movie.name) }
 
-    LaunchedEffect(movie.playlistId, movie.group) {
-        similar = withContext(Dispatchers.IO) {
-            repo.page(movie.playlistId, "movie", movie.group, null, 0, 20)
-                .filter { it.url != movie.url }
-                .take(12)
-        }
+    LaunchedEffect(movie.name) {
+        loading = true
+        info = TmdbClient.searchMovie(movie.name)
+        similar = TmdbClient.similarMovies(movie.name)
+        loading = false
     }
 
+    val poster = info?.poster ?: movie.logo
+
     Box(Modifier.fillMaxSize().background(HugoColors.Background)) {
-        movie.logo?.let { logo ->
-            SubcomposeAsyncImage(
-                model = logo,
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize(),
-                alpha = 0.18f,
-            )
+        poster?.let { p ->
+            SubcomposeAsyncImage(model = p, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize(), alpha = 0.18f)
         }
         Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color(0xCC07080F), HugoColors.Background))))
 
-        Column(
-            Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp)
-        ) {
+        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp)) {
             HugoIconButton(Icons.AutoMirrored.Filled.ArrowBack, "Voltar", onClick = onBack, label = "Voltar")
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(12.dp))
 
             Row(Modifier.fillMaxWidth()) {
                 Box(
-                    Modifier.width(180.dp).aspectRatio(2f / 3f).clip(RoundedCornerShape(14.dp)).background(HugoColors.Card),
+                    Modifier.width(160.dp).aspectRatio(2f / 3f).clip(RoundedCornerShape(14.dp)).background(HugoColors.Card),
                     contentAlignment = Alignment.Center,
                 ) {
-                    if (movie.logo != null) {
-                        SubcomposeAsyncImage(
-                            model = movie.logo,
-                            contentDescription = title,
-                            contentScale = ContentScale.Crop,
-                            modifier = Modifier.fillMaxSize(),
-                        )
+                    if (poster != null) {
+                        SubcomposeAsyncImage(model = poster, contentDescription = title, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
                     } else {
-                        Text(title, color = HugoColors.TextDim, fontSize = 13.sp, modifier = Modifier.padding(12.dp))
+                        Text(title, color = HugoColors.TextDim, fontSize = 12.sp, modifier = Modifier.padding(10.dp))
                     }
                 }
-                Spacer(Modifier.width(24.dp))
+                Spacer(Modifier.width(18.dp))
                 Column(Modifier.weight(1f)) {
-                    Text(title, color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.Bold, maxLines = 3, overflow = TextOverflow.Ellipsis)
+                    Text(title, color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold, maxLines = 3, overflow = TextOverflow.Ellipsis)
                     Spacer(Modifier.height(6.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        year?.let { Text(it, color = HugoColors.TextMuted, fontSize = 14.sp) }
-                        if (movie.group.isNotBlank() && movie.group != "Outros") {
-                            Text(movie.group, color = HugoColors.Accent, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                        (info?.year ?: year)?.let { Text(it, color = HugoColors.TextMuted, fontSize = 13.sp) }
+                        info?.rating?.let {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.Star, null, tint = Color(0xFFFBBF24), modifier = Modifier.size(14.dp))
+                                Spacer(Modifier.width(3.dp))
+                                Text(it, color = Color(0xFFFBBF24), fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                            }
+                        }
+                        (info?.genres ?: movie.group.takeIf { it.isNotBlank() && it != "Outros" })?.let {
+                            Text(it, color = HugoColors.Accent, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         }
                     }
-                    Spacer(Modifier.height(12.dp))
-                    Text(
-                        "Sinopse não disponível nesta lista.",
-                        color = HugoColors.TextMuted,
-                        fontSize = 13.sp,
-                    )
-                    Spacer(Modifier.height(16.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Spacer(Modifier.height(10.dp))
+                    if (loading) {
+                        CircularProgressIndicator(Modifier.size(20.dp), color = HugoColors.Accent, strokeWidth = 2.dp)
+                    } else {
+                        Text(
+                            info?.overview ?: "Sinopse não encontrada.",
+                            color = HugoColors.TextMuted,
+                            fontSize = 13.sp,
+                            maxLines = 6,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                    Spacer(Modifier.height(14.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Button(
                             onClick = {
                                 onPlay(PlaybackRequest(url = movie.url, title = movie.name, subtitle = "Filme", isLive = false, playlistId = movie.playlistId, logo = movie.logo))
                             },
                             colors = ButtonDefaults.buttonColors(containerColor = HugoColors.Accent),
+                            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
                         ) {
-                            Icon(Icons.Default.PlayArrow, null, modifier = Modifier.size(18.dp))
-                            Spacer(Modifier.width(6.dp))
-                            Text("Assistir")
+                            Icon(Icons.Default.PlayArrow, null, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text("Assistir", fontSize = 13.sp)
                         }
                         Button(
                             onClick = {
@@ -145,54 +147,38 @@ fun MovieDetailScreen(
                                 if (isFav) WatchHistory.saveFavoriteMeta(context, key, movie.name, movie.url, movie.logo, movie.playlistId)
                             },
                             colors = ButtonDefaults.buttonColors(containerColor = if (isFav) Color(0xFFEC4899) else HugoColors.CardAlt),
+                            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
                         ) {
-                            Icon(if (isFav) Icons.Default.Favorite else Icons.Default.FavoriteBorder, null, modifier = Modifier.size(18.dp))
-                            Spacer(Modifier.width(6.dp))
-                            Text(if (isFav) "Favorito" else "Favoritar")
+                            Icon(if (isFav) Icons.Default.Favorite else Icons.Default.FavoriteBorder, null, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text(if (isFav) "Favorito" else "Favoritar", fontSize = 13.sp)
                         }
                     }
                 }
             }
 
             if (similar.isNotEmpty()) {
-                Spacer(Modifier.height(28.dp))
-                Text("Semelhantes", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
-                Spacer(Modifier.height(10.dp))
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    items(similar, key = { it.id }) { m ->
-                        FocusSurface(
-                            onClick = { onOpenSimilar(m) },
-                            modifier = Modifier.width(120.dp),
-                            shape = RoundedCornerShape(10.dp),
-                        ) {
-                            Column {
-                                Box(
-                                    Modifier.fillMaxWidth().aspectRatio(2f / 3f).background(HugoColors.Card),
-                                    contentAlignment = Alignment.Center,
-                                ) {
-                                    if (m.logo != null) {
-                                        SubcomposeAsyncImage(
-                                            model = m.logo,
-                                            contentDescription = m.name,
-                                            contentScale = ContentScale.Crop,
-                                            modifier = Modifier.fillMaxSize(),
-                                        )
-                                    }
+                Spacer(Modifier.height(20.dp))
+                Text("Semelhantes", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.height(8.dp))
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    items(similar, key = { it.id }) { s ->
+                        Column(Modifier.width(110.dp)) {
+                            Box(
+                                Modifier.fillMaxWidth().aspectRatio(2f / 3f).clip(RoundedCornerShape(10.dp)).background(HugoColors.Card),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                s.poster?.let {
+                                    SubcomposeAsyncImage(model = it, contentDescription = s.title, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
                                 }
-                                Text(
-                                    cleanTitle(m.name),
-                                    color = Color.White,
-                                    fontSize = 12.sp,
-                                    maxLines = 2,
-                                    overflow = TextOverflow.Ellipsis,
-                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 6.dp),
-                                )
                             }
+                            Spacer(Modifier.height(4.dp))
+                            Text(s.title, color = Color.White, fontSize = 11.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
                         }
                     }
                 }
             }
-            Spacer(Modifier.height(32.dp))
+            Spacer(Modifier.height(24.dp))
         }
     }
 }
