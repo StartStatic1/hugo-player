@@ -17,6 +17,8 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.LiveTv
 import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.Search
@@ -31,6 +33,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -42,6 +45,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.hugo.player.data.CatalogRepository
+import com.hugo.player.data.WatchHistory
 import com.hugo.player.data.db.CategoryEntity
 import com.hugo.player.data.db.ChannelEntity
 import com.hugo.player.ui.components.ChannelLogo
@@ -115,10 +119,7 @@ class BrowseViewModel(app: Application) : AndroidViewModel(app) {
     fun updateQuery(q: String) {
         query = q
         searchJob?.cancel()
-        searchJob = viewModelScope.launch {
-            delay(350)
-            reload()
-        }
+        searchJob = viewModelScope.launch { delay(350); reload() }
     }
 
     private fun reload() {
@@ -135,8 +136,7 @@ class BrowseViewModel(app: Application) : AndroidViewModel(app) {
             items = first
             hasMore = first.size >= CatalogRepository.PAGE_SIZE
             initialLoading = false
-            total = if (type == BrowseType.SERIES) repo.seriesCount(playlistId, selectedGroup, query)
-            else repo.countFiltered(playlistId, type.dbType, selectedGroup, query)
+            total = if (type == BrowseType.SERIES) repo.seriesCount(playlistId, selectedGroup, query) else repo.countFiltered(playlistId, type.dbType, selectedGroup, query)
         }
     }
 
@@ -195,10 +195,7 @@ fun BrowseScreen(
     }
 
     Column(Modifier.fillMaxSize().background(HugoColors.Background)) {
-        Row(
-            Modifier.fillMaxWidth().background(HugoColors.Panel).padding(horizontal = 16.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
+        Row(Modifier.fillMaxWidth().background(HugoColors.Panel).padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
             HugoIconButton(Icons.AutoMirrored.Filled.ArrowBack, "Voltar", onClick = onBack)
             Spacer(Modifier.width(12.dp))
             Box(Modifier.size(34.dp).clip(RoundedCornerShape(10.dp)).background(type.accent.copy(alpha = 0.25f)), contentAlignment = Alignment.Center) {
@@ -207,10 +204,7 @@ fun BrowseScreen(
             Spacer(Modifier.width(10.dp))
             Column {
                 Text(type.title, color = Color.White, fontSize = 19.sp, fontWeight = FontWeight.Bold)
-                Text(
-                    if (vm.initialLoading) "Carregando..." else "${nf.format(vm.total)} ${type.unit}",
-                    color = HugoColors.TextMuted, fontSize = 11.sp
-                )
+                Text(if (vm.initialLoading) "Carregando..." else "${nf.format(vm.total)} ${type.unit}", color = HugoColors.TextMuted, fontSize = 11.sp)
             }
             Spacer(Modifier.width(20.dp))
             OutlinedTextField(
@@ -218,9 +212,7 @@ fun BrowseScreen(
                 onValueChange = vm::updateQuery,
                 placeholder = { Text("Buscar em ${type.title}", color = HugoColors.TextDim, fontSize = 14.sp) },
                 leadingIcon = { Icon(Icons.Default.Search, null, tint = HugoColors.TextMuted) },
-                trailingIcon = {
-                    if (vm.query.isNotEmpty()) IconButton(onClick = { vm.updateQuery("") }) { Icon(Icons.Default.Clear, "Limpar busca", tint = HugoColors.TextMuted) }
-                },
+                trailingIcon = { if (vm.query.isNotEmpty()) IconButton(onClick = { vm.updateQuery("") }) { Icon(Icons.Default.Clear, "Limpar busca", tint = HugoColors.TextMuted) } },
                 singleLine = true,
                 textStyle = LocalTextStyle.current.copy(fontSize = 14.sp),
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
@@ -236,32 +228,16 @@ fun BrowseScreen(
         }
 
         Row(Modifier.fillMaxSize()) {
-            LazyColumn(
-                state = catState,
-                modifier = Modifier.width(190.dp).fillMaxHeight().background(HugoColors.Panel),
-                contentPadding = PaddingValues(8.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                item(key = "__all") {
-                    CategoryRow("Todos", vm.allCount.takeIf { it > 0 }, vm.selectedGroup == null, type.accent) { vm.selectGroup(null) }
-                }
-                items(vm.categories, key = { it.name }) { cat ->
-                    CategoryRow(cat.name, cat.count.takeIf { type != BrowseType.SERIES }, vm.selectedGroup == cat.name, type.accent) { vm.selectGroup(cat.name) }
-                }
+            LazyColumn(state = catState, modifier = Modifier.width(190.dp).fillMaxHeight().background(HugoColors.Panel), contentPadding = PaddingValues(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                item(key = "__all") { CategoryRow("Todos", vm.allCount.takeIf { it > 0 }, vm.selectedGroup == null, type.accent) { vm.selectGroup(null) } }
+                items(vm.categories, key = { it.name }) { cat -> CategoryRow(cat.name, cat.count.takeIf { type != BrowseType.SERIES }, vm.selectedGroup == cat.name, type.accent) { vm.selectGroup(cat.name) } }
             }
 
             Box(Modifier.weight(1f).fillMaxHeight()) {
                 when {
-                    vm.initialLoading && vm.items.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator(color = type.accent)
-                    }
+                    vm.initialLoading && vm.items.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = type.accent) }
                     vm.items.isEmpty() -> Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
-                        Text(
-                            if (vm.query.isNotBlank()) "Nada encontrado para \"${vm.query}\"."
-                            else if (vm.allCount == 0) "Nenhum conteúdo de ${type.title} nesta playlist.\nTente \"Atualizar conteúdo\" na Home."
-                            else "Nenhum item nesta categoria.",
-                            color = HugoColors.TextMuted, textAlign = TextAlign.Center
-                        )
+                        Text(if (vm.query.isNotBlank()) "Nada encontrado." else "Nenhum item.", color = HugoColors.TextMuted, textAlign = TextAlign.Center)
                     }
                     else -> LazyVerticalGrid(
                         columns = GridCells.Adaptive(if (type == BrowseType.LIVE) 128.dp else 122.dp),
@@ -281,13 +257,11 @@ fun BrowseScreen(
                                 }
                                 Unit
                             }
-                            if (type == BrowseType.LIVE) LiveCard(item, mod, click)
+                            if (type == BrowseType.LIVE) LiveCard(item, playlistId, mod, click)
                             else PosterCard(title = item.title, imageUrl = item.image, subtitle = item.subtitle, rating = null, onClick = click, modifier = mod)
                         }
                         if (vm.loadingMore) item(span = { GridItemSpan(maxLineSpan) }) {
-                            Box(Modifier.fillMaxWidth().padding(12.dp), contentAlignment = Alignment.Center) {
-                                CircularProgressIndicator(Modifier.size(28.dp), color = type.accent, strokeWidth = 3.dp)
-                            }
+                            Box(Modifier.fillMaxWidth().padding(12.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator(Modifier.size(28.dp), color = type.accent, strokeWidth = 3.dp) }
                         }
                     }
                 }
@@ -297,22 +271,28 @@ fun BrowseScreen(
 }
 
 @Composable
-private fun LiveCard(item: BrowseItem, modifier: Modifier, onClick: () -> Unit) {
+private fun LiveCard(item: BrowseItem, playlistId: String, modifier: Modifier, onClick: () -> Unit) {
+    val context = LocalContext.current
+    val favKey = remember(item.url) { WatchHistory.contentKey(playlistId, item.url ?: "") }
+    var isFav by remember { mutableStateOf(WatchHistory.isFavorite(context, favKey)) }
+
     FocusSurface(onClick = onClick, modifier = modifier, focusScale = 1.07f) { focused ->
-        Column {
-            Box(
-                Modifier.fillMaxWidth().aspectRatio(1f).background(Color(0xFF0F1220)).padding(10.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                ChannelLogo(item.image, item.title, size = 96.dp, modifier = Modifier.fillMaxSize())
+        Box {
+            Column {
+                Box(Modifier.fillMaxWidth().aspectRatio(1f).background(Color(0xFF0F1220)).padding(10.dp), contentAlignment = Alignment.Center) {
+                    ChannelLogo(item.image, item.title, size = 96.dp, modifier = Modifier.fillMaxSize())
+                }
+                Text(item.title, color = if (focused) Color.White else Color(0xFFE2E8F0), fontSize = 12.sp, fontWeight = FontWeight.Medium, maxLines = 2, minLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp))
             }
-            Text(
-                item.title,
-                color = if (focused) Color.White else Color(0xFFE2E8F0),
-                fontSize = 12.sp, fontWeight = FontWeight.Medium,
-                maxLines = 2, minLines = 2, overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp)
-            )
+            IconButton(
+                onClick = {
+                    isFav = WatchHistory.toggleFavorite(context, favKey)
+                    if (isFav) WatchHistory.saveFavoriteMeta(context, favKey, item.title, item.url ?: "", item.image, playlistId)
+                },
+                modifier = Modifier.align(Alignment.TopEnd).size(32.dp),
+            ) {
+                Icon(if (isFav) Icons.Default.Favorite else Icons.Default.FavoriteBorder, "Favoritar", tint = if (isFav) Color(0xFFEC4899) else Color.White.copy(alpha = 0.6f), modifier = Modifier.size(16.dp))
+            }
         }
     }
 }
