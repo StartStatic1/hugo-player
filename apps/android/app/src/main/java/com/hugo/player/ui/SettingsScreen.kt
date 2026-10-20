@@ -3,6 +3,8 @@ package com.hugo.player.ui
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -10,6 +12,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ContentCopy
+import androidx.compose.material.icons.outlined.OpenInNew
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -23,11 +26,14 @@ import com.hugo.player.BuildConfig
 import com.hugo.player.data.AppSettings
 import com.hugo.player.data.DiskCache
 import com.hugo.player.data.HugoApi
+import com.hugo.player.data.WatchHistory
 import com.hugo.player.player.StreamTypes
 import com.hugo.player.ui.components.HugoColors
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
+
+private const val SITE_URL = "https://hugo.streamflixvip.online"
 
 @Composable
 fun SettingsScreen(deviceId: String, deviceKey: String, onBack: () -> Unit) {
@@ -70,47 +76,74 @@ fun SettingsScreen(deviceId: String, deviceKey: String, onBack: () -> Unit) {
             .fillMaxSize()
             .background(HugoColors.Background)
             .verticalScroll(rememberScrollState())
-            .padding(24.dp)
+            .padding(horizontal = 20.dp, vertical = 16.dp)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("Configurações", color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+            Text("Configurações", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
             Button(onClick = onBack, colors = ButtonDefaults.buttonColors(containerColor = HugoColors.Accent)) { Text("Voltar") }
         }
 
-        Section("App e licença") {
-            Text("Versão ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})", color = Color.White, fontSize = 14.sp)
-            Spacer(Modifier.height(10.dp))
+        Section("Dispositivo") {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("v${BuildConfig.VERSION_NAME}", color = Color.White, fontSize = 13.sp, modifier = Modifier.weight(1f))
+                LicenseBadge(licenseType, licenseExpires)
+            }
+            Spacer(Modifier.height(8.dp))
+            CompactCopy("ID", deviceId) { copy("ID", deviceId) }
+            CompactCopy("Key", deviceKey, valueColor = HugoColors.Accent) { copy("Key", deviceKey) }
+            CompactCopy("API", HugoApi.baseUrl, valueColor = HugoColors.TextMuted) { copy("API", HugoApi.baseUrl) }
+        }
 
-            CopyableRow("Device ID", deviceId) { copy("Device ID", deviceId) }
-            Spacer(Modifier.height(4.dp))
-            CopyableRow("Device Key", deviceKey, valueColor = HugoColors.Accent) { copy("Device Key", deviceKey) }
-            Spacer(Modifier.height(4.dp))
-            CopyableRow("API", HugoApi.baseUrl, valueColor = HugoColors.TextMuted) { copy("API", HugoApi.baseUrl) }
-
+        Section("Reprodução") {
+            Text("Formato ao vivo", color = HugoColors.TextMuted, fontSize = 11.sp)
+            Spacer(Modifier.height(6.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Chip("HLS", liveFormat == "hls") {
+                    liveFormat = "hls"
+                    AppSettings.liveFormat = "hls"
+                    message = "Formato: HLS"
+                }
+                Chip("TS", liveFormat == "ts") {
+                    liveFormat = "ts"
+                    AppSettings.liveFormat = "ts"
+                    message = "Formato: MPEG-TS"
+                }
+            }
             Spacer(Modifier.height(10.dp))
-            when (licenseType) {
-                null -> Text("Licença: carregando...", color = HugoColors.TextMuted, fontSize = 13.sp)
-                "trial" -> Text(
-                    "Licença: teste" + (licenseExpires?.let { " até $it" } ?: ""),
-                    color = Color(0xFFFBBF24),
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.SemiBold,
-                )
-                "premium" -> Text(
-                    "Licença: premium" + (licenseExpires?.let { " até $it" } ?: ""),
-                    color = Color(0xFF34D399),
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.SemiBold,
-                )
-                "expired" -> Text("Licença: expirada", color = Color(0xFFF87171), fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-                else -> Text("Licença: $licenseType", color = HugoColors.TextMuted, fontSize = 13.sp)
+            Text("User-Agent", color = HugoColors.TextMuted, fontSize = 11.sp)
+            Spacer(Modifier.height(4.dp))
+            OutlinedTextField(
+                value = ua,
+                onValueChange = { ua = it },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                textStyle = LocalTextStyle.current.copy(fontSize = 13.sp),
+            )
+            Spacer(Modifier.height(6.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(
+                    onClick = {
+                        AppSettings.userAgent = ua.trim()
+                        message = "User-Agent salvo"
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = HugoColors.Accent),
+                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp),
+                ) { Text("Salvar", fontSize = 13.sp) }
+                OutlinedButton(
+                    onClick = {
+                        ua = StreamTypes.DEFAULT_USER_AGENT
+                        AppSettings.userAgent = StreamTypes.DEFAULT_USER_AGENT
+                        message = "User-Agent padrão"
+                    },
+                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp),
+                ) { Text("Padrão", fontSize = 13.sp) }
             }
         }
 
-        Section("Cache do catálogo") {
-            Text("A lista fica salva no aparelho e abre na hora. Depois do prazo, é baixada de novo.", color = HugoColors.TextMuted, fontSize = 12.sp)
-            Spacer(Modifier.height(8.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Section("Cache e histórico") {
+            Text("Validade da lista no aparelho", color = HugoColors.TextMuted, fontSize = 11.sp)
+            Spacer(Modifier.height(6.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 listOf(6, 12, 24, 48).forEach { h ->
                     Chip("${h}h", catalogTtl == h) {
                         catalogTtl = h
@@ -119,18 +152,21 @@ fun SettingsScreen(deviceId: String, deviceKey: String, onBack: () -> Unit) {
                     }
                 }
             }
-            Spacer(Modifier.height(10.dp))
+            Spacer(Modifier.height(8.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Espaço usado: ${"%.1f".format(cacheSize / 1_048_576.0)} MB", color = Color.White, fontSize = 13.sp, modifier = Modifier.weight(1f))
-                OutlinedButton(onClick = {
-                    DiskCache.clear()
-                    cacheSize = 0L
-                    message = "Cache limpo"
-                }) { Text("Limpar") }
+                Text("${"%.1f".format(cacheSize / 1_048_576.0)} MB", color = Color.White, fontSize = 13.sp, modifier = Modifier.weight(1f))
+                OutlinedButton(
+                    onClick = {
+                        DiskCache.clear()
+                        cacheSize = 0L
+                        message = "Cache limpo"
+                    },
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                ) { Text("Limpar", fontSize = 12.sp) }
             }
-            Spacer(Modifier.height(10.dp))
+            Spacer(Modifier.height(6.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Abrir última playlist ao iniciar", color = Color.White, fontSize = 14.sp, modifier = Modifier.weight(1f))
+                Text("Abrir última playlist", color = Color.White, fontSize = 13.sp, modifier = Modifier.weight(1f))
                 Switch(
                     checked = autoOpen,
                     onCheckedChange = {
@@ -140,96 +176,83 @@ fun SettingsScreen(deviceId: String, deviceKey: String, onBack: () -> Unit) {
                     colors = SwitchDefaults.colors(checkedTrackColor = HugoColors.Accent),
                 )
             }
+            Spacer(Modifier.height(6.dp))
+            OutlinedButton(
+                onClick = {
+                    WatchHistory.clearContinue(context)
+                    message = "Continuar assistindo limpo"
+                },
+                modifier = Modifier.fillMaxWidth(),
+                contentPadding = PaddingValues(vertical = 6.dp),
+            ) { Text("Limpar continuar assistindo", fontSize = 13.sp) }
         }
 
-        Section("Reprodução") {
-            Text("Formato dos canais ao vivo (listas Xtream)", color = HugoColors.TextMuted, fontSize = 12.sp)
-            Spacer(Modifier.height(8.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Chip("HLS (m3u8)", liveFormat == "hls") {
-                    liveFormat = "hls"
-                    AppSettings.liveFormat = "hls"
-                    message = "Formato: HLS"
+        Section("Site") {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("hugo.streamflixvip.online", color = Color.White, fontSize = 13.sp)
+                    Text("Ativar e gerenciar dispositivos", color = HugoColors.TextMuted, fontSize = 11.sp)
                 }
-                Chip("MPEG-TS (ts)", liveFormat == "ts") {
-                    liveFormat = "ts"
-                    AppSettings.liveFormat = "ts"
-                    message = "Formato: MPEG-TS"
-                }
-            }
-            Spacer(Modifier.height(12.dp))
-            Text("User-Agent", color = HugoColors.TextMuted, fontSize = 12.sp)
-            Spacer(Modifier.height(6.dp))
-            OutlinedTextField(
-                value = ua,
-                onValueChange = { ua = it },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
-            )
-            Spacer(Modifier.height(8.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(
+                IconButton(
                     onClick = {
-                        AppSettings.userAgent = ua.trim()
-                        message = "User-Agent salvo"
+                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(SITE_URL)))
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = HugoColors.Accent),
-                ) { Text("Salvar") }
-                OutlinedButton(onClick = {
-                    ua = StreamTypes.DEFAULT_USER_AGENT
-                    AppSettings.userAgent = StreamTypes.DEFAULT_USER_AGENT
-                    message = "User-Agent padrão"
-                }) { Text("Padrão") }
+                    modifier = Modifier.size(36.dp),
+                ) {
+                    Icon(Icons.Outlined.OpenInNew, contentDescription = "Abrir site", tint = HugoColors.Accent, modifier = Modifier.size(18.dp))
+                }
             }
         }
 
         message?.let {
-            Spacer(Modifier.height(16.dp))
-            Text(it, color = HugoColors.Accent, fontSize = 13.sp)
+            Spacer(Modifier.height(12.dp))
+            Text(it, color = HugoColors.Accent, fontSize = 12.sp)
         }
-        Spacer(Modifier.height(32.dp))
+        Spacer(Modifier.height(24.dp))
     }
 }
 
 @Composable
-private fun CopyableRow(
+private fun LicenseBadge(type: String?, expires: String?) {
+    val (text, color) = when (type) {
+        null -> "..." to HugoColors.TextMuted
+        "trial" -> ("Teste" + (expires?.let { " · $it" } ?: "")) to Color(0xFFFBBF24)
+        "premium" -> ("Premium" + (expires?.let { " · $it" } ?: "")) to Color(0xFF34D399)
+        "expired" -> "Expirada" to Color(0xFFF87171)
+        else -> (type ?: "—") to HugoColors.TextMuted
+    }
+    Text(text, color = color, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+}
+
+@Composable
+private fun CompactCopy(
     label: String,
     value: String,
     valueColor: Color = Color.White,
     onCopy: () -> Unit,
 ) {
     Row(
-        Modifier.fillMaxWidth(),
+        Modifier.fillMaxWidth().height(36.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Column(Modifier.weight(1f)) {
-            Text(label, color = HugoColors.TextMuted, fontSize = 11.sp)
-            Text(value, color = valueColor, fontSize = 13.sp, fontWeight = FontWeight.Medium)
-        }
-        IconButton(
-            onClick = onCopy,
-            modifier = Modifier.size(32.dp),
-        ) {
-            Icon(
-                Icons.Outlined.ContentCopy,
-                contentDescription = "Copiar $label",
-                tint = HugoColors.TextMuted,
-                modifier = Modifier.size(16.dp),
-            )
+        Text(label, color = HugoColors.TextMuted, fontSize = 11.sp, modifier = Modifier.width(36.dp))
+        Text(value, color = valueColor, fontSize = 12.sp, maxLines = 1, modifier = Modifier.weight(1f))
+        IconButton(onClick = onCopy, modifier = Modifier.size(28.dp)) {
+            Icon(Icons.Outlined.ContentCopy, contentDescription = "Copiar $label", tint = HugoColors.TextMuted, modifier = Modifier.size(14.dp))
         }
     }
 }
 
 @Composable
 private fun Section(title: String, content: @Composable ColumnScope.() -> Unit) {
-    Spacer(Modifier.height(22.dp))
-    Text(title, color = HugoColors.Accent, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-    Spacer(Modifier.height(8.dp))
+    Spacer(Modifier.height(16.dp))
+    Text(title, color = HugoColors.Accent, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+    Spacer(Modifier.height(6.dp))
     Column(
         Modifier
             .fillMaxWidth()
-            .background(HugoColors.Card, RoundedCornerShape(14.dp))
-            .padding(18.dp),
+            .background(HugoColors.Card, RoundedCornerShape(12.dp))
+            .padding(12.dp),
         content = content,
     )
 }
@@ -241,7 +264,7 @@ private fun Chip(label: String, selected: Boolean, onClick: () -> Unit) {
     Button(
         onClick = onClick,
         colors = ButtonDefaults.buttonColors(containerColor = bg, contentColor = fg),
-        shape = RoundedCornerShape(20.dp),
-        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp),
-    ) { Text(label, fontSize = 13.sp) }
+        shape = RoundedCornerShape(16.dp),
+        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+    ) { Text(label, fontSize = 12.sp) }
 }
