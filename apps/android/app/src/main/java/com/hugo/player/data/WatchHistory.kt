@@ -36,7 +36,7 @@ object WatchHistory {
     fun contentKey(playlistId: String, url: String): String =
         "$playlistId|${url.hashCode()}"
 
-    // ── Favoritos ─────────────────────────────────────────────
+    // ── Favoritos ───────────────────────────────────────────────
 
     fun isFavorite(ctx: Context, key: String): Boolean {
         val arr = JSONArray(prefs(ctx).getString(KEY_FAVS, "[]"))
@@ -67,7 +67,7 @@ object WatchHistory {
         return out
     }
 
-    // ── Continuar assistindo ──────────────────────────────────
+    // ── Continuar assistindo ──────────────────────────────────────
 
     fun saveProgress(
         ctx: Context,
@@ -125,6 +125,10 @@ object WatchHistory {
         val root = JSONObject(p.getString(KEY_PROGRESS, "{}"))
         root.remove(key)
         p.edit().putString(KEY_PROGRESS, root.toString()).apply()
+    }
+
+    fun clearContinue(ctx: Context) {
+        prefs(ctx).edit().remove(KEY_PROGRESS).apply()
     }
 
     fun listContinue(ctx: Context, playlistId: String? = null): List<ProgressItem> {
