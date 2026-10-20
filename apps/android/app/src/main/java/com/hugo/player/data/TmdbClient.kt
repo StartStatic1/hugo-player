@@ -76,9 +76,16 @@ object TmdbClient {
         val arr = JSONObject(search).optJSONArray("results") ?: return@withContext emptyList()
         if (arr.length() == 0) return@withContext emptyList()
         val id = arr.getJSONObject(0).optInt("id")
-        val sim = runCatching { HugoApi.get("/tmdb/details/movie/$id") }.getOrNull() ?: return@withContext emptyList()
-        // O endpoint de details não traz similares; retorna vazio por enquanto
-        // (o VPS pode ser estendido depois com /tmdb/similar)
-        emptyList()
+        val sim = runCatching { HugoApi.get("/tmdb/similar/movie/$id") }.getOrNull() ?: return@withContext emptyList()
+        val sArr = JSONObject(sim).optJSONArray("results") ?: return@withContext emptyList()
+        (0 until minOf(sArr.length(), 12)).map { i ->
+            val o = sArr.getJSONObject(i)
+            Similar(
+                title = o.optString("title"),
+                poster = o.optString("poster_path").takeIf { it.isNotBlank() }?.let { "https://image.tmdb.org/t/p/w500$it" },
+                year = o.optString("release_date").take(4).takeIf { it.length == 4 },
+                id = o.optInt("id"),
+            )
+        }
     }
 }
