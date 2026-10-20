@@ -11,9 +11,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.PlaylistPlay
+import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.LiveTv
 import androidx.compose.material.icons.filled.Movie
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.VideoLibrary
@@ -35,6 +37,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.hugo.player.data.CatalogRepository
 import com.hugo.player.data.RecentPlaylists
+import com.hugo.player.data.WatchHistory
 import com.hugo.player.ui.components.FocusSurface
 import com.hugo.player.ui.components.HugoColors
 import com.hugo.player.ui.components.HugoLogo
@@ -52,7 +55,8 @@ private val SeriesBrush = Brush.linearGradient(listOf(Color(0xFF0891B2), Color(0
 /**
  * Home estilo IBO: logo no topo, atalhos TV ao Vivo / Filmes / Séries com contagem,
  * cards menores de utilidades e playlists recentes. Tudo navegável por D-pad.
- * Rotas emitidas: live, movies, series, playlists, settings, refresh, recent:<id>.
+ * Rotas emitidas: live, movies, series, playlists, settings, refresh, recent:<id>,
+ * continue:<key>, favorites.
  */
 @Composable
 fun HomeScreen(playlistId: String, playlistName: String, onNavigate: (String) -> Unit) {
@@ -60,11 +64,13 @@ fun HomeScreen(playlistId: String, playlistName: String, onNavigate: (String) ->
     val repo = remember { CatalogRepository.get(context) }
     var counts by remember { mutableStateOf(Triple(-1, -1, -1)) }
     val recents = remember { RecentPlaylists.list(context) }
+    var continueItems by remember { mutableStateOf(WatchHistory.listContinue(context, playlistId)) }
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
     val liveFocus = remember { FocusRequester() }
 
     LaunchedEffect(playlistId) {
         counts = Triple(repo.count(playlistId, "live"), repo.count(playlistId, "movie"), repo.seriesCount(playlistId, null, null))
+        continueItems = WatchHistory.listContinue(context, playlistId)
     }
     LaunchedEffect(Unit) {
         runCatching { liveFocus.requestFocus() }
@@ -105,11 +111,37 @@ fun HomeScreen(playlistId: String, playlistName: String, onNavigate: (String) ->
             MainTile("Séries", countLabel(counts.third, "séries"), Icons.Default.VideoLibrary, SeriesBrush, Modifier.weight(1f)) { onNavigate("series") }
         }
 
+        if (continueItems.isNotEmpty()) {
+            Spacer(Modifier.height(18.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.PlayArrow, null, tint = HugoColors.Accent, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(6.dp))
+                Text("Continuar assistindo", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+            }
+            Spacer(Modifier.height(10.dp))
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(vertical = 2.dp)) {
+                items(continueItems, key = { it.key }) { item ->
+                    FocusSurface(
+                        onClick = { onNavigate("continue:${item.key}") },
+                        modifier = Modifier.width(180.dp).height(78.dp),
+                        shape = RoundedCornerShape(12.dp),
+                    ) { _ ->
+                        Column(Modifier.fillMaxSize().padding(10.dp), verticalArrangement = Arrangement.SpaceBetween) {
+                            Text(item.title, color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Medium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                            Box(Modifier.fillMaxWidth().height(3.dp).clip(RoundedCornerShape(2.dp)).background(Color(0x33FFFFFF))) {
+                                Box(Modifier.fillMaxWidth(item.fraction).fillMaxHeight().background(HugoColors.Accent))
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         Spacer(Modifier.height(16.dp))
 
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
             SmallTile("Playlists", Icons.AutoMirrored.Filled.PlaylistPlay, Color(0xFF8B5CF6), Modifier.weight(1f)) { onNavigate("playlists") }
-            SmallTile("Atualizar conteúdo", Icons.Default.Sync, Color(0xFF06B6D4), Modifier.weight(1f)) { onNavigate("refresh") }
+            SmallTile("Favoritos", Icons.Default.Favorite, Color(0xFFEC4899), Modifier.weight(1f)) { onNavigate("favorites") }
             SmallTile("Configurações", Icons.Default.Settings, Color(0xFF64748B), Modifier.weight(1f)) { onNavigate("settings") }
         }
 
