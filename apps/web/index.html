@@ -305,13 +305,15 @@ function render() {
   }
   box.innerHTML = playlists.map(function(p) {
     var u = unlocked[p.id];
-    var lock = p.hasPin ? '<span class="badge lock">🔒 PIN</span>' : '';
-    var url = u ? esc(u.url) : (p.hasPin ? '<i>protegida por PIN</i>' : '');
+    var hasPin = Boolean(p.protected);
+    var lock = hasPin ? '<span class="badge lock">🔒 PIN</span>' : '';
+    var url = u ? esc(u.url) : (hasPin ? '<i>protegida por PIN</i>' : esc(p.url || ''));
     return '<div class="pl"><div class="ico">' + (p.type === 'xtream' ? '📡' : '📺') + '</div><div><div class="name">' + esc(p.name) + '</div><div class="meta"><span class="badge">' + p.type + '</span>' + lock + '</div><div class="url">' + url + '</div></div><div class="actions">' +
-      (p.hasPin && !u ? '<button class="icon-btn" data-act="unlock" data-id="' + p.id + '">Desbloquear</button>' : '') +
+      (hasPin && !u ? '<button class="icon-btn" data-act="unlock" data-id="' + p.id + '">Desbloquear</button>' : '') +
+      '<button class="icon-btn" data-act="edit" data-id="' + p.id + '" title="Editar playlist">✎ Editar</button>' +
       '<button class="icon-btn" data-act="rename" data-id="' + p.id + '">Renomear</button>' +
-      '<button class="icon-btn" data-act="pin" data-id="' + p.id + '">' + (p.hasPin ? 'Mudar PIN' : 'Definir PIN') + '</button>' +
-      (p.hasPin ? '<button class="icon-btn" data-act="unpin" data-id="' + p.id + '">Remover PIN</button>' : '') +
+      '<button class="icon-btn" data-act="pin" data-id="' + p.id + '">' + (hasPin ? 'Mudar PIN' : 'Definir PIN') + '</button>' +
+      (hasPin ? '<button class="icon-btn" data-act="unpin" data-id="' + p.id + '">Remover PIN</button>' : '') +
       '<button class="icon-btn del" data-act="del" data-id="' + p.id + '">Excluir</button></div></div>';
   }).join('');
 }
@@ -325,10 +327,20 @@ $("plList").addEventListener("click", async function(e) {
   if (!p) return;
   if (act === "unlock") openModal("Desbloquear", "Digite o PIN.", '<label>PIN</label><input id="mPin" class="mono" maxlength="8">', async function() {
     var pin = $("mPin").value.trim();
-    var data = await api("POST", "/playlists/" + id + "/unlock", { pin: pin });
-    unlocked[id] = { pin: pin, url: data.url };
+    var data = await api("POST", "/playlists/" + id + "/verify-pin", { pin: pin });
+    unlocked[id] = { pin: pin, url: data.playlist.url };
     render();
   });
+  if (act === "edit") openModal("Editar playlist", "Atualize o nome e a URL M3U.",
+    '<label>Nome</label><input id="mName" value="' + esc(p.name) + '" maxlength="80" required>' +
+    '<label>URL M3U</label><input id="mUrl" class="mono" value="' + esc(p.url || (unlocked[id] ? unlocked[id].url : '')) + '" maxlength="2000" required>', async function() {
+      var name = $("mName").value.trim();
+      var url = $("mUrl").value.trim();
+      var headers = unlocked[id] ? { "x-playlist-pin": unlocked[id].pin } : {};
+      await api("PATCH", "/playlists/" + id, { name: name, url: url }, headers);
+      toast("Playlist atualizada.");
+      await loadPlaylists();
+    });
   if (act === "rename") openModal("Renomear", "Novo nome.", '<label>Nome</label><input id="mName" value="' + esc(p.name) + '" maxlength="80">', async function() {
     var name = $("mName").value.trim();
     var headers = unlocked[id] ? { "x-playlist-pin": unlocked[id].pin } : {};
@@ -336,7 +348,7 @@ $("plList").addEventListener("click", async function(e) {
     toast("Renomeada.");
     await loadPlaylists();
   });
-  if (act === "pin") openModal(p.hasPin ? "Mudar PIN" : "Definir PIN", "4 a 8 dígitos.", '<label>PIN</label><input id="mPin" class="mono" maxlength="8">', async function() {
+  if (act === "pin") openModal(p.protected ? "Mudar PIN" : "Definir PIN", "4 a 8 dígitos.", '<label>PIN</label><input id="mPin" class="mono" maxlength="8">', async function() {
     var pin = $("mPin").value.trim();
     var headers = unlocked[id] ? { "x-playlist-pin": unlocked[id].pin } : {};
     await api("POST", "/playlists/" + id + "/pin", { pin: pin }, headers);
@@ -350,8 +362,8 @@ $("plList").addEventListener("click", async function(e) {
     toast("PIN removido.");
     await loadPlaylists();
   });
-  if (act === "del") openModal("Excluir", "Isso não pode ser desfeito.", p.hasPin ? '<label>PIN</label><input id="mPin" class="mono" maxlength="8">' : "", async function() {
-    var headers = p.hasPin ? { "x-playlist-pin": $("mPin").value.trim() } : (unlocked[id] ? { "x-playlist-pin": unlocked[id].pin } : {});
+  if (act === "del") openModal("Excluir", "Isso não pode ser desfeito.", p.protected ? '<label>PIN</label><input id="mPin" class="mono" maxlength="8">' : "", async function() {
+    var headers = p.protected ? { "x-playlist-pin": $("mPin").value.trim() } : (unlocked[id] ? { "x-playlist-pin": unlocked[id].pin } : {});
     await api("DELETE", "/playlists/" + id, {}, headers);
     delete unlocked[id];
     toast("Excluída.");
