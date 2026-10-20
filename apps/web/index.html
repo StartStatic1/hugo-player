@@ -245,7 +245,9 @@ function toast(msg, type) {
 $("loginForm").addEventListener("submit", async function(e) {
   e.preventDefault();
   var deviceId = $("deviceId").value.trim().toUpperCase();
-  var deviceKey = $("deviceKey").value.trim().toUpperCase();
+  // A Device Key deve ser enviada exatamente como foi cadastrada.
+  // Diferente do ID, ela pode ser sensível a maiúsculas/minúsculas.
+  var deviceKey = $("deviceKey").value.trim();
   var st = $("loginStatus"); clear(st);
   if (!deviceId || deviceKey.length < 4) return show(st, "Preencha o Device ID e a Device Key.", "err");
   $("loginBtn").disabled = true; $("loginBtn").textContent = "Entrando...";
