@@ -291,6 +291,8 @@ async function enterDashboard() {
   var label = { trial: "Teste", premium: "Premium", expired: "Expirada" }[lic.type] || lic.type;
   var until = lic.expiresAt ? " até " + new Date(lic.expiresAt).toLocaleDateString("pt-BR") : "";
   $("licBadge").className = "badge " + lic.type; $("licBadge").textContent = "Licença: " + label + until;
+  var act = $("activateBtn");
+  if (act) act.style.display = lic.type === "premium" ? "none" : "inline-block";
   $("loginView").classList.add("hidden");
   $("dashView").classList.remove("hidden"); $("session").classList.remove("hidden");
   await loadPlaylists();
