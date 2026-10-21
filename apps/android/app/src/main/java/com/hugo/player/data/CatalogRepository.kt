@@ -112,61 +112,72 @@ class CatalogRepository(context: Context) {
         onProgress: (String) -> Unit = {},
         onFraction: (Float?) -> Unit = {},
     ) = withContext(Dispatchers.IO) {
-        onProgress("Baixando lista no aparelho...")
+        onProgress("Conectando ao servidor...")
         onFraction(null)
 
-        // Prefer local download for large lists (avoids server connection abort)
-        try {
-            val total = importM3uFullyLocal(playlistId, playlistUrl, onProgress, onFraction)
-            onFraction(1f)
-            onProgress("Pronto! $total itens")
-            return@withContext
-        } catch (localErr: Exception) {
-            onProgress("Falhou no aparelho. Tentando pelo servidor...")
-        }
-
-        // Fallback to server proxy
+        // Xtream via VPS first (more organized). Local download only on 403.
         val encoded = java.net.URLEncoder.encode(playlistUrl, "UTF-8")
         val endpoint = "${HugoApi.baseUrl}/channels?url=$encoded&limit=80000"
         val conn = URL(endpoint).openConnection() as java.net.HttpURLConnection
         conn.connectTimeout = 30000
         conn.readTimeout = 180000
 
-        if (conn.responseCode in 200..299) {
-            onProgress("Lendo lista do servidor...")
-            dao.deleteChannels(playlistId)
-            dao.deleteCategories(playlistId)
-            val total = parseServerJson(conn.inputStream, playlistId, onProgress)
+        try {
+            val code = conn.responseCode
+            if (code in 200..299) {
+                onProgress("Lendo lista do servidor...")
+                onFraction(0.05f)
+                dao.deleteChannels(playlistId)
+                dao.deleteCategories(playlistId)
+                val total = parseServerJson(conn.inputStream, playlistId, onProgress, onFraction)
+                onFraction(1f)
+                onProgress("Pronto! $total itens")
+                return@withContext
+            }
+
+            val err = conn.errorStream?.bufferedReader()?.use { it.readText() }.orEmpty()
+            val apiErr = Regex("\"error\"\\s*:\\s*\"([^\"]+)\"").find(err)?.groupValues?.get(1)
+            val is403 = apiErr == "upstream_403" || code == 403 ||
+                (apiErr?.startsWith("upstream_") == true && apiErr.contains("403"))
+
+            if (!is403 && apiErr != "empty_playlist" && code !in listOf(502, 504)) {
+                throw Exception(
+                    when {
+                        apiErr == "timeout" || code == 504 -> "o servidor da lista demorou demais"
+                        apiErr?.startsWith("upstream_") == true ->
+                            "o provedor recusou a lista (${apiErr.removePrefix("upstream_")})"
+                        else -> "HTTP $code"
+                    }
+                )
+            }
+        } catch (e: Exception) {
+            if (e.message?.contains("connection abort", ignoreCase = true) == true ||
+                e.message?.contains("Software caused", ignoreCase = true) == true ||
+                e is java.net.SocketTimeoutException ||
+                e is java.io.IOException && e.message?.contains("abort", ignoreCase = true) == true) {
+                // connection dropped mid-transfer — fall through to local
+            } else throw e
+        } finally {
             try { conn.disconnect() } catch (_: Exception) {}
-            onFraction(1f)
-            onProgress("Pronto! $total itens")
-            return@withContext
         }
 
-        val err = conn.errorStream?.bufferedReader()?.use { it.readText() }.orEmpty()
-        val apiErr = Regex("\"error\"\\s*:\\s*\"([^\"]+)\"").find(err)?.groupValues?.get(1)
-        val code = conn.responseCode
-        try { conn.disconnect() } catch (_: Exception) {}
-
-        throw Exception(
-            when {
-                apiErr == "timeout" || code == 504 -> "o servidor da lista demorou demais"
-                apiErr?.startsWith("upstream_") == true ->
-                    "o provedor recusou a lista (${apiErr.removePrefix("upstream_")})"
-                else -> "HTTP $code"
-            }
-        )
+        onProgress("Provedor bloqueou o servidor. Baixando no aparelho...")
+        val total = importM3uFullyLocal(playlistId, playlistUrl, onProgress, onFraction)
+        onFraction(1f)
+        onProgress("Pronto! $total itens")
     }
 
     private suspend fun parseServerJson(
         input: java.io.InputStream,
         playlistId: String,
         onProgress: (String) -> Unit,
+        onFraction: (Float?) -> Unit,
     ): Int {
         val reader = JsonReader(input.bufferedReader())
         reader.isLenient = true
         val channels = ArrayList<ChannelEntity>(800)
         var total = 0
+        var estimated = 50000
         try {
             reader.beginObject()
             while (reader.hasNext()) {
@@ -213,7 +224,11 @@ class CatalogRepository(context: Context) {
                                 )
                             )
                             total++
-                            if (total % 2000 == 0) onProgress("Lendo lista... $total itens")
+                            if (total % 1000 == 0) {
+                                val pct = ((total.toFloat() / estimated).coerceIn(0.05f, 0.95f) * 100).toInt()
+                                onProgress("Lendo lista... $pct% ($total itens)")
+                                onFraction((total.toFloat() / estimated).coerceIn(0.05f, 0.95f))
+                            }
                             if (channels.size >= 800) {
                                 dao.insertChannels(channels.toList())
                                 channels.clear()
@@ -276,7 +291,8 @@ class CatalogRepository(context: Context) {
                 val len = conn.contentLengthLong
                 if (len > maxClientM3uBytes) throw Exception("lista muito grande (${len / 1_000_000} MB)")
                 var written = 0L
-                onProgress("Baixando... 0 MB")
+                onProgress("Baixando... 0%")
+                onFraction(0f)
                 conn.inputStream.use { input ->
                     tmp.outputStream().buffered().use { out ->
                         val buf = ByteArray(64 * 1024)
@@ -286,9 +302,12 @@ class CatalogRepository(context: Context) {
                             written += n
                             if (written > maxClientM3uBytes) throw Exception("lista muito grande para o aparelho")
                             out.write(buf, 0, n)
-                            if (written % (2 * 1024 * 1024) < 64 * 1024) {
+                            if (len > 0 && written % (512 * 1024) < 64 * 1024) {
+                                val pct = ((written.toFloat() / len) * 100).toInt().coerceIn(0, 99)
+                                onProgress("Baixando... $pct%")
+                                onFraction((written.toFloat() / len).coerceIn(0f, 0.85f))
+                            } else if (len <= 0 && written % (2 * 1024 * 1024) < 64 * 1024) {
                                 onProgress("Baixando... ${written / 1_000_000} MB")
-                                if (len > 0) onFraction((written.toFloat() / len).coerceIn(0f, 0.9f))
                             }
                         }
                     }
@@ -296,8 +315,8 @@ class CatalogRepository(context: Context) {
             } finally {
                 conn.disconnect()
             }
-            onProgress("Organizando canais...")
-            onFraction(0.9f)
+            onProgress("Organizando... 0%")
+            onFraction(0.85f)
             return importM3uFullyLocalStreaming(playlistId, tmp, onProgress, onFraction)
         } finally {
             tmp.delete()
@@ -318,6 +337,7 @@ class CatalogRepository(context: Context) {
         var pendingName = "Canal"
         var pendingGroup = "Outros"
         var pendingLogo: String? = null
+        val fileLen = tmp.length().coerceAtLeast(1L)
 
         val reader = tmp.bufferedReader(Charsets.UTF_8)
         try {
@@ -357,8 +377,9 @@ class CatalogRepository(context: Context) {
                         dao.insertChannels(batch.toList())
                         batch.clear()
                         if (total % 2000 == 0) {
-                            onProgress("Organizando... $total itens")
-                            onFraction(0.9f + (0.09f * (total / 50000f).coerceIn(0f, 1f)))
+                            val pct = (85 + (total / 2000).coerceAtMost(14))
+                            onProgress("Organizando... $pct%")
+                            onFraction((0.85f + (total / 50000f).coerceIn(0f, 0.14f)))
                         }
                     }
                     pendingName = "Canal"
