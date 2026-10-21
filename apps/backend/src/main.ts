@@ -12,11 +12,13 @@ import { recoveryRouter } from "./routes-recovery.js";
 import { channelsRouter } from "./routes-channels.js";
 import { createPlaylistRouter, type StoredPlaylist } from "./routes-playlists.js";
 import { createEpgRouter } from "./routes-epg.js";
+import { createAdminRouter } from "./routes-admin.js";
 import type { PlaylistResolver } from "./routes-catalog.js";
 
 const PORT = Number(process.env.PORT ?? 8080);
 const DATA_FILE = path.resolve(process.env.DATA_FILE ?? "./data/db.json");
 const TRIAL_DAYS = Number(process.env.TRIAL_DAYS ?? 7);
+const ADMIN_TOKEN = process.env.ADMIN_TOKEN ?? "";
 
 type LicenseType = "trial" | "premium" | "expired";
 type LicensePlan = "trial" | "annual" | "lifetime";
@@ -122,6 +124,7 @@ app.use(rateLimit({ windowMs: 60_000, limit: 200 }));
 app.use("/tmdb", tmdbRouter);
 app.use("/recovery", recoveryRouter);
 app.use("/channels", channelsRouter);
+app.use("/admin", createAdminRouter({ devices: () => db.devices, persist, adminToken: ADMIN_TOKEN }));
 
 app.get("/health", (_req, res) => {
   res.json({ status: "ok", time: new Date().toISOString() });
@@ -173,16 +176,9 @@ function requireDevice(req: Request, res: Response, next: NextFunction) {
   next();
 }
 
-app.post("/devices/activate", requireDevice, async (req, res) => {
-  const device = (req as any).device as Device;
-  const days = Number(req.body?.days ?? 30);
-  const now = new Date();
-  const expires = new Date(now.getTime() + days * 86400000);
-  device.license = { type: "premium", expiresAt: expires.toISOString() };
-  db.devices[device.deviceId] = device;
-  await persist();
-  res.json({ ok: true, license: device.license });
-});
+// A ativação não pode ser feita pelo próprio usuário apenas com o par Device ID + Key.
+// Pagamentos/webhooks e testes administrativos usam /admin, protegido por ADMIN_TOKEN.
+app.post("/devices/activate", (_req, res) => res.status(410).json({ error: "payment_required", message: "A ativação é feita pelo checkout ou pelo painel administrativo." }));
 
 app.get("/devices/status", requireDevice, (req, res) => {
   const device = (req as any).device as Device;

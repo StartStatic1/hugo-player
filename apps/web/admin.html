@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Hugo Player · Administração</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#07080f;color:#f1f5f9;font:15px system-ui;padding:24px}main{max-width:820px;margin:auto}.card{background:#12141f;border:1px solid #1f2638;border-radius:16px;padding:22px;margin-bottom:16px}h1{margin-top:0}label{display:block;color:#94a3b8;font-size:12px;text-transform:uppercase;margin:12px 0 6px}input,select{width:100%;padding:12px;border-radius:10px;border:1px solid #1f2638;background:#0c0e18;color:#fff;font:inherit}.row{display:grid;grid-template-columns:1fr 1fr;gap:12px}button{padding:11px 14px;border:0;border-radius:10px;background:#8b5cf6;color:#fff;font-weight:700;cursor:pointer;margin:10px 8px 0 0}.ghost{background:#181b2a;border:1px solid #1f2638}.danger{background:#b91c1c}.status{margin-top:14px;color:#34d399;white-space:pre-wrap}.err{color:#f87171}.device{padding:14px 0;border-top:1px solid #1f2638}.muted{color:#94a3b8;font-size:13px}@media(max-width:600px){.row{grid-template-columns:1fr}body{padding:14px}}
+</style></head>
+<body><main>
+<div class="card"><h1>Hugo Player · Administração</h1><p class="muted">Painel protegido. Nunca coloque o token no código do aplicativo.</p>
+<label>API</label><input id="api" value="https://api-hugo.streamflixvip.online">
+<label>Token administrativo</label><input id="token" type="password" autocomplete="off">
+<label>Device ID</label><input id="device" placeholder="02:AA:BB:CC:DD:EE">
+<div class="row"><div><label>Plano</label><select id="plan"><option value="annual">Anual · 12 meses</option><option value="lifetime">Vitalício</option></select></div><div><label>Transação/teste</label><input id="tx" placeholder="manual-test"></div></div>
+<button onclick="activate('annual')">Ativar anual</button><button onclick="activate('lifetime')">Ativar vitalício</button><button class="ghost" onclick="testTrial()">Gerar teste</button><button class="ghost" onclick="lookup()">Consultar</button><div id="status" class="status"></div></div>
+<div class="card"><h2>Dispositivos</h2><button class="ghost" onclick="listDevices()">Atualizar lista</button><div id="list" class="muted"></div></div>
+</main><script>
+const $=id=>document.getElementById(id); const api=()=>$("api").value.replace(/\/+$/,'');
+async function call(path,method='GET',body){const r=await fetch(api()+path,{method,headers:{'Content-Type':'application/json','x-admin-token':$('token').value},body:body?JSON.stringify(body):undefined});const j=await r.json().catch(()=>({}));if(!r.ok)throw j;return j}
+function out(v,err=false){$('status').className='status'+(err?' err':'');$('status').textContent=typeof v==='string'?v:JSON.stringify(v,null,2)}
+async function activate(plan){try{out(await call('/admin/devices/'+encodeURIComponent($('device').value.trim())+'/activate','POST',{plan,transactionNsu:$('tx').value.trim()||'manual-test'}))}catch(e){out(e.error||'Erro',true)}}
+async function testTrial(){try{out(await call('/admin/devices/'+encodeURIComponent($('device').value.trim())+'/test','POST',{days:7}))}catch(e){out(e.error||'Erro',true)}}
+async function lookup(){try{const j=await call('/admin/devices?q='+encodeURIComponent($('device').value.trim()));out(j)}catch(e){out(e.error||'Erro',true)}}
+async function listDevices(){try{const j=await call('/admin/devices');$('list').innerHTML=j.devices.map(d=>`<div class="device"><b>${d.deviceId}</b><br>${d.platform} · ${d.license.plan||d.license.type} · ${d.license.expiresAt||'sem expiração'}</div>`).join('')||'Nenhum dispositivo'}catch(e){out(e.error||'Erro',true)}}
+</script></body></html>

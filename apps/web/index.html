@@ -120,7 +120,6 @@ button:disabled { opacity: .55; cursor: not-allowed; }
   <div class="session hidden" id="session">
     <span class="who mono" id="whoId"></span>
     <span class="badge" id="licBadge"></span>
-    <button id="activateBtn" class="btn" style="display:none;margin-left:8px" onclick="activate()">Ativar</button>
     <button class="btn ghost sm" id="logoutBtn" type="button">Sair</button>
   </div>
 </header>
@@ -285,14 +284,6 @@ $("logoutBtn").addEventListener("click", function() {
   $("loginView").classList.remove("hidden");
 });
 
-async function activate() {
-  if (!confirm("Ativar Premium por 30 dias?")) return;
-  try {
-    await api("POST", "/devices/activate", { days: 30 });
-    toast("Ativado!");
-    await enterDashboard();
-  } catch (e) { toast(friendly(e), "err"); }
-}
 async function enterDashboard() {
   var status = await api("GET", "/devices/status").catch(function(){ return null; });
   $("whoId").textContent = session.deviceId;
@@ -300,8 +291,6 @@ async function enterDashboard() {
   var label = { trial: "Teste", premium: "Premium", expired: "Expirada" }[lic.type] || lic.type;
   var until = lic.expiresAt ? " até " + new Date(lic.expiresAt).toLocaleDateString("pt-BR") : "";
   $("licBadge").className = "badge " + lic.type; $("licBadge").textContent = "Licença: " + label + until;
-  var act = $("activateBtn");
-  if (act) act.style.display = lic.type === "premium" ? "none" : "inline-block";
   $("loginView").classList.add("hidden");
   $("dashView").classList.remove("hidden"); $("session").classList.remove("hidden");
   await loadPlaylists();
