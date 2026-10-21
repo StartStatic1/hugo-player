@@ -66,6 +66,7 @@ export function createAdminRouter(deps: AdminDeps): Router {
         deviceId: d.deviceId,
         platform: d.platform,
         appVersion: d.appVersion,
+        playlistCount: deps.playlistCount(d.deviceId),
         license: d.license,
         createdAt: d.createdAt,
         lastSeenAt: d.lastSeenAt,
