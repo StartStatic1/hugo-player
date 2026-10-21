@@ -19,6 +19,7 @@ const DATA_FILE = path.resolve(process.env.DATA_FILE ?? "./data/db.json");
 const TRIAL_DAYS = Number(process.env.TRIAL_DAYS ?? 7);
 
 type LicenseType = "trial" | "premium" | "expired";
+type LicensePlan = "trial" | "annual" | "lifetime";
 
 interface Device {
   deviceId: string;
@@ -26,7 +27,13 @@ interface Device {
   keySalt: string;
   platform: string;
   appVersion: string;
-  license: { type: LicenseType; expiresAt: string | null };
+  license: {
+    type: LicenseType;
+    plan?: LicensePlan;
+    expiresAt: string | null;
+    paymentProvider?: string;
+    transactionNsu?: string;
+  };
   createdAt: string;
   lastSeenAt: string;
 }
@@ -139,16 +146,9 @@ app.post("/devices/register", async (req, res) => {
       await persist();
       return res.json({ registered: true, created: false });
     }
-    // Mesmo ID com key nova (reinstall): re-vincula
-    const { salt, hash } = hashKey(deviceKey);
-    existing.keyHash = hash;
-    existing.keySalt = salt;
-    existing.lastSeenAt = now.toISOString();
-    existing.platform = platform;
-    if (appVersion) existing.appVersion = appVersion;
-    db.devices[storeKey] = existing;
-    await persist();
-    return res.json({ registered: true, created: false, keyRotated: true });
+    // Um ID existente não pode trocar de Key só porque recebeu uma Key diferente.
+    // A troca após reinstalação deve passar pelo fluxo explícito de recuperação.
+    return res.status(409).json({ error: "device_key_mismatch", message: "Este Device ID já está registrado. Use a recuperação para trocar de aparelho." });
   }
   const { salt, hash } = hashKey(deviceKey);
   const device: Device = {
@@ -157,7 +157,7 @@ app.post("/devices/register", async (req, res) => {
     keySalt: salt,
     platform,
     appVersion: appVersion ?? "",
-    license: { type: "trial", expiresAt: new Date(now.getTime() + TRIAL_DAYS * 86400000).toISOString() },
+    license: { type: "trial", plan: "trial", expiresAt: new Date(now.getTime() + TRIAL_DAYS * 86400000).toISOString() },
     createdAt: now.toISOString(),
     lastSeenAt: now.toISOString(),
   };
@@ -188,12 +188,17 @@ app.get("/devices/status", requireDevice, (req, res) => {
   const device = (req as any).device as Device;
   const expiresAt = device.license.expiresAt ? new Date(device.license.expiresAt) : null;
   const expired = expiresAt !== null && expiresAt.getTime() < Date.now();
+  const active = !expired && device.license.type !== "expired";
   res.json({
     deviceId: device.deviceId,
     platform: device.platform,
     license: {
       type: expired ? "expired" : device.license.type,
+      plan: device.license.plan ?? (device.license.type === "premium" ? "annual" : "trial"),
+      active,
       expiresAt: device.license.expiresAt,
+      paymentProvider: device.license.paymentProvider,
+      transactionNsu: device.license.transactionNsu,
     },
     playlists: db.playlists.filter((p) => p.deviceId.toUpperCase() === device.deviceId.toUpperCase()).length,
     createdAt: device.createdAt,
