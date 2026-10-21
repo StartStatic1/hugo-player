@@ -38,6 +38,8 @@ interface Device {
   };
   createdAt: string;
   lastSeenAt: string;
+  blockedAt?: string;
+  blockedReason?: string;
 }
 
 interface Db {
@@ -98,11 +100,18 @@ function authDevice(id: string | undefined, key: string | undefined): Device | n
   if (!id || !key) return null;
   const device = findDevice(id);
   if (!device) return null;
+  if (device.blockedAt) return null;
   const k = key.trim();
   if (verifyKey(k, device) || verifyKey(k.toUpperCase(), device) || verifyKey(k.toLowerCase(), device)) {
     return device;
   }
   return null;
+}
+
+function hasActiveLicense(device: Device): boolean {
+  if (device.blockedAt || device.license.type === "expired") return false;
+  if (!device.license.expiresAt) return true;
+  return new Date(device.license.expiresAt).getTime() >= Date.now();
 }
 
 const registerSchema = z.object({
@@ -124,7 +133,16 @@ app.use(rateLimit({ windowMs: 60_000, limit: 200 }));
 app.use("/tmdb", tmdbRouter);
 app.use("/recovery", recoveryRouter);
 app.use("/channels", channelsRouter);
-app.use("/admin", createAdminRouter({ devices: () => db.devices, persist, adminToken: ADMIN_TOKEN }));
+app.use("/admin", createAdminRouter({
+  devices: () => db.devices,
+  persist,
+  adminToken: ADMIN_TOKEN,
+  playlistCount: (deviceId) => db.playlists.filter((p) => p.deviceId.toUpperCase() === deviceId.toUpperCase()).length,
+  deleteDevice: (deviceId) => {
+    const key = Object.keys(db.devices).find((k) => db.devices[k].deviceId.toUpperCase() === deviceId.toUpperCase());
+    if (key) delete db.devices[key];
+  },
+}));
 
 app.get("/health", (_req, res) => {
   res.json({ status: "ok", time: new Date().toISOString() });
@@ -210,7 +228,10 @@ app.use(
       db.playlists = next;
     },
     persist,
-    authenticate: (id, key) => authDevice(id, key)?.deviceId ?? null,
+    authenticate: (id, key) => {
+      const device = authDevice(id, key);
+      return device && hasActiveLicense(device) ? device.deviceId : null;
+    },
   }),
 );
 

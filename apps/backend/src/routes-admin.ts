@@ -17,12 +17,16 @@ export interface AdminDevice {
   };
   createdAt: string;
   lastSeenAt: string;
+  blockedAt?: string;
+  blockedReason?: string;
 }
 
 export interface AdminDeps {
   devices: () => Record<string, AdminDevice>;
   persist: () => Promise<void>;
   adminToken: string;
+  playlistCount: (deviceId: string) => number;
+  deleteDevice: (deviceId: string) => void;
 }
 
 const planSchema = z.object({
@@ -65,6 +69,8 @@ export function createAdminRouter(deps: AdminDeps): Router {
         license: d.license,
         createdAt: d.createdAt,
         lastSeenAt: d.lastSeenAt,
+        blockedAt: d.blockedAt,
+        blockedReason: d.blockedReason,
       }));
     res.json({ devices });
   });
@@ -96,6 +102,37 @@ export function createAdminRouter(deps: AdminDeps): Router {
     };
     await deps.persist();
     res.json({ ok: true, deviceId: device.deviceId, license: device.license });
+  });
+
+  r.post("/devices/:id/block", async (req, res) => {
+    const device = findDevice(req.params.id);
+    if (!device) return res.status(404).json({ error: "device_not_found" });
+    device.blockedAt = new Date().toISOString();
+    device.blockedReason = String(req.body?.reason ?? "bloqueado pelo administrador").slice(0, 200);
+    await deps.persist();
+    res.json({ ok: true, deviceId: device.deviceId, blockedAt: device.blockedAt });
+  });
+
+  r.post("/devices/:id/unblock", async (req, res) => {
+    const device = findDevice(req.params.id);
+    if (!device) return res.status(404).json({ error: "device_not_found" });
+    delete device.blockedAt;
+    delete device.blockedReason;
+    await deps.persist();
+    res.json({ ok: true, deviceId: device.deviceId, unblocked: true });
+  });
+
+  r.delete("/devices/:id", async (req, res) => {
+    const device = findDevice(req.params.id);
+    if (!device) return res.status(404).json({ error: "device_not_found" });
+    if (device.license.type === "premium" || device.license.plan !== "trial") {
+      return res.status(409).json({ error: "premium_device_protected" });
+    }
+    const count = deps.playlistCount(device.deviceId);
+    if (count > 0) return res.status(409).json({ error: "device_has_playlists", count });
+    deps.deleteDevice(device.deviceId);
+    await deps.persist();
+    res.json({ ok: true, deleted: device.deviceId });
   });
 
   return r;
