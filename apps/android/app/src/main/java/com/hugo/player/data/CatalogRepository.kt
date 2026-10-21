@@ -209,6 +209,7 @@ class CatalogRepository(context: Context) {
                                 )
                             )
                             total++
+                            if (total % 2000 == 0) onProgress("Lendo lista... $total itens")
                             if (channels.size >= 800) {
                                 dao.insertChannels(channels.toList())
                                 channels.clear()
