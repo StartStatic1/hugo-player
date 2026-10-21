@@ -173,6 +173,17 @@ function requireDevice(req: Request, res: Response, next: NextFunction) {
   next();
 }
 
+app.post("/devices/activate", requireDevice, async (req, res) => {
+  const device = (req as any).device as Device;
+  const days = Number(req.body?.days ?? 30);
+  const now = new Date();
+  const expires = new Date(now.getTime() + days * 86400000);
+  device.license = { type: "premium", expiresAt: expires.toISOString() };
+  db.devices[device.deviceId] = device;
+  await persist();
+  res.json({ ok: true, license: device.license });
+});
+
 app.get("/devices/status", requireDevice, (req, res) => {
   const device = (req as any).device as Device;
   const expiresAt = device.license.expiresAt ? new Date(device.license.expiresAt) : null;
