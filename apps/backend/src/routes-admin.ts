@@ -19,6 +19,8 @@ export interface AdminDevice {
   lastSeenAt: string;
   blockedAt?: string;
   blockedReason?: string;
+  revokedAt?: string;
+  revokedReason?: string;
 }
 
 export interface AdminDeps {
@@ -72,6 +74,8 @@ export function createAdminRouter(deps: AdminDeps): Router {
         lastSeenAt: d.lastSeenAt,
         blockedAt: d.blockedAt,
         blockedReason: d.blockedReason,
+        revokedAt: d.revokedAt,
+        revokedReason: d.revokedReason,
       }));
     res.json({ devices });
   });
@@ -87,6 +91,8 @@ export function createAdminRouter(deps: AdminDeps): Router {
       paymentProvider: parsed.data.transactionNsu ? "manual-test" : device.license.paymentProvider,
       transactionNsu: parsed.data.transactionNsu ?? device.license.transactionNsu,
     };
+    delete device.revokedAt;
+    delete device.revokedReason;
     await deps.persist();
     res.json({ ok: true, deviceId: device.deviceId, license: device.license });
   });
@@ -101,6 +107,8 @@ export function createAdminRouter(deps: AdminDeps): Router {
       expiresAt: new Date(Date.now() + days * 86400000).toISOString(),
       paymentProvider: "admin-test",
     };
+    delete device.revokedAt;
+    delete device.revokedReason;
     await deps.persist();
     res.json({ ok: true, deviceId: device.deviceId, license: device.license });
   });
@@ -112,6 +120,23 @@ export function createAdminRouter(deps: AdminDeps): Router {
     device.blockedReason = String(req.body?.reason ?? "bloqueado pelo administrador").slice(0, 200);
     await deps.persist();
     res.json({ ok: true, deviceId: device.deviceId, blockedAt: device.blockedAt });
+  });
+
+  r.post("/devices/:id/revoke", async (req, res) => {
+    const device = findDevice(req.params.id);
+    if (!device) return res.status(404).json({ error: "device_not_found" });
+    if (device.license.type !== "premium") return res.status(409).json({ error: "device_not_premium" });
+    const now = new Date().toISOString();
+    device.license = {
+      type: "expired",
+      plan: "trial",
+      expiresAt: now,
+      paymentProvider: "admin-revoked",
+    };
+    device.revokedAt = now;
+    device.revokedReason = String(req.body?.reason ?? "licença revogada pelo administrador").slice(0, 200);
+    await deps.persist();
+    res.json({ ok: true, deviceId: device.deviceId, license: device.license, revokedAt: now });
   });
 
   r.post("/devices/:id/unblock", async (req, res) => {
@@ -126,6 +151,7 @@ export function createAdminRouter(deps: AdminDeps): Router {
   r.delete("/devices/:id", async (req, res) => {
     const device = findDevice(req.params.id);
     if (!device) return res.status(404).json({ error: "device_not_found" });
+    if (device.revokedAt) return res.status(409).json({ error: "revoked_device_protected" });
     const plan = device.license.plan ?? (device.license.type === "premium" ? "annual" : "trial");
     if (device.license.type === "premium" || plan !== "trial") {
       return res.status(409).json({ error: "premium_device_protected" });

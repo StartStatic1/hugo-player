@@ -40,6 +40,8 @@ interface Device {
   lastSeenAt: string;
   blockedAt?: string;
   blockedReason?: string;
+  revokedAt?: string;
+  revokedReason?: string;
 }
 
 interface Db {
