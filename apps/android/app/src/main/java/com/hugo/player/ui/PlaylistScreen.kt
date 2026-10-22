@@ -45,6 +45,8 @@ import androidx.compose.ui.unit.sp
 import com.hugo.player.data.AppSettings
 import com.hugo.player.data.CatalogRepository
 import com.hugo.player.data.DeviceIdentity
+import com.hugo.player.data.LicenseRepository
+import com.hugo.player.data.LicenseStatus
 import com.hugo.player.data.PlaylistRepository
 import com.hugo.player.data.RecentPlaylists
 import com.hugo.player.data.RemotePlaylist
@@ -93,6 +95,7 @@ fun PlaylistScreen(
     val repo = remember { CatalogRepository.get(context) }
 
     var playlists by remember { mutableStateOf<List<RemotePlaylist>?>(null) }
+    var licenseStatus by remember { mutableStateOf<LicenseStatus?>(null) }
     var listError by remember { mutableStateOf<String?>(null) }
     val summaries = remember { mutableStateMapOf<String, PlaylistRepository.LocalSummary>() }
     val loads = remember { mutableStateMapOf<String, CardLoad>() }
@@ -109,6 +112,7 @@ fun PlaylistScreen(
         listError = null
         try {
             DeviceIdentity.ensureRegistered(context)
+            licenseStatus = runCatching { LicenseRepository.status(identity.deviceId, identity.deviceKey) }.getOrNull()
             val migrated = DeviceIdentity.migrateLegacyIfNeeded(context)
             if (migrated > 0) toast = "$migrated playlist(s) copiadas do ID antigo"
             val list = PlaylistRepository.list(identity.deviceId, identity.deviceKey)
@@ -203,6 +207,8 @@ fun PlaylistScreen(
             Spacer(Modifier.width(18.dp))
             Text("Playlists", color = HugoColors.TextMuted, fontSize = 18.sp, fontWeight = FontWeight.Medium)
             Spacer(Modifier.weight(1f))
+            licenseStatus?.let { LicenseBadge(it) }
+            Spacer(Modifier.width(10.dp))
             Column(horizontalAlignment = Alignment.End, modifier = Modifier.padding(end = 14.dp)) {
                 Text("ID ${identity.deviceId}", color = HugoColors.TextMuted, fontSize = 11.sp, fontFamily = FontFamily.Monospace)
                 Text("KEY ${identity.deviceKey}", color = HugoColors.Accent, fontSize = 11.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
@@ -445,6 +451,25 @@ private fun enterPlaylist(context: android.content.Context, pl: RemotePlaylist, 
     AppSettings.lastPlaylistUrl = url
     RecentPlaylists.touch(context, pl.id, pl.name)
     onOpen(pl.id, pl.name)
+}
+
+@Composable
+private fun LicenseBadge(status: LicenseStatus) {
+    val color = when {
+        status.type == "premium" -> Color(0xFF34D399)
+        status.type == "expired" -> Color(0xFFF87171)
+        else -> Color(0xFFFBBF24)
+    }
+    Column(
+        horizontalAlignment = Alignment.End,
+        modifier = Modifier
+            .background(color.copy(alpha = 0.12f), RoundedCornerShape(10.dp))
+            .border(1.dp, color.copy(alpha = 0.45f), RoundedCornerShape(10.dp))
+            .padding(horizontal = 10.dp, vertical = 5.dp),
+    ) {
+        Text(status.label(), color = color, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+        Text(status.validityLabel(), color = color.copy(alpha = 0.9f), fontSize = 10.sp)
+    }
 }
 
 @Composable
