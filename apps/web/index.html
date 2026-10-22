@@ -80,6 +80,15 @@ button:disabled { opacity: .55; cursor: not-allowed; }
 .step { background: #ffffff06; border: 1px solid var(--border); border-radius: 14px; padding: 14px; font-size: 13px; color: var(--muted); }
 .step b { display: block; color: var(--text); font-size: 14px; margin-bottom: 4px; }
 .step i { font-style: normal; color: var(--primary); font-weight: 800; margin-right: 6px; }
+.trust-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 18px; }
+.trust-item { padding: 14px; border-radius: 14px; background: #ffffff05; border: 1px solid var(--border); }
+.trust-item strong { display: block; font-size: 13px; margin-bottom: 4px; }
+.trust-item span { color: var(--muted); font-size: 12px; line-height: 1.45; }
+.legal { margin-top: 28px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+.legal-card { padding: 18px; background: #ffffff04; border: 1px solid var(--border); border-radius: 14px; }
+.legal-card h3 { margin: 0 0 7px; font-size: 14px; }
+.legal-card p { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.55; }
+.legal-note { margin-top: 16px; padding: 14px 16px; border-radius: 12px; background: #fbbf2410; border: 1px solid #fbbf2433; color: #fde68a; font-size: 12px; line-height: 1.5; }
 .dash-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; margin-bottom: 22px; flex-wrap: wrap; }
 .grid { display: grid; grid-template-columns: 380px 1fr; gap: 22px; align-items: start; }
 .pl-list { display: grid; gap: 12px; }
@@ -101,7 +110,7 @@ button:disabled { opacity: .55; cursor: not-allowed; }
 .toast.ok { border-color: #34d39955; color: var(--ok); }
 .toast.err { border-color: #f8717155; color: var(--err); }
 .footer { text-align: center; color: var(--muted); font-size: 12px; margin-top: 40px; }
-@media (max-width: 880px) { .login, .grid { grid-template-columns: 1fr; } .hero h1 { font-size: 30px; } .pl { grid-template-columns: 40px minmax(0, 1fr); } .pl .actions { grid-column: 1 / -1; } .topbar { padding: 12px 16px; } }
+@media (max-width: 880px) { .login, .grid { grid-template-columns: 1fr; } .hero h1 { font-size: 30px; } .pl { grid-template-columns: 40px minmax(0, 1fr); } .pl .actions { grid-column: 1 / -1; } .topbar { padding: 12px 16px; } .legal { grid-template-columns: 1fr; } }
 @media (max-width: 560px) {
   .topbar { align-items: flex-start; flex-wrap: wrap; gap: 8px 12px; }
   .brand { font-size: 18px; }
@@ -111,6 +120,7 @@ button:disabled { opacity: .55; cursor: not-allowed; }
   .card { padding: 20px 16px; }
   .pl { padding: 14px; }
   .pl .actions { justify-content: flex-start; }
+  .trust-grid { grid-template-columns: 1fr; }
 }
 </style>
 </head>
@@ -132,6 +142,11 @@ button:disabled { opacity: .55; cursor: not-allowed; }
         <div class="step"><b><i>1</i>Abra o app</b>No celular ou na TV</div>
         <div class="step"><b><i>2</i>Copie ID e Key</b>Mostrados na tela inicial</div>
         <div class="step"><b><i>3</i>Entre aqui</b>E adicione suas listas</div>
+      </div>
+      <div class="trust-grid">
+        <div class="trust-item"><strong>🔐 Acesso por dispositivo</strong><span>Seu ID e sua Key identificam o aparelho autorizado.</span></div>
+        <div class="trust-item"><strong>☁️ Suas listas no servidor</strong><span>As playlists ficam associadas ao seu dispositivo para aparecer no app.</span></div>
+        <div class="trust-item"><strong>⚡ Controle simples</strong><span>Adicione, edite, proteja com PIN ou remova suas próprias listas.</span></div>
       </div>
     </div>
     <form class="card" id="loginForm" autocomplete="off">
@@ -185,7 +200,13 @@ button:disabled { opacity: .55; cursor: not-allowed; }
       <div><div class="pl-list" id="plList"></div></div>
     </div>
   </section>
-  <div class="footer">Hugo Player • Ativação segura por dispositivo</div>
+  <section class="legal">
+    <div class="legal-card"><h3>O que é o Hugo Player?</h3><p>Uma ferramenta de gerenciamento e reprodução para playlists fornecidas pelo próprio usuário. O Hugo Player não vende, hospeda, indexa ou distribui filmes, séries, canais ou arquivos de terceiros.</p></div>
+    <div class="legal-card"><h3>Responsabilidade do usuário</h3><p>Você deve utilizar somente listas e links obtidos legalmente e ter autorização para acessá-los. O serviço não se responsabiliza pelo conteúdo, disponibilidade ou origem de listas adicionadas pelo usuário.</p></div>
+    <div class="legal-card"><h3>Direitos autorais e DMCA</h3><p>Se você é titular de direitos e acredita que um link fornecido por um usuário viola seus direitos, envie uma notificação com a identificação da obra, URL e comprovação de titularidade pelo canal oficial de suporte.</p></div>
+  </section>
+  <div class="legal-note"><strong>Transparência:</strong> os dados institucionais da empresa — razão social, CNPJ, endereço e canal oficial — devem ser preenchidos pelo responsável antes da publicação comercial. Não incluí informações inventadas.</div>
+  <div class="footer">Hugo Player • Gerenciamento de playlists • Licenciamento por dispositivo</div>
 </main>
 <div class="modal-bg hidden" id="modalBg">
   <form class="card modal" id="modalForm">

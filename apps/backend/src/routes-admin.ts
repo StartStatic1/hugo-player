@@ -126,7 +126,8 @@ export function createAdminRouter(deps: AdminDeps): Router {
   r.delete("/devices/:id", async (req, res) => {
     const device = findDevice(req.params.id);
     if (!device) return res.status(404).json({ error: "device_not_found" });
-    if (device.license.type === "premium" || device.license.plan !== "trial") {
+    const plan = device.license.plan ?? (device.license.type === "premium" ? "annual" : "trial");
+    if (device.license.type === "premium" || plan !== "trial") {
       return res.status(409).json({ error: "premium_device_protected" });
     }
     const count = deps.playlistCount(device.deviceId);
