@@ -370,6 +370,7 @@ app.use(
 
 const resolvePlaylist: PlaylistResolver = (req) => {
   const device = authDevice(req.header("x-device-id"), req.header("x-device-key"));
+  if (device && !hasActiveLicense(device)) return "unauthorized";
   const playlistId = String(req.query.playlistId || "");
   if (playlistId && device) {
     const p = db.playlists.find(

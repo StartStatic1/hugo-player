@@ -245,6 +245,7 @@ let session = null;
 let playlists = [];
 const unlocked = {};
 let addType = "m3u";
+let licenseActive = true;
 
 function esc(s) {
   return String(s == null ? "" : s).replace(/[&<>"']/g, function(c) {
@@ -317,7 +318,7 @@ $("loginForm").addEventListener("submit", async function(e) {
   }
 });
 $("logoutBtn").addEventListener("click", function() {
-  session = null; playlists = [];
+  session = null; playlists = []; licenseActive = true;
   Object.keys(unlocked).forEach(function(k){ delete unlocked[k]; });
   sessionStorage.removeItem("hugo.session");
   $("dashView").classList.add("hidden"); $("session").classList.add("hidden");
@@ -325,19 +326,38 @@ $("logoutBtn").addEventListener("click", function() {
 });
 
 async function enterDashboard() {
-  var status = await api("GET", "/devices/status").catch(function(){ return null; });
+  var status;
+  try {
+    status = await api("GET", "/devices/status");
+  } catch (err) {
+    session = null;
+    sessionStorage.removeItem("hugo.session");
+    return show($("loginStatus"), friendly(err), "err");
+  }
   $("whoId").textContent = session.deviceId;
-  var lic = status && status.license ? status.license : { type: "trial" };
-  var label = { trial: "Teste", premium: "Premium", expired: "Expirada" }[lic.type] || lic.type;
+  var lic = status.license || { type: "trial", active: false };
+  licenseActive = lic.active !== false && lic.type !== "expired";
+  var label = lic.type === "premium"
+    ? (lic.plan === "lifetime" ? "Premium Vitalício" : "Premium Anual")
+    : ({ trial: "Teste", expired: "Trial expirado" }[lic.type] || lic.type);
   var until = lic.expiresAt ? " até " + new Date(lic.expiresAt).toLocaleDateString("pt-BR") : "";
   $("licBadge").className = "badge " + lic.type; $("licBadge").textContent = "Licença: " + label + until;
   $("loginView").classList.add("hidden");
   $("dashView").classList.remove("hidden"); $("session").classList.remove("hidden");
+  $("plansCard").classList.toggle("hidden", licenseActive && lic.type === "premium");
+  $("addForm").classList.toggle("hidden", !licenseActive);
+  $("dashSub").textContent = licenseActive
+    ? "Tudo o que você mudar aqui aparece no app ao atualizar a lista."
+    : "Seu acesso de teste terminou. Escolha um plano para continuar usando suas playlists.";
   await loadPlaylists();
 }
 
 async function loadPlaylists() {
   var box = $("plList");
+  if (!licenseActive) {
+    box.innerHTML = '<div class="empty"><div class="big">🔒</div><b>Licença inativa</b><br>Ative o Premium acima para gerenciar e reproduzir suas playlists.</div>';
+    return;
+  }
   box.innerHTML = '<div class="skeleton"></div><div class="skeleton"></div>';
   try {
     var data = await api("GET", "/playlists");
@@ -358,15 +378,16 @@ function render() {
   box.innerHTML = playlists.map(function(p) {
     var u = unlocked[p.id];
     var hasPin = Boolean(p.protected);
+    var canManage = !hasPin || Boolean(u);
     var lock = hasPin ? '<span class="badge lock">🔒 PIN</span>' : '';
     var url = u ? esc(u.url) : (hasPin ? '<i>protegida por PIN</i>' : esc(p.url || ''));
     return '<div class="pl"><div class="ico">' + (p.type === 'xtream' ? '📡' : '📺') + '</div><div><div class="name">' + esc(p.name) + '</div><div class="meta"><span class="badge">' + p.type + '</span>' + lock + '</div><div class="url">' + url + '</div></div><div class="actions">' +
       (hasPin && !u ? '<button class="icon-btn" data-act="unlock" data-id="' + p.id + '">Desbloquear</button>' : '') +
-      '<button class="icon-btn" data-act="edit" data-id="' + p.id + '" title="Editar playlist">✎ Editar</button>' +
+      (canManage ? '<button class="icon-btn" data-act="edit" data-id="' + p.id + '" title="Editar playlist">✎ Editar</button>' +
       '<button class="icon-btn" data-act="rename" data-id="' + p.id + '">Renomear</button>' +
       '<button class="icon-btn" data-act="pin" data-id="' + p.id + '">' + (hasPin ? 'Mudar PIN' : 'Definir PIN') + '</button>' +
       (hasPin ? '<button class="icon-btn" data-act="unpin" data-id="' + p.id + '">Remover PIN</button>' : '') +
-      '<button class="icon-btn del" data-act="del" data-id="' + p.id + '">Excluir</button></div></div>';
+      '<button class="icon-btn del" data-act="del" data-id="' + p.id + '">Excluir</button>' : '') + '</div></div>';
   }).join('');
 }
 
