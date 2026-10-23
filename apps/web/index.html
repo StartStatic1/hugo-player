@@ -424,13 +424,13 @@ $("plList").addEventListener("click", async function(e) {
   if (act === "pin") openModal(p.protected ? "Mudar PIN" : "Definir PIN", "4 a 8 dígitos.", '<label>PIN</label><input id="mPin" class="mono" maxlength="8">', async function() {
     var pin = $("mPin").value.trim();
     var headers = unlocked[id] ? { "x-playlist-pin": unlocked[id].pin } : {};
-    await api("POST", "/playlists/" + id + "/pin", { pin: pin }, headers);
+    await api("PATCH", "/playlists/" + id, { newPin: pin }, headers);
     toast("PIN atualizado.");
     await loadPlaylists();
   });
   if (act === "unpin") openModal("Remover PIN", "Confirma?", '<label>PIN atual</label><input id="mPin" class="mono" maxlength="8">', async function() {
     var headers = { "x-playlist-pin": $("mPin").value.trim() };
-    await api("DELETE", "/playlists/" + id + "/pin", {}, headers);
+    await api("PATCH", "/playlists/" + id, { removePin: true }, headers);
     delete unlocked[id];
     toast("PIN removido.");
     await loadPlaylists();
