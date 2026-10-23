@@ -168,6 +168,15 @@ button:disabled { opacity: .55; cursor: not-allowed; }
       </div>
       <button class="btn ghost sm" id="refreshBtn" type="button">↻ Atualizar</button>
     </div>
+    <section class="card" id="plansCard">
+      <h2>Ative o Hugo Player</h2>
+      <p class="desc">Escolha seu plano. O acesso é liberado automaticamente depois da confirmação do pagamento.</p>
+      <div class="row">
+        <div class="legal-card"><h3>Premium Anual · R$ 25,00</h3><p>Licença válida por 12 meses e vinculada a este dispositivo.</p><button class="btn" type="button" onclick="startPayment('annual')">Comprar anual</button></div>
+        <div class="legal-card"><h3>Premium Vitalício · R$ 60,00</h3><p>Licença sem data de vencimento, vinculada a este dispositivo.</p><button class="btn" type="button" onclick="startPayment('lifetime')">Comprar vitalício</button></div>
+      </div>
+      <div class="status" id="paymentStatus"></div>
+    </section>
     <div class="grid">
       <form class="card" id="addForm" autocomplete="off">
         <h2>Adicionar playlist</h2>
@@ -272,6 +281,17 @@ function toast(msg, type) {
   var t = document.createElement("div");
   t.className = "toast " + type; t.textContent = msg; document.body.appendChild(t);
   clearTimeout(toastTimer); toastTimer = setTimeout(function(){ t.remove(); }, 3200);
+}
+async function startPayment(plan) {
+  var status = $("paymentStatus");
+  clear(status); show(status, "Preparando checkout seguro...", "ok");
+  try {
+    var data = await api("POST", "/payments/checkout", { plan: plan });
+    if (!data.checkoutUrl) throw { error: "checkout_create_failed" };
+    window.location.href = data.checkoutUrl;
+  } catch (err) {
+    show(status, friendly(err), "err");
+  }
 }
 
 $("loginForm").addEventListener("submit", async function(e) {
