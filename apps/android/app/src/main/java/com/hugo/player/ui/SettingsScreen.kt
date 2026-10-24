@@ -45,6 +45,7 @@ fun SettingsScreen(deviceId: String, deviceKey: String, onBack: () -> Unit) {
     var cacheSize by remember { mutableLongStateOf(0L) }
     var message by remember { mutableStateOf<String?>(null) }
     var licenseType by remember { mutableStateOf<String?>(null) }
+    var licensePlan by remember { mutableStateOf<String?>(null) }
     var licenseExpires by remember { mutableStateOf<String?>(null) }
 
     fun copy(label: String, value: String) {
@@ -62,9 +63,11 @@ fun SettingsScreen(deviceId: String, deviceKey: String, onBack: () -> Unit) {
             val json = JSONObject(text)
             val lic = json.optJSONObject("license")
             licenseType = lic?.optString("type") ?: "—"
+            licensePlan = lic?.optString("plan")?.takeIf { it.isNotBlank() && it != "null" }
             licenseExpires = lic?.optString("expiresAt")?.takeIf { it.isNotBlank() && it != "null" }?.take(10)
         } catch (_: Exception) {
             licenseType = "indisponível"
+            licensePlan = null
         }
     }
 
@@ -79,7 +82,7 @@ fun SettingsScreen(deviceId: String, deviceKey: String, onBack: () -> Unit) {
         Section("Dispositivo") {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("v${BuildConfig.VERSION_NAME}", color = Color.White, fontSize = 13.sp, modifier = Modifier.weight(1f))
-                LicenseBadge(licenseType, licenseExpires)
+                LicenseBadge(licenseType, licensePlan, licenseExpires)
             }
             Spacer(Modifier.height(8.dp))
             CompactCopy("ID", deviceId) { copy("ID", deviceId) }
@@ -143,11 +146,14 @@ fun SettingsScreen(deviceId: String, deviceKey: String, onBack: () -> Unit) {
 }
 
 @Composable
-private fun LicenseBadge(type: String?, expires: String?) {
+private fun LicenseBadge(type: String?, plan: String?, expires: String?) {
     val (text, color) = when (type) {
         null -> "..." to HugoColors.TextMuted
         "trial" -> ("Teste" + (expires?.let { " · $it" } ?: "")) to Color(0xFFFBBF24)
-        "premium" -> ("Premium" + (expires?.let { " · $it" } ?: "")) to Color(0xFF34D399)
+        "premium" -> when (plan) {
+            "lifetime" -> "Premium Vitalício" to Color(0xFF34D399)
+            else -> ("Premium Anual" + (expires?.let { " · $it" } ?: "")) to Color(0xFF34D399)
+        }
         "expired" -> "Expirada" to Color(0xFFF87171)
         else -> (type ?: "—") to HugoColors.TextMuted
     }
