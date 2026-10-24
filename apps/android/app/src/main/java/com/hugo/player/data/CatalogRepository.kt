@@ -338,11 +338,13 @@ class CatalogRepository(context: Context) {
         var pendingGroup = "Outros"
         var pendingLogo: String? = null
         val fileLen = tmp.length().coerceAtLeast(1L)
+        var processedBytes = 0L
 
         val reader = tmp.bufferedReader(Charsets.UTF_8)
         try {
             var line: String?
             while (reader.readLine().also { line = it } != null) {
+                processedBytes += (line?.toByteArray(Charsets.UTF_8)?.size ?: 0) + 1
                 val t = line!!.trim()
                 if (t.startsWith("#EXTINF", ignoreCase = true)) {
                     pendingName = extractExtinfName(t)
@@ -376,10 +378,11 @@ class CatalogRepository(context: Context) {
                     if (batch.size >= 500) {
                         dao.insertChannels(batch.toList())
                         batch.clear()
-                        if (total % 2000 == 0) {
-                            val pct = (85 + (total / 2000).coerceAtMost(14))
-                            onProgress("Organizando... $pct%")
-                            onFraction((0.85f + (total / 50000f).coerceIn(0f, 0.14f)))
+                        if (total % 500 == 0) {
+                            val fraction = (processedBytes.toFloat() / fileLen).coerceIn(0f, 1f)
+                            val pct = (85 + fraction * 14).toInt().coerceIn(85, 99)
+                            onProgress("Organizando... $pct% ($total itens)")
+                            onFraction(0.85f + fraction * 0.14f)
                         }
                     }
                     pendingName = "Canal"
