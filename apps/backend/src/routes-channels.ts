@@ -2,11 +2,14 @@ import { Router } from "express";
 import fs from "fs";
 import { classifyEntry, parseEpisode } from "./content/classify.js";
 import { parseXtreamUrl, buildCatalogFromXtream, fetchSeriesInfo } from "./content/xtream.js";
+import { blockKey, isBlocked, markBlocked } from "./content/blocked-hosts.js";
 
 export const channelsRouter = Router();
 
 const playlistCache = new Map<string, { channels: any[]; categories: any[]; stats: any; timestamp: number }>();
 const CACHE_TTL = 10 * 60 * 1000;
+const BLOCKED_HINT =
+  "Provedor bloqueou o IP do servidor (comum em VPS). O app no celular funciona; o painel barre data center.";
 
 const UPDATE_JSON_REMOTE =
   process.env.UPDATE_JSON_URL ||
@@ -141,9 +144,16 @@ channelsRouter.get("/", async (req, res) => {
       const ua = "VLC/3.0.20 LibVLC/3.0.20";
       let usedSource = "xtream";
       let data: { channels: any[]; categories: any[]; stats: any; timestamp: number } | null = null;
+      const hostKey = blockKey(xt.baseUrl, xt.username);
+      if (isBlocked(hostKey)) {
+        // 403 recente deste provedor: não insiste da VPS, o app baixa no aparelho.
+        return res.status(502).json({ error: "upstream_403", hint: BLOCKED_HINT });
+      }
+      let forbidden = false;
       try {
         const fetchJson = async (url: string) => {
           const r = await fetch(url, { headers: { "User-Agent": ua, Accept: "*/*" } });
+          if (r.status === 403) forbidden = true;
           if (!r.ok) throw new Error("upstream_" + r.status);
           return r.json();
         };
@@ -174,6 +184,12 @@ channelsRouter.get("/", async (req, res) => {
           data = { channels, categories, stats: catalog.stats, timestamp: Date.now() };
         }
       } catch (e: any) {
+        if (forbidden || e?.message === "upstream_403") {
+          // IP da VPS bloqueado: get.php do mesmo servidor também seria recusado.
+          markBlocked(hostKey);
+          console.warn("xtream api 403 (VPS IP blocked), skipping get.php:", blockKey(xt.baseUrl));
+          return res.status(502).json({ error: "upstream_403", hint: BLOCKED_HINT });
+        }
         console.warn("xtream api failed, trying get.php M3U:", e?.message);
       }
       if (!data) {
@@ -189,12 +205,10 @@ channelsRouter.get("/", async (req, res) => {
             headers: { "User-Agent": ua, Accept: "*/*" },
           });
           if (!response.ok) {
+            if (response.status === 403) markBlocked(hostKey);
             return res.status(502).json({
               error: `upstream_${response.status}`,
-              hint:
-                response.status === 403
-                  ? "Provedor bloqueou o IP do servidor (comum em VPS). O app no celular funciona; o painel barre data center."
-                  : undefined,
+              hint: response.status === 403 ? BLOCKED_HINT : undefined,
             });
           }
           const text = await response.text();
