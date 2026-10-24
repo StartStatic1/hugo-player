@@ -344,7 +344,7 @@ class CatalogRepository(context: Context) {
         try {
             var line: String?
             while (reader.readLine().also { line = it } != null) {
-                processedBytes += (line?.toByteArray(Charsets.UTF_8)?.size ?: 0) + 1
+                processedBytes += (line?.length?.toLong() ?: 0L) + 1L
                 val t = line!!.trim()
                 if (t.startsWith("#EXTINF", ignoreCase = true)) {
                     pendingName = extractExtinfName(t)
