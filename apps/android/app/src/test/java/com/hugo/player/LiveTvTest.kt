@@ -9,6 +9,7 @@ import com.hugo.player.ui.epgDisplayList
 import com.hugo.player.ui.playingFormat
 import com.hugo.player.ui.previewLayout
 import com.hugo.player.ui.headerChipsThatFit
+import com.hugo.player.ui.liveDpadRight
 import com.hugo.player.ui.LiveFormat
 import com.hugo.player.ui.LiveFormatMemory
 import com.hugo.player.ui.isLiveFormatFailure
@@ -140,5 +141,16 @@ class LiveTvTest {
         assertEquals(4, headerChipsThatFit(700f, lens, compact = false))
         assertEquals(1, headerChipsThatFit(140f, lens, compact = true))
         assertEquals(0, headerChipsThatFit(40f, lens, compact = true))
+    }
+
+    @Test
+    fun previewLayoutStaysFiniteOnTvAndOddSizes() {
+        for ((w, h) in listOf(380f to 482f, 380f to 0f, 0f to 0f, Float.NaN to 400f, 380f to Float.POSITIVE_INFINITY, 2f to 2f)) {
+            val l = previewLayout(w, h)
+            for (v in listOf(l.boxWidth, l.boxHeight, l.videoWidth, l.videoHeight)) assertTrue("w=$w h=$h v=$v", v.isFinite() && v > 0f)
+        }
+        assertTrue(liveDpadRight(android.view.KeyEvent.KEYCODE_DPAD_RIGHT, isDown = true))
+        assertTrue(!liveDpadRight(android.view.KeyEvent.KEYCODE_DPAD_RIGHT, isDown = false))
+        assertTrue(!liveDpadRight(android.view.KeyEvent.KEYCODE_DPAD_LEFT, isDown = true))
     }
 }

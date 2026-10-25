@@ -179,7 +179,10 @@ data class PreviewLayout(
     val cardHeight: Float, val pad: Float, val short: Boolean,
 )
 
-fun previewLayout(widthDp: Float, heightDp: Float): PreviewLayout {
+fun previewLayout(widthRaw: Float, heightRaw: Float): PreviewLayout {
+    // medidas inválidas (0, infinito, NaN) não podem virar tamanho negativo/NaN no layout
+    val widthDp = if (widthRaw.isFinite() && widthRaw > 0f) widthRaw.coerceAtMost(2000f) else 320f
+    val heightDp = if (heightRaw.isFinite() && heightRaw > 0f) heightRaw.coerceAtMost(2000f) else 400f
     val short = heightDp < 440f
     val pad = if (short) 8f else 12f
     val card = if (short) 40f else 48f
@@ -214,3 +217,7 @@ fun headerChipsThatFit(widthDp: Float, textLens: List<Int>, compact: Boolean): I
     }
     return n
 }
+
+/** Tecla DIREITA do controle (só ao apertar, não ao soltar). */
+fun liveDpadRight(keyCode: Int, isDown: Boolean): Boolean =
+    isDown && keyCode == android.view.KeyEvent.KEYCODE_DPAD_RIGHT

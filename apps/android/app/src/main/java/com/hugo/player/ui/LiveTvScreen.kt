@@ -3,6 +3,8 @@ package com.hugo.player.ui
 import android.app.Application
 import android.view.KeyEvent as AndroidKeyEvent
 import android.view.TextureView
+import android.view.ViewGroup
+import android.widget.FrameLayout
 import androidx.annotation.OptIn
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -41,6 +43,7 @@ import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.graphics.Color
@@ -315,6 +318,7 @@ fun LiveTvScreen(playlistId: String, onPlay: (LivePlayRequest) -> Unit, onBack: 
     val focusManager = LocalFocusManager.current
     val listState = rememberLazyListState()
     val focusTarget = remember { FocusRequester() }
+    val previewFocus = remember { FocusRequester() }
     val previewAllowed = remember { livePreviewAllowed(context) }
     val preview = remember { mutableStateOf<ExoPlayer?>(null) }
     var initialFocusDone by remember { mutableStateOf(false) }
@@ -332,7 +336,7 @@ fun LiveTvScreen(playlistId: String, onPlay: (LivePlayRequest) -> Unit, onBack: 
             listState.scrollToItem((i - 3).coerceAtLeast(0))
             if (!initialFocusDone || LiveSession.lastPlayedUrl != null) {
                 delay(60)
-                runCatching { focusTarget.requestFocus() }
+                safeRequestFocus(focusTarget)
                 initialFocusDone = true
                 LiveSession.lastPlayedUrl = null
             }
@@ -427,7 +431,12 @@ fun LiveTvScreen(playlistId: String, onPlay: (LivePlayRequest) -> Unit, onBack: 
                     }
                     else -> LazyColumn(
                         state = listState,
-                        modifier = Modifier.fillMaxSize().focusRestorer(),
+                        modifier = Modifier.fillMaxSize().focusRestorer().onPreviewKeyEvent { ev ->
+                            // controle: DIREITA da lista vai sempre para a prévia (sem busca de foco "livre" entrando no vídeo)
+                            if (showPreview && vm.focused != null && liveDpadRight(ev.key.nativeKeyCode, ev.type == KeyEventType.KeyDown)) {
+                                safeRequestFocus(previewFocus)
+                            } else false
+                        },
                         contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp),
                         verticalArrangement = Arrangement.spacedBy(4.dp),
                     ) {
@@ -459,6 +468,8 @@ fun LiveTvScreen(playlistId: String, onPlay: (LivePlayRequest) -> Unit, onBack: 
                 previewAllowed = previewAllowed,
                 playerHolder = preview,
                 onWatch = { vm.focused?.let { play(it, vm.focusedIndex) } },
+                previewFocus = previewFocus,
+                onBackToList = { safeRequestFocus(focusTarget) },
                 compact = shortScreen || w < 840.dp,
                 modifier = Modifier.width(previewWidth).fillMaxHeight(),
             )
@@ -606,6 +617,8 @@ private fun PreviewPanel(
     previewAllowed: Boolean,
     playerHolder: MutableState<ExoPlayer?>,
     onWatch: () -> Unit,
+    previewFocus: FocusRequester,
+    onBackToList: () -> Boolean,
     modifier: Modifier,
     compact: Boolean = false,
 ) {
@@ -613,7 +626,16 @@ private fun PreviewPanel(
     var videoHeight by remember { mutableIntStateOf(0) }
     var playing by remember { mutableStateOf<String?>(null) }
     // topo FIXO (prévia larga + cartão compacto); só a programação embaixo rola
-    BoxWithConstraints(modifier.background(HugoColors.Panel)) {
+    var backDown by remember { mutableStateOf(false) }
+    BoxWithConstraints(modifier.background(HugoColors.Panel).onPreviewKeyEvent { ev ->
+        // VOLTAR com foco na 3ª coluna: primeiro volta para a lista de canais (não sai da tela)
+        if (ev.key.nativeKeyCode != AndroidKeyEvent.KEYCODE_BACK) return@onPreviewKeyEvent false
+        when (ev.type) {
+            KeyEventType.KeyDown -> { backDown = onBackToList(); backDown }
+            KeyEventType.KeyUp -> { val h = backDown; backDown = false; h }
+            else -> false
+        }
+    }) {
     val layout = previewLayout(maxWidth.value, maxHeight.value)
     val short = layout.short
     val pad = layout.pad.dp
@@ -625,12 +647,17 @@ private fun PreviewPanel(
             Modifier.align(Alignment.CenterHorizontally).width(layout.boxWidth.dp).height(layout.boxHeight.dp)
                 .clip(RoundedCornerShape(12.dp)).background(Color.Black)
                 .border(2.dp, if (previewFocused) Color.White else Color.Transparent, RoundedCornerShape(12.dp))
+                .focusRequester(previewFocus)
+                .onPreviewKeyEvent { ev ->
+                    // ESQUERDA na prévia volta para a linha do canal
+                    if (ev.type == KeyEventType.KeyDown && ev.key.nativeKeyCode == AndroidKeyEvent.KEYCODE_DPAD_LEFT) onBackToList() else false
+                }
                 .clickable(interactionSource = previewSrc, indication = null, enabled = c != null) { onWatch() },
             contentAlignment = Alignment.Center,
         ) {
             if (previewAllowed && c != null) {
                 // vídeo sempre 16:9; se a caixa for mais baixa, corta um pouco em cima/embaixo (sem esticar)
-                Box(Modifier.requiredSize(layout.videoWidth.dp, layout.videoHeight.dp)) {
+                Box(Modifier.requiredSize(layout.videoWidth.dp, layout.videoHeight.dp).focusProperties { canFocus = false }) {
                     LivePreview(c.url, playerHolder, onVideoHeight = { videoHeight = it }, onPlaying = { playing = it })
                 }
                 Row(
@@ -833,9 +860,19 @@ private fun LivePreview(url: String, holder: MutableState<ExoPlayer?>, onVideoHe
     }
     Box(Modifier.fillMaxSize().background(Color.Black), contentAlignment = Alignment.Center) {
         AndroidView(
-            factory = { ctx -> TextureView(ctx).also { player.setVideoTextureView(it) } },
-            onRelease = { player.clearVideoTextureView(it) },
-            modifier = Modifier.fillMaxSize(),
+            // a View do vídeo fica fora da navegação por foco (Fire TV / Android TV)
+            factory = { ctx ->
+                FrameLayout(ctx).apply {
+                    isFocusable = false
+                    isFocusableInTouchMode = false
+                    descendantFocusability = ViewGroup.FOCUS_BLOCK_DESCENDANTS
+                    val tv = TextureView(ctx).apply { isFocusable = false; isFocusableInTouchMode = false }
+                    addView(tv, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+                    player.setVideoTextureView(tv)
+                }
+            },
+            onRelease = { fl -> (fl.getChildAt(0) as? TextureView)?.let { runCatching { player.clearVideoTextureView(it) } } },
+            modifier = Modifier.fillMaxSize().focusProperties { canFocus = false },
         )
         when {
             failed -> Text("Prévia indisponível", color = HugoColors.TextMuted, fontSize = 12.sp, modifier = Modifier.background(Color.Black).padding(8.dp))
@@ -843,3 +880,6 @@ private fun LivePreview(url: String, holder: MutableState<ExoPlayer?>, onVideoHe
         }
     }
 }
+
+/** Pede foco sem derrubar o app se o alvo ainda não estiver na tela (FocusRequester não ligado). */
+private fun safeRequestFocus(r: FocusRequester): Boolean = runCatching { r.requestFocus() }.isSuccess
