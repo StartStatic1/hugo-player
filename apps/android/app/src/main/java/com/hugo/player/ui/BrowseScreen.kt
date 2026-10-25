@@ -1,5 +1,7 @@
 package com.hugo.player.ui
 
+import com.hugo.player.ui.components.tvTextInput
+import com.hugo.player.ui.components.rememberTvTextInput
 import android.app.Application
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -207,9 +209,11 @@ fun BrowseScreen(
                 Text(if (vm.initialLoading) "Carregando..." else "${nf.format(vm.total)} ${type.unit}", color = HugoColors.TextMuted, fontSize = 11.sp)
             }
             Spacer(Modifier.width(20.dp))
+            val searchInput = rememberTvTextInput()
             OutlinedTextField(
                 value = vm.query,
                 onValueChange = vm::updateQuery,
+                readOnly = searchInput.readOnly,
                 placeholder = { Text("Buscar em ${type.title}", color = HugoColors.TextDim, fontSize = 14.sp) },
                 leadingIcon = { Icon(Icons.Default.Search, null, tint = HugoColors.TextMuted) },
                 trailingIcon = { if (vm.query.isNotEmpty()) IconButton(onClick = { vm.updateQuery("") }) { Icon(Icons.Default.Clear, "Limpar busca", tint = HugoColors.TextMuted) } },
@@ -223,7 +227,7 @@ fun BrowseScreen(
                     focusedBorderColor = type.accent, unfocusedBorderColor = Color(0xFF2A3148),
                     focusedContainerColor = Color(0xFF0C0E18), unfocusedContainerColor = Color(0xFF0C0E18), cursorColor = type.accent,
                 ),
-                modifier = Modifier.weight(1f).heightIn(min = 48.dp)
+                modifier = Modifier.weight(1f).heightIn(min = 48.dp).tvTextInput(searchInput)
             )
         }
 

@@ -1,5 +1,7 @@
 package com.hugo.player.ui
 
+import com.hugo.player.ui.components.tvTextInput
+import com.hugo.player.ui.components.rememberTvTextInput
 import android.text.format.DateUtils
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -587,9 +589,11 @@ fun HugoTextField(
     keyboardType: KeyboardType = KeyboardType.Text,
     modifier: Modifier = Modifier,
 ) {
+    val tv = rememberTvTextInput()
     OutlinedTextField(
         value = value,
         onValueChange = onChange,
+        readOnly = tv.readOnly,
         label = { Text(label) },
         singleLine = true,
         visualTransformation = if (isPin) PasswordVisualTransformation() else androidx.compose.ui.text.input.VisualTransformation.None,
@@ -599,7 +603,7 @@ fun HugoTextField(
             focusedBorderColor = HugoColors.Accent, unfocusedBorderColor = Color(0xFF334155),
             focusedLabelColor = HugoColors.Accent, unfocusedLabelColor = HugoColors.TextMuted, cursorColor = HugoColors.Accent,
         ),
-        modifier = modifier.fillMaxWidth()
+        modifier = modifier.fillMaxWidth().tvTextInput(tv)
     )
 }
 
