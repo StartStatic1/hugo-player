@@ -128,6 +128,9 @@ interface ChannelDao {
     @Query("SELECT * FROM channels WHERE playlistId = :playlistId AND type = 'live' AND url IN (:urls)")
     suspend fun liveByUrls(playlistId: String, urls: List<String>): List<ChannelEntity>
 
+    @Query("SELECT * FROM channels WHERE playlistId = :playlistId AND url IN (:urls)")
+    suspend fun byUrls(playlistId: String, urls: List<String>): List<ChannelEntity>
+
     @Query("SELECT name, epgId FROM channels WHERE playlistId = :playlistId AND type = 'live'")
     suspend fun liveEpgKeys(playlistId: String): List<LiveEpgKey>
 

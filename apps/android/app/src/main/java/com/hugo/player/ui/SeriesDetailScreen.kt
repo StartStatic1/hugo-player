@@ -83,14 +83,14 @@ fun SeriesDetailScreen(
         val marker = local.firstOrNull()?.url
         if (marker != null && marker.startsWith("xtream://series/")) {
             val seriesId = marker.removePrefix("xtream://series/")
-            var plUrl = LiveTvCache.playlistUrl
-            if (plUrl.isNullOrBlank()) plUrl = AppSettings.lastPlaylistUrl
-            if (plUrl.isNullOrBlank()) plUrl = ""
-            val encoded = java.net.URLEncoder.encode(plUrl, "UTF-8")
-            val endpoint = "${com.hugo.player.data.HugoApi.baseUrl}/channels/series-episodes?url=$encoded&seriesId=$seriesId"
+            // só o id da playlist + aparelho: o servidor usa o link guardado (sem usuário/senha na URL)
+            val identity = com.hugo.player.data.DeviceIdentity.get(context)
+            val endpoint = "${com.hugo.player.data.HugoApi.baseUrl}/channels/series-episodes?playlistId=${java.net.URLEncoder.encode(playlistId, "UTF-8")}&seriesId=$seriesId"
             try {
                 val body = withContext(Dispatchers.IO) {
                     val conn = URL(endpoint).openConnection() as java.net.HttpURLConnection
+                    conn.setRequestProperty("x-device-id", identity.deviceId)
+                    conn.setRequestProperty("x-device-key", identity.deviceKey)
                     conn.connectTimeout = 20000
                     conn.readTimeout = 30000
                     val code = conn.responseCode

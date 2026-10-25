@@ -1,5 +1,14 @@
 package com.hugo.player.ui
 
+import androidx.compose.foundation.layout.heightIn
+import com.hugo.player.ui.components.tvTextInput
+import com.hugo.player.ui.components.rememberTvTextInput
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.focus.FocusDirection
+import androidx.compose.material3.LocalTextStyle
+import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material.icons.filled.Close
 import com.hugo.player.ui.components.liveCategoryLazyIndex
 import com.hugo.player.ui.components.lazyFocusRestore
 import android.app.Application
@@ -319,6 +328,9 @@ fun LiveTvScreen(playlistId: String, onPlay: (LivePlayRequest) -> Unit, onBack: 
     val vm: LiveTvViewModel = viewModel()
     LaunchedEffect(playlistId) { vm.bind(playlistId); CrashLog.step("TV ao vivo: abriu") }
     val nf = remember { NumberFormat.getIntegerInstance(Locale("pt", "BR")) }
+    var searchOpen by rememberSaveable { mutableStateOf(false) }
+    val searchFocus = remember { FocusRequester() }
+    LaunchedEffect(searchOpen) { if (searchOpen) { kotlinx.coroutines.delay(60); runCatching { searchFocus.requestFocus() } } }
     var pinFor by remember { mutableStateOf<String?>(null) }
     var lockTick by remember { mutableIntStateOf(0) }
     pinFor?.let { group ->
@@ -400,17 +412,40 @@ fun LiveTvScreen(playlistId: String, onPlay: (LivePlayRequest) -> Unit, onBack: 
                 Text(if (vm.loading) "Carregando..." else "${nf.format(vm.total)} canais", color = HugoColors.TextMuted, fontSize = 11.sp)
             }
             Spacer(Modifier.width(12.dp))
-            // faixa de informações (some o que não couber)
-            HeaderStats(
-                playlistName = LiveTvCache.playlistName?.takeIf { LiveTvCache.playlistId == playlistId },
-                total = vm.allCount,
-                categoryLabel = vm.playRequestTitle(),
-                categoryCount = vm.total,
-                loading = vm.loading,
-                nf = nf,
-                compact = shortScreen,
-                modifier = Modifier.weight(1f),
-            )
+            if (searchOpen || vm.query.isNotBlank()) {
+                // busca: na TV o teclado só abre com OK (setas passam direto)
+                val searchInput = rememberTvTextInput()
+                OutlinedTextField(
+                    value = vm.query,
+                    onValueChange = vm::updateQuery,
+                    readOnly = searchInput.readOnly,
+                    placeholder = { Text(if (searchInput.isTv && !searchInput.editing) "Buscar canal (OK para digitar)" else "Buscar canal", color = HugoColors.TextDim, fontSize = 13.sp) },
+                    leadingIcon = { Icon(Icons.Default.Search, null, tint = HugoColors.TextMuted) },
+                    singleLine = true,
+                    textStyle = LocalTextStyle.current.copy(fontSize = 14.sp),
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                    keyboardActions = KeyboardActions(onSearch = { searchInput.editing = false; focusManager.moveFocus(FocusDirection.Down) }),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = HugoColors.Accent, unfocusedBorderColor = Color(0xFF2A3148), focusedTextColor = Color.White, unfocusedTextColor = Color.White),
+                    modifier = Modifier.weight(1f).heightIn(min = 44.dp).focusRequester(searchFocus).tvTextInput(searchInput),
+                )
+                Spacer(Modifier.width(8.dp))
+                HugoIconButton(Icons.Default.Close, "Fechar busca", onClick = { vm.updateQuery(""); searchOpen = false })
+            } else {
+                // faixa de informações (some o que não couber)
+                HeaderStats(
+                    playlistName = LiveTvCache.playlistName?.takeIf { LiveTvCache.playlistId == playlistId },
+                    total = vm.allCount,
+                    categoryLabel = vm.playRequestTitle(),
+                    categoryCount = vm.total,
+                    loading = vm.loading,
+                    nf = nf,
+                    compact = shortScreen,
+                    modifier = Modifier.weight(1f),
+                )
+                Spacer(Modifier.width(8.dp))
+                HugoIconButton(Icons.Default.Search, "Buscar canal", onClick = { searchOpen = true })
+            }
             Spacer(Modifier.width(10.dp))
             Clock()
         }

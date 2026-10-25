@@ -10,7 +10,8 @@ import path from "node:path";
 import { tmdbRouter } from "./routes-tmdb.js";
 import { recoveryRouter } from "./routes-recovery.js";
 import { createTransferRouter, type TransferRecord } from "./routes-transfer.js";
-import { channelsRouter } from "./routes-channels.js";
+import { channelsRouter, setChannelsAccess } from "./routes-channels.js";
+import { isRegisteredUrl } from "./playlist-access.js";
 import { createPlaylistRouter, type StoredPlaylist } from "./routes-playlists.js";
 import { createEpgRouter } from "./routes-epg.js";
 import { createAdminRouter } from "./routes-admin.js";
@@ -161,6 +162,11 @@ app.use(rateLimit({ windowMs: 60_000, limit: 200 }));
 
 app.use("/tmdb", tmdbRouter);
 app.use("/recovery", recoveryRouter);
+// /channels e /channels/series-episodes: playlistId + aparelho (novo) ou ?url= cadastrada (apps antigos)
+setChannelsAccess({
+  authenticate: (id, key) => authDevice(id, key)?.deviceId ?? null,
+  playlists: () => db.playlists,
+});
 app.use("/channels", channelsRouter);
 app.use("/admin", createAdminRouter({
   devices: () => db.devices,
@@ -420,7 +426,8 @@ const resolvePlaylist: PlaylistResolver = (req) => {
     return { type: p.type, url: p.url, ...(p.epgUrl ? { epgUrl: p.epgUrl } : {}) };
   }
   const url = String(req.query.url || "");
-  if (url) return { type: (req.query.type as "m3u" | "xtream") || "m3u", url };
+  // link na URL (rota antiga): só de playlist cadastrada
+  if (url) return isRegisteredUrl(url, db.playlists) ? { type: (req.query.type as "m3u" | "xtream") || "m3u", url } : "unauthorized";
   return null;
 };
 app.use("/epg", createEpgRouter(resolvePlaylist));

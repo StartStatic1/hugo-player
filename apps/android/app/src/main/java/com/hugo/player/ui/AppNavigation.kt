@@ -1,5 +1,15 @@
 package com.hugo.player.ui
 
+import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.nativeKeyCode
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -139,8 +149,24 @@ fun AppNavigation() {
         }
         composable("settings") { SettingsScreen(identity.deviceId, identity.deviceKey, onBack = { nav.popBackStack() }) }
         composable("favorites") {
+            val playlistId = LiveTvCache.playlistId ?: ""
             FavoritesScreen(
-                onOpen = { fav -> nav.openMovie(ChannelEntity(name = fav.title, url = fav.url, logo = fav.logo, group = "", type = "movie", playlistId = fav.playlistId)) },
+                playlistId = playlistId,
+                // cada favorito abre na tela certa: canal -> player ao vivo, série -> episódios, filme -> detalhes
+                onOpen = { e, liveFavs ->
+                    val fav = e.fav
+                    when (e.kind) {
+                        "series" -> nav.navigate("seriesDetail/${enc(fav.playlistId)}/${enc(fav.title)}")
+                        "live" -> {
+                            val ch = e.channel ?: ChannelEntity(name = fav.title, url = fav.url, logo = fav.logo, group = "", type = "live", playlistId = fav.playlistId)
+                            val list = liveFavs.ifEmpty { listOf(ch) }
+                            val n = list.indexOfFirst { it.url == ch.url }.coerceAtLeast(0) + 1
+                            LiveSession.current = LivePlayRequest(LiveListSource(fav.playlistId, LiveFilters.FAV, "", "Favoritos"), ch, n, fixedList = list)
+                            nav.navigate("livePlay")
+                        }
+                        else -> nav.openMovie(e.channel ?: ChannelEntity(name = fav.title, url = fav.url, logo = fav.logo, group = "", type = "movie", playlistId = fav.playlistId))
+                    }
+                },
                 onBack = { nav.popBackStack() },
             )
         }
@@ -162,55 +188,138 @@ fun AppNavigation() {
     }
 }
 
+/** Favorito já com o tipo descoberto (canal / filme / série). */
+private data class FavEntry(val fav: WatchHistory.FavoriteItem, val kind: String, val channel: ChannelEntity?)
+
 @Composable
-private fun FavoritesScreen(onOpen: (WatchHistory.FavoriteItem) -> Unit, onBack: () -> Unit) {
+private fun FavoritesScreen(playlistId: String, onOpen: (FavEntry, List<ChannelEntity>) -> Unit, onBack: () -> Unit) {
     val context = LocalContext.current
-    var items by remember { mutableStateOf(WatchHistory.listFavorites(context)) }
+    val repo = remember { com.hugo.player.data.CatalogRepository.get(context) }
+    var tick by remember { mutableIntStateOf(0) }
+    var entries by remember { mutableStateOf<List<FavEntry>?>(null) }
+    var otherCount by remember { mutableIntStateOf(0) }
+    var menuFor by remember { mutableStateOf<FavEntry?>(null) }
+    val firstFocus = remember { FocusRequester() }
+
+    LaunchedEffect(playlistId, tick) {
+        val all = WatchHistory.listFavorites(context)
+        val mine = all.filter { it.playlistId == playlistId }
+        otherCount = all.size - mine.size
+        val byUrl = repo.byUrls(playlistId, mine.filter { !it.key.startsWith("series:") && it.url.isNotBlank() }.map { it.url }).associateBy { it.url }
+        entries = mine.map { f ->
+            when {
+                f.key.startsWith("series:") -> FavEntry(f, "series", null)
+                else -> byUrl[f.url]?.let { FavEntry(f, it.type, it) } ?: FavEntry(f, "movie", null)
+            }
+        }
+    }
+    LaunchedEffect(entries != null) { if (!entries.isNullOrEmpty()) { kotlinx.coroutines.delay(80); runCatching { firstFocus.requestFocus() } } }
+
+    menuFor?.let { e ->
+        FavoriteMenu(
+            title = e.fav.title,
+            onOpen = { menuFor = null; onOpen(e, entries.orEmpty().filter { it.kind == "live" }.mapNotNull { it.channel }) },
+            onRemove = { WatchHistory.removeFavorite(context, e.fav.key); menuFor = null; tick++ },
+            onDismiss = { menuFor = null },
+        )
+    }
 
     Column(Modifier.fillMaxSize().background(HugoColors.Background)) {
         Row(Modifier.fillMaxWidth().background(HugoColors.Panel).padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
             HugoIconButton(Icons.AutoMirrored.Filled.ArrowBack, "Voltar", onClick = onBack)
             Spacer(Modifier.width(12.dp))
-            Text("Favoritos", color = Color.White, fontSize = 19.sp, fontWeight = FontWeight.Bold)
+            Text("Favoritos", color = Color.White, fontSize = 19.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+            Text("OK abre · segure OK ou ≡ para remover", color = HugoColors.TextDim, fontSize = 11.sp)
         }
-        if (items.isEmpty()) {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("Nenhum favorito ainda.\nFavorite filmes, séries ou canais.", color = HugoColors.TextMuted, fontSize = 14.sp)
+        val list = entries
+        when {
+            list == null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = HugoColors.Accent) }
+            list.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text(
+                    "Nenhum favorito nesta playlist.\nFavorite filmes, séries ou canais." + if (otherCount > 0) "\n($otherCount em outras playlists)" else "",
+                    color = HugoColors.TextMuted, fontSize = 14.sp, textAlign = TextAlign.Center,
+                )
             }
-        } else {
-            LazyVerticalGrid(
+            else -> LazyVerticalGrid(
                 columns = GridCells.Adaptive(120.dp),
                 contentPadding = PaddingValues(16.dp),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
-                items(items, key = { it.key }) { fav ->
-                    Box {
-                        // cartão focável com borda visível no controle remoto
-                        FocusSurface(
-                            onClick = { onOpen(fav) },
-                            modifier = Modifier.fillMaxWidth(),
-                            color = Color.Transparent,
-                            focusedColor = HugoColors.Accent.copy(alpha = 0.35f),
-                            focusScale = 1.05f,
-                            focusBorderWidth = 3.dp,
-                        ) { _ ->
-                            Column(Modifier.fillMaxWidth().padding(3.dp)) {
-                                Box(Modifier.fillMaxWidth().aspectRatio(2f / 3f).clip(RoundedCornerShape(10.dp)).background(HugoColors.Card)) {
-                                    fav.logo?.let { SubcomposeAsyncImage(model = it, contentDescription = fav.title, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize()) }
+                var firstAssigned = false
+                listOf("live" to "Canais", "movie" to "Filmes", "series" to "Séries").forEach { (kind, label) ->
+                    val group = list.filter { it.kind == kind }
+                    if (group.isEmpty()) return@forEach
+                    item(key = "h:$kind", span = { GridItemSpan(maxLineSpan) }) {
+                        Text("$label (${group.size})", color = HugoColors.Accent, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                    }
+                    group.forEachIndexed { i, e ->
+                        val isFirst = !firstAssigned && i == 0
+                        if (isFirst) firstAssigned = true
+                        item(key = e.fav.key) {
+                            var longPressed by remember { mutableStateOf(false) }
+                            FocusSurface(
+                                onClick = { onOpen(e, list.filter { it.kind == "live" }.mapNotNull { it.channel }) },
+                                onLongClick = { menuFor = e },
+                                modifier = Modifier.fillMaxWidth()
+                                    .then(if (isFirst) Modifier.focusRequester(firstFocus) else Modifier)
+                                    // controle: ≡ (MENU) ou segurar OK abre o menu (remover)
+                                    .onPreviewKeyEvent { ev ->
+                                        val code = ev.key.nativeKeyCode
+                                        val ok = code == android.view.KeyEvent.KEYCODE_DPAD_CENTER || code == android.view.KeyEvent.KEYCODE_ENTER
+                                        when {
+                                            ev.type == KeyEventType.KeyDown && code == android.view.KeyEvent.KEYCODE_MENU -> { menuFor = e; true }
+                                            ev.type == KeyEventType.KeyDown && ok && ev.nativeKeyEvent.repeatCount > 0 -> { if (!longPressed) { longPressed = true; menuFor = e }; true }
+                                            ev.type == KeyEventType.KeyUp && ok && longPressed -> { longPressed = false; true }
+                                            else -> false
+                                        }
+                                    },
+                                color = Color.Transparent,
+                                focusedColor = HugoColors.Accent.copy(alpha = 0.35f),
+                                focusScale = 1.05f,
+                                focusBorderWidth = 3.dp,
+                            ) { _ ->
+                                Column(Modifier.fillMaxWidth().padding(3.dp)) {
+                                    Box(
+                                        Modifier.fillMaxWidth().aspectRatio(if (kind == "live") 1f else 2f / 3f).clip(RoundedCornerShape(10.dp)).background(HugoColors.Card),
+                                        contentAlignment = Alignment.Center,
+                                    ) {
+                                        e.fav.logo?.let { SubcomposeAsyncImage(model = it, contentDescription = e.fav.title, contentScale = if (kind == "live") ContentScale.Fit else ContentScale.Crop, modifier = Modifier.fillMaxSize().padding(if (kind == "live") 12.dp else 0.dp)) }
+                                            ?: Text(e.fav.title.take(2).uppercase(), color = HugoColors.TextMuted, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                                    }
+                                    Text(e.fav.title, color = Color.White, fontSize = 11.sp, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 4.dp, start = 2.dp, end = 2.dp))
                                 }
-                                Text(fav.title, color = Color.White, fontSize = 11.sp, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 4.dp, start = 2.dp, end = 2.dp))
                             }
                         }
-                        IconButton(
-                            onClick = { WatchHistory.removeFavorite(context, fav.key); items = WatchHistory.listFavorites(context) },
-                            modifier = Modifier.align(Alignment.TopEnd).size(28.dp).offset(x = 4.dp, y = (-4).dp),
-                        ) {
-                            Icon(Icons.Default.Close, "Remover", tint = Color.White, modifier = Modifier.size(16.dp).background(Color(0xCC000000), RoundedCornerShape(50)))
-                        }
                     }
+                }
+                if (otherCount > 0) item(key = "others", span = { GridItemSpan(maxLineSpan) }) {
+                    Text("+ $otherCount favorito(s) em outras playlists — abra a playlist para vê-los.", color = HugoColors.TextDim, fontSize = 11.sp)
                 }
             }
         }
     }
+}
+
+@Composable
+private fun FavoriteMenu(title: String, onOpen: () -> Unit, onRemove: () -> Unit, onDismiss: () -> Unit) {
+    val first = remember { FocusRequester() }
+    androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
+        Column(Modifier.width(300.dp).background(HugoColors.Panel, RoundedCornerShape(16.dp)).padding(18.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(title, color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center)
+            Spacer(Modifier.height(14.dp))
+            listOf("Abrir" to onOpen, "Remover dos favoritos" to onRemove, "Cancelar" to onDismiss).forEachIndexed { i, (label, action) ->
+                FocusSurface(
+                    onClick = action,
+                    modifier = Modifier.fillMaxWidth().height(46.dp).padding(vertical = 3.dp).then(if (i == 0) Modifier.focusRequester(first) else Modifier),
+                    color = if (i == 1) Color(0x55EC4899) else HugoColors.CardAlt,
+                    focusedColor = if (i == 1) Color(0xFFEC4899) else HugoColors.Accent,
+                    focusBorderWidth = 3.dp,
+                    focusScale = 1.02f,
+                    shape = RoundedCornerShape(10.dp),
+                ) { _ -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text(label, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.SemiBold) } }
+            }
+        }
+    }
+    LaunchedEffect(Unit) { kotlinx.coroutines.delay(80); runCatching { first.requestFocus() } }
 }

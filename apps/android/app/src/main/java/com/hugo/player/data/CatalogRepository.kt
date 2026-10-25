@@ -119,9 +119,12 @@ class CatalogRepository(context: Context) {
         onFraction(null)
 
         // Xtream via VPS first (more organized). Local download only on 403.
-        val encoded = java.net.URLEncoder.encode(playlistUrl, "UTF-8")
-        val endpoint = "${HugoApi.baseUrl}/channels?url=$encoded&limit=80000"
+        // só o id da playlist + aparelho: o servidor usa o link guardado (sem usuário/senha na URL)
+        val identity = DeviceIdentity.get(appContext)
+        val endpoint = "${HugoApi.baseUrl}/channels?playlistId=${HugoApi.enc(playlistId)}&limit=80000"
         val conn = URL(endpoint).openConnection() as java.net.HttpURLConnection
+        conn.setRequestProperty("x-device-id", identity.deviceId)
+        conn.setRequestProperty("x-device-key", identity.deviceKey)
         conn.connectTimeout = 30000
         conn.readTimeout = 180000
 
@@ -143,7 +146,9 @@ class CatalogRepository(context: Context) {
             val is403 = apiErr == "upstream_403" || code == 403 ||
                 (apiErr?.startsWith("upstream_") == true && apiErr.contains("403"))
 
-            if (!is403 && apiErr != "empty_playlist" && code !in listOf(502, 504)) {
+            // servidor não achou a playlist deste aparelho: baixa direto no aparelho (sem mandar o link ao servidor)
+            val notOnServer = apiErr == "playlist_not_found" || apiErr == "invalid_credentials" || apiErr == "playlist_not_registered"
+            if (!is403 && !notOnServer && apiErr != "empty_playlist" && code !in listOf(502, 504)) {
                 throw Exception(
                     when {
                         apiErr == "timeout" || code == 504 -> "o servidor da lista demorou demais"
@@ -483,6 +488,12 @@ class CatalogRepository(context: Context) {
         val found = HashMap<String, ChannelEntity>()
         urls.distinct().chunked(500).forEach { chunk -> dao.liveByUrls(playlistId, chunk).forEach { found.putIfAbsent(it.url, it) } }
         urls.mapNotNull { found[it] }
+    }
+
+    /** Itens (qualquer tipo) pelas URLs — favoritos. */
+    suspend fun byUrls(playlistId: String, urls: List<String>): List<ChannelEntity> = withContext(Dispatchers.IO) {
+        if (urls.isEmpty()) return@withContext emptyList()
+        urls.distinct().chunked(500).flatMap { dao.byUrls(playlistId, it) }
     }
 
     /** Janela da lista ao vivo (mesma ordem da tela), para zapear no player. */

@@ -4,8 +4,44 @@ import { classifyEntry, parseEpisode } from "./content/classify.js";
 import { parseXtreamUrl, buildCatalogFromXtream, fetchSeriesInfo } from "./content/xtream.js";
 import { blockKey, isBlocked, markBlocked } from "./content/blocked-hosts.js";
 import { rememberChannels } from "./content/known-channels.js";
+import { isRegisteredUrl, noteDeprecated, playlistUrlFor, type StoredPlaylist } from "./playlist-access.js";
 
 export const channelsRouter = Router();
+
+/** Ligado pelo main.ts (sem isso — testes — as rotas ficam como antes). */
+export interface ChannelsAccess {
+  /** deviceId se id+key conferem */
+  authenticate(id?: string, key?: string): string | null;
+  playlists(): StoredPlaylist[];
+}
+let access: ChannelsAccess | null = null;
+export function setChannelsAccess(a: ChannelsAccess | null) {
+  access = a;
+}
+
+/**
+ * Resolve o link da playlist sem credenciais na URL:
+ *  - ?playlistId=... + x-device-id/x-device-key  -> link guardado no servidor (novo)
+ *  - ?url=... (apps antigos)                       -> só se for de uma playlist cadastrada (será removido)
+ */
+const sourceGate: import("express").RequestHandler = (req, res, next) => {
+  if (!access) return next();
+  const playlistId = String(req.query.playlistId || "");
+  if (playlistId) {
+    const deviceId = access.authenticate(req.header("x-device-id"), req.header("x-device-key"));
+    if (!deviceId) return res.status(401).json({ error: "invalid_credentials" });
+    const url = playlistUrlFor(deviceId, playlistId, access.playlists());
+    if (!url) return res.status(404).json({ error: "playlist_not_found" });
+    res.locals.playlistUrl = url;
+    return next();
+  }
+  const url = String(req.query.url || "");
+  if (!url) return next();
+  if (!isRegisteredUrl(url, access.playlists())) return res.status(403).json({ error: "playlist_not_registered" });
+  noteDeprecated(`GET /channels${req.path === "/" ? "" : req.path}`, url);
+  res.locals.playlistUrl = url;
+  next();
+};
 
 const playlistCache = new Map<string, { channels: any[]; categories: any[]; stats: any; timestamp: number }>();
 const CACHE_TTL = 10 * 60 * 1000;
@@ -16,8 +52,8 @@ const UPDATE_JSON_REMOTE =
   process.env.UPDATE_JSON_URL ||
   "https://raw.githubusercontent.com/StartStatic1/hugo-player/main/apps/backend/update.json";
 
-channelsRouter.get("/series-episodes", async (req, res) => {
-  const playlistUrl = req.query.url as string;
+channelsRouter.get("/series-episodes", sourceGate, async (req, res) => {
+  const playlistUrl = (res.locals.playlistUrl ?? req.query.url) as string;
   const seriesId = parseInt(req.query.seriesId as string);
   if (!playlistUrl || !seriesId) return res.status(400).json({ error: "missing_params" });
   const xt = parseXtreamUrl(playlistUrl);
@@ -133,8 +169,8 @@ channelsRouter.post("/from-m3u", async (req, res) => {
   }
 });
 
-channelsRouter.get("/", async (req, res) => {
-  const playlistUrl = req.query.url as string;
+channelsRouter.get("/", sourceGate, async (req, res) => {
+  const playlistUrl = (res.locals.playlistUrl ?? req.query.url) as string;
   const page = parseInt(String(req.query.page || "0"), 10) || 0;
   const rawLimit = parseInt(String(req.query.limit || "50"), 10) || 50;
   const limit = Math.min(Math.max(rawLimit, 1), 100_000);

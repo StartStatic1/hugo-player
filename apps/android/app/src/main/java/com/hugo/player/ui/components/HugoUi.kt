@@ -1,9 +1,12 @@
+@file:OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+
 package com.hugo.player.ui.components
 
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.*
@@ -61,6 +64,8 @@ fun FocusSurface(
     /** borda do foco (pôsteres usam mais grossa, para enxergar de longe na TV) */
     focusBorderWidth: Dp = 2.dp,
     focusBorderColor: Color = Color.White,
+    /** segurar (toque) — opcional */
+    onLongClick: (() -> Unit)? = null,
     content: @Composable BoxScope.(focused: Boolean) -> Unit,
 ) {
     val interaction = remember { MutableInteractionSource() }
@@ -79,7 +84,10 @@ fun FocusSurface(
             )
             .border(focusBorderWidth, if (focused) focusBorderColor else Color.Transparent, shape)
             .onFocusChanged { if (it.isFocused) onFocused?.invoke() }
-            .clickable(interactionSource = interaction, indication = null, onClick = onClick)
+            .then(
+                if (onLongClick != null) Modifier.combinedClickable(interactionSource = interaction, indication = null, onLongClick = onLongClick, onClick = onClick)
+                else Modifier.clickable(interactionSource = interaction, indication = null, onClick = onClick)
+            )
     ) {
         content(focused)
     }
