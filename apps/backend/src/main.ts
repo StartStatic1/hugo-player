@@ -9,6 +9,7 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import { tmdbRouter } from "./routes-tmdb.js";
 import { recoveryRouter } from "./routes-recovery.js";
+import { createTransferRouter } from "./routes-transfer.js";
 import { channelsRouter } from "./routes-channels.js";
 import { createPlaylistRouter, type StoredPlaylist } from "./routes-playlists.js";
 import { createEpgRouter } from "./routes-epg.js";
@@ -361,6 +362,16 @@ app.get("/devices/status", requireDevice, (req, res) => {
     lastSeenAt: device.lastSeenAt,
   });
 });
+
+// Transferir playlists do aparelho antigo para o novo (as duas Keys precisam conferir).
+app.use(
+  "/devices",
+  createTransferRouter({
+    playlists: () => db.playlists,
+    persist,
+    verify: (id, key) => authDevice(id, key)?.deviceId ?? null,
+  }),
+);
 
 app.use(
   "/playlists",
