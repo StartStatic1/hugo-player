@@ -8,6 +8,7 @@ import com.hugo.player.ui.LiveAttempt
 import com.hugo.player.ui.epgDisplayList
 import com.hugo.player.ui.playingFormat
 import com.hugo.player.ui.previewLayout
+import com.hugo.player.ui.headerChipsThatFit
 import com.hugo.player.ui.LiveFormat
 import com.hugo.player.ui.LiveFormatMemory
 import com.hugo.player.ui.isLiveFormatFailure
@@ -126,5 +127,12 @@ class LiveTvTest {
             assertTrue(l.videoWidth <= w)
         }
         assertTrue(previewLayout(250f, 400f).short)
+    }
+    @Test
+    fun headerChipsDropWhatDoesNotFit() {
+        val lens = listOf(10, 8, 10, 20)
+        assertEquals(4, headerChipsThatFit(700f, lens, compact = false))
+        assertEquals(1, headerChipsThatFit(140f, lens, compact = true))
+        assertEquals(0, headerChipsThatFit(40f, lens, compact = true))
     }
 }

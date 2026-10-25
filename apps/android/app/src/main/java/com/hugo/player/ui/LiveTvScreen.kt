@@ -17,7 +17,9 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.PlaylistPlay
 import androidx.compose.material.icons.filled.Apps
+import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.History
@@ -281,13 +283,15 @@ class LiveTvViewModel(app: Application) : AndroidViewModel(app) {
 
     fun cachedEpg(c: ChannelEntity): EpgNowNext? = epg[c.url] ?: LiveEpg.cached(playlistId, c)
 
+    fun playRequestTitle(): String = when (filter) {
+        LiveFilters.FAV -> "Favoritos"
+        LiveFilters.REC -> "Recentes"
+        LiveFilters.ALL -> "Todos"
+        else -> filter
+    }.let { if (query.isNotBlank()) "Busca: $query" else it }
+
     fun playRequest(c: ChannelEntity, index: Int): LivePlayRequest {
-        val title = when (filter) {
-            LiveFilters.FAV -> "Favoritos"
-            LiveFilters.REC -> "Recentes"
-            LiveFilters.ALL -> "Todos"
-            else -> filter
-        }.let { if (query.isNotBlank()) "Busca: $query" else it }
+        val title = playRequestTitle()
         return LivePlayRequest(
             source = LiveListSource(playlistId, if (query.isNotBlank()) LiveFilters.ALL else filter, query, title),
             channel = c,
@@ -371,7 +375,19 @@ fun LiveTvScreen(playlistId: String, onPlay: (LivePlayRequest) -> Unit, onBack: 
                 Text("TV ao Vivo", color = Color.White, fontSize = 19.sp, fontWeight = FontWeight.Bold)
                 Text(if (vm.loading) "Carregando..." else "${nf.format(vm.total)} canais", color = HugoColors.TextMuted, fontSize = 11.sp)
             }
-            Spacer(Modifier.weight(1f))
+            Spacer(Modifier.width(12.dp))
+            // faixa de informações (some o que não couber)
+            HeaderStats(
+                playlistName = LiveTvCache.playlistName?.takeIf { LiveTvCache.playlistId == playlistId },
+                total = vm.allCount,
+                categoryLabel = vm.playRequestTitle(),
+                categoryCount = vm.total,
+                loading = vm.loading,
+                nf = nf,
+                compact = shortScreen,
+                modifier = Modifier.weight(1f),
+            )
+            Spacer(Modifier.width(10.dp))
             Clock()
         }
 
@@ -444,6 +460,45 @@ fun LiveTvScreen(playlistId: String, onPlay: (LivePlayRequest) -> Unit, onBack: 
             )
         }
     }
+    }
+}
+
+/** Chips do topo: categoria atual, total da lista, data e nome da playlist, por prioridade conforme a largura. */
+@Composable
+private fun HeaderStats(
+    playlistName: String?, total: Int, categoryLabel: String, categoryCount: Int, loading: Boolean,
+    nf: NumberFormat, compact: Boolean, modifier: Modifier,
+) {
+    val today = remember { java.text.SimpleDateFormat("EEE, dd/MM", Locale("pt", "BR")).format(java.util.Date()).replaceFirstChar { it.uppercase() } }
+    BoxWithConstraints(modifier, contentAlignment = Alignment.CenterEnd) {
+        val items = buildList {
+            add(Triple(Icons.Default.Folder, categoryLabel, if (loading) "…" else nf.format(categoryCount)))
+            if (total > 0) add(Triple(Icons.Default.LiveTv, "Total", nf.format(total)))
+            add(Triple(Icons.Default.CalendarToday, today, null))
+            playlistName?.let { add(Triple(Icons.AutoMirrored.Filled.PlaylistPlay, it, null)) }
+        }
+        val fit = headerChipsThatFit(maxWidth.value, items.map { (_, label, value) -> label.length + (value?.length ?: 0) }, compact)
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+            // ordem na tela: playlist, data, total, categoria (a categoria, mais útil, fica sempre)
+            items.take(fit).asReversed().forEach { (icon, label, value) -> HeaderChip(icon, label, value, compact) }
+        }
+    }
+}
+
+@Composable
+private fun HeaderChip(icon: ImageVector, label: String, value: String?, compact: Boolean) {
+    Row(
+        Modifier.height(if (compact) 28.dp else 34.dp).background(HugoColors.Card, RoundedCornerShape(9.dp))
+            .border(1.dp, Color(0xFF2A3148), RoundedCornerShape(9.dp)).padding(horizontal = 9.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(icon, null, tint = HugoColors.Accent, modifier = Modifier.size(if (compact) 13.dp else 15.dp))
+        Spacer(Modifier.width(6.dp))
+        if (value != null) {
+            Text(value, color = Color.White, fontSize = if (compact) 12.sp else 13.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+            Spacer(Modifier.width(4.dp))
+        }
+        Text(label, color = HugoColors.TextMuted, fontSize = if (compact) 10.sp else 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.widthIn(max = 150.dp))
     }
 }
 

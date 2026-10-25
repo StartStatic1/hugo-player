@@ -179,3 +179,19 @@ fun previewLayout(widthDp: Float, heightDp: Float): PreviewLayout {
     val h = minOf(inner * 9f / 16f, heightDp * maxFrac).coerceAtLeast(60f)
     return PreviewLayout(videoWidth = minOf(inner, h * 16f / 9f), videoHeight = h, short = short)
 }
+
+/**
+ * Quantos chips do topo cabem (em ordem de prioridade) numa largura em dp.
+ * [textLens] = nº de caracteres de cada chip; estimativa ~6.5dp/char (7.2 na TV) + ícone e margens.
+ */
+fun headerChipsThatFit(widthDp: Float, textLens: List<Int>, compact: Boolean): Int {
+    val perChar = if (compact) 6.5f else 7.2f
+    var used = 0f
+    var n = 0
+    for (len in textLens) {
+        val w = 46f + minOf(len, 24) * perChar + 6f
+        if (used + w > widthDp) break
+        used += w; n++
+    }
+    return n
+}
