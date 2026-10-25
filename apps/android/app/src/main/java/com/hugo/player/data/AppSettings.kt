@@ -30,6 +30,11 @@ object AppSettings {
         get() = if (isReady) prefs.getString("liveFormat", "m3u8") ?: "m3u8" else "m3u8"
         set(v) { prefs.edit().putString("liveFormat", if (v == "ts") "ts" else "m3u8").apply() }
 
+    /** Modo de tela do player ao vivo ("fit", "fill", "zoom", "16:9", "4:3"); padrão Ajustar. */
+    var liveScreenMode: String
+        get() = if (isReady) prefs.getString("liveScreenMode", "fit") ?: "fit" else "fit"
+        set(v) { prefs.edit().putString("liveScreenMode", v).apply() }
+
     /** Abrir automaticamente a última playlist ao iniciar. */
     var autoOpenLastPlaylist: Boolean
         get() = if (isReady) prefs.getBoolean("autoOpenLast", true) else true

@@ -168,4 +168,29 @@ class LiveTvTest {
         assertTrue(!com.hugo.player.ui.liveArrowZaps(bannerVisible = false))
         assertTrue(com.hugo.player.ui.liveArrowZaps(bannerVisible = true))
     }
+
+    @Test
+    fun screenModesAreVisiblyDifferentOnTv() {
+        import_modes()
+    }
+
+    private fun import_modes() {
+        val m = com.hugo.player.ui.LiveScreenMode
+        fun r(mode: com.hugo.player.ui.LiveScreenMode, va: Float) = com.hugo.player.ui.liveVideoRect(mode, 960f, 540f, va)
+        val sd = 4f / 3f
+        // vídeo 4:3 numa TV 16:9
+        assertEquals(720f, r(com.hugo.player.ui.LiveScreenMode.FIT, sd).first, 0.5f)       // tarjas laterais
+        assertEquals(960f to 540f, r(com.hugo.player.ui.LiveScreenMode.FILL, sd))           // esticado
+        assertEquals(720f, r(com.hugo.player.ui.LiveScreenMode.ZOOM, sd).second, 0.5f)     // cobre e corta
+        assertEquals(960f, r(com.hugo.player.ui.LiveScreenMode.R16_9, sd).first, 0.5f)
+        assertEquals(720f, r(com.hugo.player.ui.LiveScreenMode.R4_3, 16f / 9f).first, 0.5f)
+        // vídeo 16:9 numa TV 16:9: Zoom ainda aproxima (corta tarjas embutidas)
+        assertEquals(960f, r(com.hugo.player.ui.LiveScreenMode.FIT, 16f / 9f).first, 0.5f)
+        assertTrue(r(com.hugo.player.ui.LiveScreenMode.ZOOM, 16f / 9f).first > 1100f)
+        // formato desconhecido = 16:9; padrão salvo inválido = Ajustar
+        assertEquals(com.hugo.player.ui.LiveScreenMode.FIT, m.from("xyz"))
+        assertEquals(com.hugo.player.ui.LiveScreenMode.R4_3, m.from("4:3"))
+        val odd = com.hugo.player.ui.liveVideoRect(com.hugo.player.ui.LiveScreenMode.FIT, Float.NaN, 0f, 0f)
+        assertTrue(odd.first > 0f && odd.second > 0f)
+    }
 }

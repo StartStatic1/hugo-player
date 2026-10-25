@@ -1,5 +1,6 @@
 package com.hugo.player.ui
 
+import com.hugo.player.data.AppSettings
 import com.hugo.player.ui.components.lazyFocusRestore
 import android.view.KeyEvent as AndroidKeyEvent
 import androidx.activity.compose.BackHandler
@@ -70,12 +71,6 @@ private const val STALL_BUFFERING_MS = 15_000L
 private const val STALL_FROZEN_MS = 12_000L
 
 
-@OptIn(UnstableApi::class)
-private val liveResizeModes = listOf(
-    AspectRatioFrameLayout.RESIZE_MODE_FIT to "Ajustar",
-    AspectRatioFrameLayout.RESIZE_MODE_FILL to "Esticar",
-    AspectRatioFrameLayout.RESIZE_MODE_ZOOM to "Zoom",
-)
 
 /**
  * Player só da TV ao vivo: CH+/- zapeia sempre; ▲▼ mostram a barra (se escondida) e depois zapeiam; número pelo controle, lista lateral (OK / ←),
@@ -103,7 +98,8 @@ fun LivePlayerScreen(request: LivePlayRequest, onBack: () -> Unit) {
     var attempt by remember { mutableIntStateOf(0) }
     val playUrl = attempts.getOrNull(attempt)?.url ?: current.url
     val forceHls = attempts.getOrNull(attempt)?.forceHls ?: false
-    var resizeIndex by remember { mutableIntStateOf(0) }
+    var screenMode by remember { mutableStateOf(LiveScreenMode.from(AppSettings.liveScreenMode)) }
+    var videoAspect by remember { mutableFloatStateOf(0f) }
     // formato que está TOCANDO de verdade (null até a primeira imagem)
     var playing by remember { mutableStateOf<String?>(null) }
     var loading by remember { mutableStateOf(true) }
@@ -242,7 +238,10 @@ fun LivePlayerScreen(request: LivePlayRequest, onBack: () -> Unit) {
                 if (state == Player.STATE_ENDED) reconnectTick++
             }
             override fun onIsPlayingChanged(playing: Boolean) { isPlaying = playing }
-            override fun onVideoSizeChanged(videoSize: VideoSize) { videoHeight = videoSize.height }
+            override fun onVideoSizeChanged(videoSize: VideoSize) {
+                videoHeight = videoSize.height
+                videoAspect = if (videoSize.width > 0 && videoSize.height > 0) videoSize.width * videoSize.pixelWidthHeightRatio / videoSize.height else 0f
+            }
         }
         exoPlayer.addListener(listener)
         onDispose { exoPlayer.removeListener(listener); exoPlayer.release() }
@@ -359,6 +358,10 @@ fun LivePlayerScreen(request: LivePlayRequest, onBack: () -> Unit) {
                 else if (showBanner) showBanner = false else bannerNow()
             }
     ) {
+        // tamanho do vídeo calculado aqui (o PlayerView só estica no espaço dado): em TV 16:9 com vídeo 16:9
+        // Ajustar/Esticar/Zoom do PlayerView ficavam iguais; agora cada modo tem efeito visível
+        BoxWithConstraints(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        val rect = liveVideoRect(screenMode, maxWidth.value, maxHeight.value, videoAspect)
         AndroidView(
             factory = {
                 PlayerView(it).apply {
@@ -370,9 +373,10 @@ fun LivePlayerScreen(request: LivePlayRequest, onBack: () -> Unit) {
                     setShutterBackgroundColor(android.graphics.Color.BLACK)
                 }
             },
-            update = { it.player = exoPlayer; it.resizeMode = liveResizeModes[resizeIndex].first },
-            modifier = Modifier.fillMaxSize(),
+            update = { it.player = exoPlayer; it.resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FILL },
+            modifier = Modifier.requiredSize(rect.first.dp, rect.second.dp),
         )
+        }
 
         if (loading && errorMsg == null) {
             Column(Modifier.align(Alignment.Center), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -479,7 +483,7 @@ fun LivePlayerScreen(request: LivePlayRequest, onBack: () -> Unit) {
                 )
                 Spacer(Modifier.height(8.dp))
                 Text("Tela", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold)
-                liveResizeModes.forEachIndexed { i, (_, label) -> PanelOption(label, selected = resizeIndex == i) { resizeIndex = i } }
+                LiveScreenMode.entries.forEach { m -> PanelOption(m.label, selected = screenMode == m) { screenMode = m; AppSettings.liveScreenMode = m.key } }
                 Spacer(Modifier.height(8.dp))
                 PanelOption("Recarregar canal", selected = false) { retryCount = 0; if (attempt == 0) reconnect() else attempt = 0; showSources = false }
                 Spacer(Modifier.height(16.dp))

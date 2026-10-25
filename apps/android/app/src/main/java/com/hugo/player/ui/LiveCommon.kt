@@ -224,3 +224,34 @@ fun liveDpadRight(keyCode: Int, isDown: Boolean): Boolean =
 
 /** Player ao vivo: ▲▼ trocam de canal só com a barra do canal visível (com ela escondida, o toque só a mostra). */
 fun liveArrowZaps(bannerVisible: Boolean): Boolean = bannerVisible
+
+/** Modos de tela do player ao vivo. */
+enum class LiveScreenMode(val key: String, val label: String) {
+    FIT("fit", "Ajustar"), FILL("fill", "Esticar"), ZOOM("zoom", "Zoom"), R16_9("16:9", "16:9"), R4_3("4:3", "4:3");
+    companion object { fun from(key: String?): LiveScreenMode = entries.firstOrNull { it.key == key } ?: FIT }
+}
+
+/**
+ * Tamanho (dp) da área do vídeo, centralizada na tela, para cada modo. [videoAspect] = largura/altura
+ * real do vídeo (0 = ainda não se sabe -> 16:9).
+ *  Ajustar: maior retângulo do formato do vídeo que cabe (tarjas pretas se preciso);
+ *  Esticar: tela toda (deforma); Zoom: cobre a tela cortando as bordas (se o vídeo já tem o formato
+ *  da tela, aproxima 20% para cortar tarjas embutidas); 16:9 / 4:3: força esse formato, centralizado.
+ */
+fun liveVideoRect(mode: LiveScreenMode, screenW: Float, screenH: Float, videoAspect: Float): Pair<Float, Float> {
+    val w = if (screenW.isFinite() && screenW > 0f) screenW else 960f
+    val h = if (screenH.isFinite() && screenH > 0f) screenH else 540f
+    val va = if (videoAspect.isFinite() && videoAspect > 0.2f && videoAspect < 5f) videoAspect else 16f / 9f
+    val sa = w / h
+    fun fit(a: Float) = if (a > sa) w to w / a else h * a to h
+    return when (mode) {
+        LiveScreenMode.FIT -> fit(va)
+        LiveScreenMode.FILL -> w to h
+        LiveScreenMode.ZOOM -> {
+            val cover = if (va > sa) h * va to h else w to w / va
+            if (kotlin.math.abs(va - sa) / sa < 0.03f) cover.first * 1.2f to cover.second * 1.2f else cover
+        }
+        LiveScreenMode.R16_9 -> fit(16f / 9f)
+        LiveScreenMode.R4_3 -> fit(4f / 3f)
+    }
+}
