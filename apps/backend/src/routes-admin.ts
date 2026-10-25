@@ -21,6 +21,9 @@ export interface AdminDevice {
   blockedReason?: string;
   revokedAt?: string;
   revokedReason?: string;
+  transferredTo?: string;
+  transferredFrom?: string;
+  transferredAt?: string;
 }
 
 export interface AdminDeps {
@@ -77,6 +80,9 @@ export function createAdminRouter(deps: AdminDeps): Router {
         blockedReason: d.blockedReason,
         revokedAt: d.revokedAt,
         revokedReason: d.revokedReason,
+        transferredTo: d.transferredTo,
+        transferredFrom: d.transferredFrom,
+        transferredAt: d.transferredAt,
       }));
     res.json({ devices });
   });

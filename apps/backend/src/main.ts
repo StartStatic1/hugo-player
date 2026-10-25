@@ -9,7 +9,7 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import { tmdbRouter } from "./routes-tmdb.js";
 import { recoveryRouter } from "./routes-recovery.js";
-import { createTransferRouter } from "./routes-transfer.js";
+import { createTransferRouter, type TransferRecord } from "./routes-transfer.js";
 import { channelsRouter } from "./routes-channels.js";
 import { createPlaylistRouter, type StoredPlaylist } from "./routes-playlists.js";
 import { createEpgRouter } from "./routes-epg.js";
@@ -46,12 +46,17 @@ interface Device {
   blockedReason?: string;
   revokedAt?: string;
   revokedReason?: string;
+  /** transferência de aparelho (licença + playlists) */
+  transferredTo?: string;
+  transferredFrom?: string;
+  transferredAt?: string;
 }
 
 interface Db {
   devices: Record<string, Device>;
   playlists: StoredPlaylist[];
   orders: PaymentOrder[];
+  transfers?: TransferRecord[];
 }
 
 type PaymentPlan = "annual" | "lifetime";
@@ -370,6 +375,21 @@ app.use(
     playlists: () => db.playlists,
     persist,
     verify: (id, key) => authDevice(id, key)?.deviceId ?? null,
+    licenses: {
+      get: (id) => findDevice(id)?.license,
+      set: (id, license) => {
+        const d = findDevice(id);
+        if (!d) return;
+        d.license = license;
+        if (license.type !== "expired") { delete d.revokedAt; delete d.revokedReason; }
+      },
+      record: (rec) => {
+        const f = findDevice(rec.from), t = findDevice(rec.to);
+        if (f) { f.transferredTo = rec.to; f.transferredAt = rec.at; }
+        if (t) { t.transferredFrom = rec.from; t.transferredAt = rec.at; }
+        db.transfers = [...(db.transfers ?? []), rec].slice(-500);
+      },
+    },
   }),
 );
 

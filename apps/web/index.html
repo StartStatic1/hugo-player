@@ -352,6 +352,7 @@ async function enterDashboard() {
   licenseActive = lic.active !== false && lic.type !== "expired";
   var label = lic.type === "premium"
     ? (lic.plan === "lifetime" ? "Premium Vitalício" : "Premium Anual")
+    : lic.paymentProvider === "transferred" ? "Transferida para outro aparelho"
     : ({ trial: "Teste", expired: "Trial expirado" }[lic.type] || lic.type);
   var until = lic.expiresAt ? " até " + new Date(lic.expiresAt).toLocaleDateString("pt-BR") : "";
   $("licBadge").className = "badge " + lic.type; $("licBadge").textContent = "Licença: " + label + until;
@@ -462,11 +463,11 @@ $("plList").addEventListener("click", async function(e) {
   });
 });
 
-// Transferir playlists do aparelho antigo (ID + Key) para o aparelho logado agora.
+// Transferir playlists E licença do aparelho antigo (ID + Key) para o aparelho logado agora.
 $("transferBtn").addEventListener("click", function() {
   openModal(
     "Transferir de outro aparelho",
-    "Reinstalou o app ou trocou de aparelho? Digite o Device ID e a Key do aparelho ANTIGO. As playlists dele (com link do EPG e PIN) passam para este aparelho (" + session.deviceId + "). O antigo fica sem playlists.",
+    "Reinstalou o app ou trocou de aparelho? Digite o Device ID e a Key do aparelho ANTIGO. As playlists dele (com link do EPG e PIN) e a LICENÇA passam para este aparelho (" + session.deviceId + "). Se este aparelho já tiver uma licença melhor, ela é mantida. O aparelho antigo fica sem playlists e sem licença (para de funcionar).",
     '<label>Device ID do aparelho antigo</label><input id="tFromId" class="mono" placeholder="A1:B2:C3:D4:E5:F6" maxlength="40" required>' +
     '<label>Device Key do aparelho antigo</label><input id="tFromKey" class="mono" placeholder="8 caracteres" maxlength="16" required>' +
     '<p class="desc" style="margin-top:8px">O ID e a Key antigos aparecem na tela de Playlists do app antigo, no e-mail/print que você guardou ou com o suporte. Depois, no app novo, toque em Atualizar.</p>',
@@ -475,8 +476,11 @@ $("transferBtn").addEventListener("click", function() {
       var fromKey = $("tFromKey").value.trim();
       if (!fromId || fromKey.length < 4) throw { error: "Preencha o Device ID e a Key do aparelho antigo." };
       var r = await api("POST", "/devices/transfer", { fromId: fromId, fromKey: fromKey, toId: session.deviceId, toKey: session.deviceKey });
-      toast(r.moved ? (r.moved + " playlist(s) transferida(s) para este aparelho.") : "O aparelho antigo não tinha playlists.", "ok");
-      await loadPlaylists();
+      var msg = (r.moved ? r.moved + " playlist(s)" : "Nenhuma playlist") +
+        (r.license === "moved" ? " e a licença transferidas para este aparelho." : r.license === "kept_new" ? " transferida(s); este aparelho manteve a licença dele (era melhor)." : " transferida(s).") +
+        " O aparelho antigo parou de funcionar. No app novo, toque em Atualizar.";
+      toast(msg, "ok");
+      await enterDashboard();
     }
   );
   $("mOk").textContent = "Transferir";
