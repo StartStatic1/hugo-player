@@ -285,16 +285,19 @@ fun PlaylistScreen(
     renameTarget?.let { pl ->
         val needsPin = pl.isProtected && PlaylistRepository.pinFor(pl.id) == null
         var name by remember(pl.id) { mutableStateOf(pl.name) }
+        var epg by remember(pl.id) { mutableStateOf(pl.epgUrl.orEmpty()) }
         var pin by remember(pl.id) { mutableStateOf("") }
         var err by remember(pl.id) { mutableStateOf<String?>(null) }
         var busy by remember(pl.id) { mutableStateOf(false) }
         AlertDialog(
             onDismissRequest = { if (!busy) renameTarget = null },
             containerColor = HugoColors.Card,
-            title = { Text("Renomear playlist", color = Color.White) },
+            title = { Text("Editar playlist", color = Color.White) },
             text = {
-                Column {
+                Column(Modifier.verticalScroll(rememberScrollState())) {
                     HugoTextField(name, { name = it }, "Nome")
+                    Spacer(Modifier.height(10.dp))
+                    EpgLinkField(epg, { epg = it.trim() }, keepHint = needsPin)
                     if (needsPin) { Spacer(Modifier.height(10.dp)); HugoTextField(pin, { pin = it.filter(Char::isDigit).take(8) }, "PIN", isPin = true) }
                     err?.let { Spacer(Modifier.height(8.dp)); Text(it, color = Color(0xFFF87171), fontSize = 13.sp) }
                 }
@@ -305,15 +308,21 @@ fun PlaylistScreen(
                     onClick = {
                         val n = name.trim()
                         if (n.isEmpty()) { err = "Digite um nome."; return@Button }
+                        if (!PlaylistRepository.isValidEpgUrl(epg)) { err = EPG_URL_ERROR; return@Button }
                         busy = true
                         scope.launch {
                             try {
-                                PlaylistRepository.rename(identity.deviceId, identity.deviceKey, pl.id, n, pin.takeIf { needsPin })
-                                playlists = playlists?.map { if (it.id == pl.id) it.copy(name = n) else it }
+                                // protegida e bloqueada: o link atual não aparece; vazio = manter
+                                val keepEpg = needsPin && epg.isBlank()
+                                if (keepEpg) PlaylistRepository.rename(identity.deviceId, identity.deviceKey, pl.id, n, pin.takeIf { needsPin })
+                                else PlaylistRepository.update(identity.deviceId, identity.deviceKey, pl.id, n, epg, pin.takeIf { needsPin })
+                                playlists = playlists?.map {
+                                    if (it.id != pl.id) it else if (keepEpg) it.copy(name = n) else it.copy(name = n, epgUrl = epg.ifBlank { null })
+                                }
                                 RecentPlaylists.rename(context, pl.id, n)
                                 if (LiveTvCache.playlistId == pl.id) { LiveTvCache.playlistName = n; LiveTvCache.save(context) }
                                 renameTarget = null
-                                toast = "Nome atualizado"
+                                toast = "Playlist atualizada"
                             } catch (e: Exception) { err = e.message; busy = false }
                         }
                     },
@@ -373,6 +382,7 @@ fun PlaylistScreen(
         var host by remember { mutableStateOf("") }
         var user by remember { mutableStateOf("") }
         var pass by remember { mutableStateOf("") }
+        var epg by remember { mutableStateOf("") }
         var err by remember { mutableStateOf<String?>(null) }
         var busy by remember { mutableStateOf(false) }
         AlertDialog(
@@ -402,6 +412,8 @@ fun PlaylistScreen(
                     } else {
                         HugoTextField(url, { url = it.trim() }, "URL M3U", keyboardType = KeyboardType.Uri)
                     }
+                    Spacer(Modifier.height(10.dp))
+                    EpgLinkField(epg, { epg = it.trim() })
                     err?.let { Spacer(Modifier.height(8.dp)); Text(it, color = Color(0xFFF87171), fontSize = 13.sp) }
                     Spacer(Modifier.height(8.dp))
                 }
@@ -416,10 +428,11 @@ fun PlaylistScreen(
                             "$h/get.php?username=$user&password=$pass&type=m3u_plus&output=ts"
                         } else url
                         if (name.isBlank() || finalUrl.length < 8) { err = "Preencha os campos."; return@Button }
+                        if (!PlaylistRepository.isValidEpgUrl(epg)) { err = EPG_URL_ERROR; return@Button }
                         busy = true
                         scope.launch {
                             try {
-                                PlaylistRepository.add(identity.deviceId, identity.deviceKey, name.trim(), finalUrl)
+                                PlaylistRepository.add(identity.deviceId, identity.deviceKey, name.trim(), finalUrl, epg)
                                 showAdd = false
                                 toast = "Playlist adicionada"
                                 reload()
@@ -432,6 +445,20 @@ fun PlaylistScreen(
             dismissButton = { TextButton(onClick = { showAdd = false }, enabled = !busy) { Text("Cancelar", color = HugoColors.TextMuted) } }
         )
     }
+}
+
+private const val EPG_URL_ERROR = "O link do EPG deve começar com http:// ou https://"
+
+/** Link opcional do guia (XMLTV .xml ou .xml.gz); vazio = automático. */
+@Composable
+private fun EpgLinkField(value: String, onChange: (String) -> Unit, keepHint: Boolean = false) {
+    HugoTextField(value, onChange, "Link do EPG (XMLTV) — opcional", keyboardType = KeyboardType.Uri)
+    Spacer(Modifier.height(4.dp))
+    Text(
+        if (keepHint) "Deixe vazio para manter o link atual. Aceita .xml e .xml.gz."
+        else "Ex: http://servidor.com/epg.xml.gz — vazio usa o EPG do próprio servidor (Xtream).",
+        color = HugoColors.TextMuted, fontSize = 11.sp,
+    )
 }
 
 /** Marca a playlist como atual e abre a Home. */
@@ -514,7 +541,7 @@ private fun PlaylistCard(
                 )
                 Spacer(Modifier.weight(1f))
                 HugoIconButton(Icons.Default.Sync, "Recarregar conteúdo", onClick = onRefresh)
-                HugoIconButton(Icons.Default.Edit, "Editar nome", onClick = onRename)
+                HugoIconButton(Icons.Default.Edit, "Editar nome e EPG", onClick = onRename)
                 HugoIconButton(Icons.Default.Delete, "Excluir", onClick = onDelete, tint = Color(0xFFF87171))
             }
         }

@@ -1,0 +1,35 @@
+name: Debug APK (teste, sem publicar)
+
+# Só gera um APK de DEBUG como artefato para teste. Não cria release,
+# não mexe no update.json e não roda na main (a main publica pelo build-apk.yml).
+on:
+  push:
+    branches-ignore: [main]
+    paths:
+      - "apps/android/**"
+      - ".github/workflows/debug-apk.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  debug:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          java-version: "17"
+          distribution: "temurin"
+      - uses: gradle/actions/setup-gradle@v3
+      - name: Testes + APK debug
+        working-directory: apps/android
+        run: |
+          chmod +x gradlew
+          ./gradlew testDebugUnitTest assembleDebug --no-daemon
+      - uses: actions/upload-artifact@v4
+        with:
+          name: hugo-player-debug-${{ github.ref_name }}-${{ github.sha }}
+          path: apps/android/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 30

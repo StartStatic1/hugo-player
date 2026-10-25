@@ -114,7 +114,8 @@ fun AppNavigation() {
         }
         composable("live/{playlistId}") { backStack ->
             val playlistId = backStack.arguments?.getString("playlistId") ?: ""
-            BrowseScreen(playlistId, BrowseType.LIVE, onPlay = { url, title -> nav.openPlayer(PlaybackRequest(url = url, title = title, subtitle = "TV ao Vivo", isLive = true, playlistId = playlistId)) }, onOpenSeries = {}, onOpenMovie = {}, onBack = { nav.popBackStack() })
+            // TV ao vivo sempre no formato novo (o layout se ajusta à largura: TV, tablet ou celular deitado)
+            LiveTvScreen(playlistId, onPlay = { req -> LiveSession.current = req; nav.navigate("livePlay") }, onBack = { nav.popBackStack() })
         }
         composable("movies/{playlistId}") { backStack ->
             val playlistId = backStack.arguments?.getString("playlistId") ?: ""
@@ -141,6 +142,11 @@ fun AppNavigation() {
                 onOpen = { fav -> nav.openMovie(ChannelEntity(name = fav.title, url = fav.url, logo = fav.logo, group = "", type = "movie", playlistId = fav.playlistId)) },
                 onBack = { nav.popBackStack() },
             )
+        }
+        composable("livePlay") {
+            val req = remember { LiveSession.current }
+            if (req != null) LivePlayerScreen(req, onBack = { nav.popBackStack() })
+            else LaunchedEffect(Unit) { nav.popBackStack() }
         }
         composable("play") {
             val req = remember { PlaybackSession.current }
