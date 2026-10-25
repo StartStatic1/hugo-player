@@ -106,9 +106,9 @@ fun PlayerScreen(request: PlaybackRequest, onBack: () -> Unit) {
     var showTracks by remember { mutableStateOf(false) }
     var audioOpts by remember { mutableStateOf<List<TrackOption>>(emptyList()) }
     var textOpts by remember { mutableStateOf<List<TrackOption>>(emptyList()) }
-    val progressKey = remember(current.url, current.playlistId) {
-        WatchHistory.contentKey(current.playlistId ?: "_", current.url)
-    }
+    /** "Próximo episódio em N s" (null = sem contagem). */
+    var nextCountdown by remember { mutableStateOf<Int?>(null) }
+    val nextFocus = remember { FocusRequester() }
 
     val rootFocus = remember { FocusRequester() }
     val playFocus = remember { FocusRequester() }
@@ -127,7 +127,7 @@ fun PlayerScreen(request: PlaybackRequest, onBack: () -> Unit) {
         loading = true
         exoPlayer.setMediaItem(HugoPlayerFactory.mediaItem(current.url, forceHls))
         exoPlayer.prepare()
-        val resumeAt = if (current.isLive != true) WatchHistory.getProgress(context, progressKey) else 0L
+        val resumeAt = if (current.isLive != true) WatchHistory.getProgress(context, progressKeyFor(current)) else 0L
         if (resumeAt > 15_000) exoPlayer.seekTo(resumeAt)
         exoPlayer.playWhenReady = true
     }
@@ -164,11 +164,11 @@ fun PlayerScreen(request: PlaybackRequest, onBack: () -> Unit) {
                     retryCount = 0
                     isLive = exoPlayer.isCurrentMediaItemLive || (current.isLive ?: false)
                 }
-                if (state == Player.STATE_ENDED && queue.isNotEmpty()) {
-                    val next = queue.first()
-                    queue = queue.drop(1)
-                    forceHls = false
-                    current = next
+                if (state == Player.STATE_ENDED && current.isLive != true) {
+                    // terminou: marca assistido e, se tem próximo, conta 10 s (dá para cancelar)
+                    WatchHistory.markWatched(context, progressKeyFor(current))
+                    WatchHistory.removeProgress(context, progressKeyFor(current))
+                    if (queue.isNotEmpty()) { showControls = false; nextCountdown = NEXT_COUNTDOWN_S }
                 }
             }
 
@@ -184,14 +184,7 @@ fun PlayerScreen(request: PlaybackRequest, onBack: () -> Unit) {
         }
         exoPlayer.addListener(listener)
         onDispose {
-            val pos = exoPlayer.currentPosition
-            val dur = exoPlayer.duration
-            if (current.isLive != true && pos > 15_000) {
-                WatchHistory.saveProgress(
-                    context, progressKey, current.title, current.url, pos,
-                    if (dur > 0) dur else 0L, current.playlistId ?: "", logo = current.logo
-                )
-            }
+            saveProgressOf(context, current, exoPlayer.currentPosition, exoPlayer.duration, exoPlayer.playbackState == Player.STATE_ENDED)
             exoPlayer.removeListener(listener)
             exoPlayer.release()
         }
@@ -238,13 +231,40 @@ fun PlayerScreen(request: PlaybackRequest, onBack: () -> Unit) {
         }
     }
 
-    LaunchedEffect(showControls, errorMsg) {
+    LaunchedEffect(showControls, errorMsg, nextCountdown != null) {
         delay(50)
-        runCatching { if (showControls) playFocus.requestFocus() else rootFocus.requestFocus() }
+        runCatching {
+            when {
+                nextCountdown != null -> nextFocus.requestFocus()
+                showControls -> playFocus.requestFocus()
+                else -> rootFocus.requestFocus()
+            }
+        }
+    }
+
+    /** Vai para o próximo da fila, guardando onde parou no atual. */
+    fun goNext() {
+        val next = queue.firstOrNull() ?: return
+        saveProgressOf(context, current, exoPlayer.currentPosition, exoPlayer.duration, exoPlayer.playbackState == Player.STATE_ENDED)
+        nextCountdown = null
+        queue = queue.drop(1)
+        forceHls = false
+        current = next
+    }
+
+    LaunchedEffect(nextCountdown) {
+        val n = nextCountdown ?: return@LaunchedEffect
+        if (n <= 0) { goNext(); return@LaunchedEffect }
+        delay(1_000)
+        if (nextCountdown == n) nextCountdown = n - 1
     }
 
     BackHandler {
-        if (showControls && errorMsg == null) showControls = false else onBack()
+        when {
+            nextCountdown != null -> { nextCountdown = null; touch() }
+            showControls && errorMsg == null -> showControls = false
+            else -> onBack()
+        }
     }
 
     val canSeek = !isLive && durationMs != C.TIME_UNSET && durationMs > 0
@@ -289,7 +309,8 @@ fun PlayerScreen(request: PlaybackRequest, onBack: () -> Unit) {
                     AndroidKeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> { seekBy(30_000); true }
                     AndroidKeyEvent.KEYCODE_MEDIA_REWIND -> { seekBy(-30_000); true }
                     AndroidKeyEvent.KEYCODE_BACK -> false
-                    else -> {
+                    // contagem do próximo episódio na tela: as setas/OK vão para os botões dela
+                    else -> if (nextCountdown != null) false else {
                         if (!showControls && errorMsg == null) {
                             when (ev.key.nativeKeyCode) {
                                 AndroidKeyEvent.KEYCODE_DPAD_LEFT -> if (canSeek) seekBy(-10_000) else touch()
@@ -443,11 +464,8 @@ fun PlayerScreen(request: PlaybackRequest, onBack: () -> Unit) {
                         }
                         if (queue.isNotEmpty()) {
                             Spacer(Modifier.width(16.dp))
-                            ControlButton(Icons.Default.SkipNext, "Próximo: ${queue.first().title}") {
-                                val next = queue.first()
-                                queue = queue.drop(1)
-                                forceHls = false
-                                current = next
+                            ControlButton(Icons.Default.SkipNext, "Próximo: ${queue.first().subtitle ?: queue.first().title}") {
+                                goNext()
                                 touch()
                             }
                         }
@@ -461,6 +479,17 @@ fun PlayerScreen(request: PlaybackRequest, onBack: () -> Unit) {
                     )
                 }
             }
+        }
+
+        nextCountdown?.let { n ->
+            NextEpisodeCard(
+                seconds = n,
+                next = queue.firstOrNull(),
+                playFocus = nextFocus,
+                onPlayNow = { goNext() },
+                onCancel = { nextCountdown = null; touch() },
+                modifier = Modifier.align(Alignment.BottomEnd).padding(28.dp),
+            )
         }
 
         if (showTracks) {
@@ -477,6 +506,59 @@ fun PlayerScreen(request: PlaybackRequest, onBack: () -> Unit) {
                 onDismiss = { showTracks = false },
             )
         }
+    }
+}
+
+private const val NEXT_COUNTDOWN_S = 10
+
+internal fun progressKeyFor(r: PlaybackRequest): String = WatchHistory.contentKey(r.playlistId ?: "_", r.url)
+
+/** Guarda o ponto (ou marca assistido) do item que está saindo da tela. */
+private fun saveProgressOf(context: Context, r: PlaybackRequest, pos: Long, dur: Long, ended: Boolean) {
+    if (r.isLive == true) return
+    val key = progressKeyFor(r)
+    if (ended) { WatchHistory.markWatched(context, key); WatchHistory.removeProgress(context, key); return }
+    if (pos > 15_000) {
+        WatchHistory.saveProgress(context, key, r.title, r.url, pos, if (dur > 0) dur else 0L, r.playlistId ?: "", logo = r.logo, subtitle = r.subtitle)
+    }
+}
+
+@Composable
+private fun NextEpisodeCard(
+    seconds: Int,
+    next: PlaybackRequest?,
+    playFocus: FocusRequester,
+    onPlayNow: () -> Unit,
+    onCancel: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier.widthIn(max = 380.dp).background(Color(0xEE0F172A), RoundedCornerShape(14.dp)).padding(18.dp)
+    ) {
+        Text("Próximo episódio em $seconds s", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+        next?.let { Text(it.subtitle ?: it.title, color = Color(0xFFCBD5E1), fontSize = 13.sp, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 4.dp)) }
+        Spacer(Modifier.height(14.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            CountdownButton("Assistir agora", primary = true, modifier = Modifier.focusRequester(playFocus), onClick = onPlayNow)
+            CountdownButton("Cancelar", primary = false, onClick = onCancel)
+        }
+    }
+}
+
+@Composable
+private fun CountdownButton(label: String, primary: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    val interaction = remember { MutableInteractionSource() }
+    val focused by interaction.collectIsFocusedAsState()
+    Box(
+        modifier
+            .height(42.dp)
+            .background(if (focused) Accent else if (primary) Color(0x668B5CF6) else Color(0x33FFFFFF), RoundedCornerShape(10.dp))
+            .border(if (focused) 2.dp else 0.dp, Color.White, RoundedCornerShape(10.dp))
+            .clickable(interactionSource = interaction, indication = null, onClick = onClick)
+            .padding(horizontal = 16.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(label, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
     }
 }
 

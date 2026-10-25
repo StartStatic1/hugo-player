@@ -105,7 +105,7 @@ fun AppNavigation() {
                         route.startsWith("continue:") -> {
                             val key = route.removePrefix("continue:")
                             val item = WatchHistory.listContinue(context).find { it.key == key }
-                            if (item != null) nav.openPlayer(PlaybackRequest(url = item.url, title = item.title, playlistId = item.playlistId, logo = item.logo))
+                            if (item != null) nav.openPlayer(PlaybackRequest(url = item.url, title = item.title, subtitle = item.subtitle, isLive = false, playlistId = item.playlistId, logo = item.logo))
                         }
                         route.startsWith("recent:") -> nav.goToPlaylists("open=${enc(route.removePrefix("recent:"))}&refresh=")
                         else -> nav.navigate(route)

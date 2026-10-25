@@ -123,13 +123,23 @@ fun HomeScreen(playlistId: String, playlistName: String, onNavigate: (String) ->
                 items(continueItems, key = { it.key }) { item ->
                     FocusSurface(
                         onClick = { onNavigate("continue:${item.key}") },
-                        modifier = Modifier.width(180.dp).height(78.dp),
+                        modifier = Modifier.width(240.dp).height(84.dp),
                         shape = RoundedCornerShape(12.dp),
+                        focusBorderWidth = 3.dp,
                     ) { _ ->
-                        Column(Modifier.fillMaxSize().padding(10.dp), verticalArrangement = Arrangement.SpaceBetween) {
-                            Text(item.title, color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Medium, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                            Box(Modifier.fillMaxWidth().height(3.dp).clip(RoundedCornerShape(2.dp)).background(Color(0x33FFFFFF))) {
-                                Box(Modifier.fillMaxWidth(item.fraction).fillMaxHeight().background(HugoColors.Accent))
+                        Row(Modifier.fillMaxSize()) {
+                            // pôster do filme/série
+                            Box(Modifier.width(56.dp).fillMaxHeight().background(Color(0xFF0F1220))) {
+                                if (!item.logo.isNullOrBlank()) coil.compose.SubcomposeAsyncImage(model = item.logo, contentDescription = null, contentScale = androidx.compose.ui.layout.ContentScale.Crop, modifier = Modifier.fillMaxSize())
+                            }
+                            Column(Modifier.weight(1f).fillMaxHeight().padding(horizontal = 10.dp, vertical = 8.dp), verticalArrangement = Arrangement.SpaceBetween) {
+                                Column {
+                                    Text(item.title, color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Medium, maxLines = if (item.subtitle != null) 1 else 2, overflow = TextOverflow.Ellipsis)
+                                    item.subtitle?.let { Text(it, color = HugoColors.TextMuted, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+                                }
+                                Box(Modifier.fillMaxWidth().height(3.dp).clip(RoundedCornerShape(2.dp)).background(Color(0x33FFFFFF))) {
+                                    Box(Modifier.fillMaxWidth(item.fraction).fillMaxHeight().background(HugoColors.Accent))
+                                }
                             }
                         }
                     }

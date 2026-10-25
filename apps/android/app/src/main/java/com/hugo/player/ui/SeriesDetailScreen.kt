@@ -13,6 +13,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.PlayArrow
@@ -113,7 +114,8 @@ fun SeriesDetailScreen(
                 meta = metaOut
                 episodes = list
             } catch (ex: Exception) {
-                errorMsg = "Erro: ${ex.javaClass.simpleName}: ${ex.message}"
+                errorMsg = "Não deu para carregar os episódios do servidor" + (if (local.size > 1) " — mostrando os salvos." else ".") +
+                    " (" + (ex.message?.substringBefore(':')?.take(40) ?: ex.javaClass.simpleName) + ")"
                 episodes = local
             }
         } else episodes = local
@@ -126,11 +128,23 @@ fun SeriesDetailScreen(
     val poster = info?.poster ?: episodes?.firstOrNull { !it.logo.isNullOrBlank() }?.logo
     val seasonEps = selectedSeason?.let { bySeason[it] }.orEmpty()
 
+    // assistidos / progresso parcial — relê ao voltar do player
+    val lifecycleOwner = androidx.compose.ui.platform.LocalLifecycleOwner.current
+    var resumeTick by remember { mutableIntStateOf(0) }
+    DisposableEffect(lifecycleOwner) {
+        val obs = androidx.lifecycle.LifecycleEventObserver { _, e -> if (e == androidx.lifecycle.Lifecycle.Event.ON_RESUME) resumeTick++ }
+        lifecycleOwner.lifecycle.addObserver(obs)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(obs) }
+    }
+    val watched = remember(resumeTick) { WatchHistory.watchedKeys(context) }
+    val partial = remember(resumeTick) { WatchHistory.progressFractions(context) }
+
     fun play(ep: ChannelEntity) {
         val ordered = bySeason.values.flatten()
         val idx = ordered.indexOf(ep)
-        val queue = ordered.drop(idx + 1).take(50).map { PlaybackRequest(url = it.url, title = seriesName, subtitle = epLabel(it), isLive = false) }
-        onPlay(PlaybackRequest(url = ep.url, title = seriesName, subtitle = epLabel(ep), isLive = false, queue = queue))
+        // playlistId + pôster também nos próximos episódios (senão somem do "Continuar assistindo")
+        val queue = ordered.drop(idx + 1).take(50).map { PlaybackRequest(url = it.url, title = seriesName, subtitle = epLabel(it), isLive = false, playlistId = playlistId, logo = poster) }
+        onPlay(PlaybackRequest(url = ep.url, title = seriesName, subtitle = epLabel(ep), isLive = false, queue = queue, playlistId = playlistId, logo = poster))
     }
 
     Box(Modifier.fillMaxSize().background(HugoColors.Background)) {
@@ -156,7 +170,9 @@ fun SeriesDetailScreen(
                 Spacer(Modifier.height(10.dp))
                 // ações: Assistir (1º episódio da temporada escolhida) + Favoritar lado a lado
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    val first = selectedSeason?.let { bySeason[it] }?.firstOrNull()
+                    // continua do primeiro episódio ainda não assistido da temporada
+                    val seasonList = selectedSeason?.let { bySeason[it] }.orEmpty()
+                    val first = seasonList.firstOrNull { WatchHistory.contentKey(playlistId, it.url) !in watched } ?: seasonList.firstOrNull()
                     val playSrc = remember { MutableInteractionSource() }
                     val favSrc = remember { MutableInteractionSource() }
                     val playFocused by playSrc.collectIsFocusedAsState()
@@ -188,6 +204,7 @@ fun SeriesDetailScreen(
                         Text(if (isFav) "Favorito" else "Favoritar", fontSize = 13.sp)
                     }
                 }
+                errorMsg?.let { Text(it, color = Color(0xFFFCA5A5), fontSize = 12.sp, modifier = Modifier.padding(bottom = 8.dp)) }
                 Spacer(Modifier.height(10.dp))
 
                 if (episodes == null) { Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = SeriesAccent) }; return@Column }
@@ -208,6 +225,9 @@ fun SeriesDetailScreen(
                 LazyColumn(state = listState, verticalArrangement = Arrangement.spacedBy(6.dp), contentPadding = PaddingValues(bottom = 24.dp)) {
                     itemsIndexed(seasonEps, key = { i, it -> "${it.id}-$i" }) { index, ep ->
                         val m = meta[ep.url]
+                        val epKey = WatchHistory.contentKey(playlistId, ep.url)
+                        val isWatched = epKey in watched
+                        val frac = partial[epKey]
                         val title = episodeTitle(ep)
                         val header = listOfNotNull(ep.episode?.let { "Episódio $it" } ?: "Episódio ${index + 1}", formatEpisodeDuration(m?.durationSecs)).joinToString(" · ")
                         FocusSurface(onClick = { play(ep) }, focusScale = 1.01f, focusBorderWidth = 3.dp, shape = RoundedCornerShape(10.dp), modifier = Modifier.fillMaxWidth().heightIn(min = 72.dp).then(if (index == 0) Modifier.focusRequester(firstEpisodeFocus) else Modifier)) { focused ->
@@ -216,10 +236,16 @@ fun SeriesDetailScreen(
                                     val thumb = ep.logo?.takeIf { it.isNotBlank() } ?: poster
                                     if (!thumb.isNullOrBlank()) SubcomposeAsyncImage(model = thumb, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
                                     Icon(Icons.Default.PlayCircle, null, tint = Color.White.copy(alpha = if (focused) 1f else 0.7f), modifier = Modifier.size(22.dp))
+                                    if (isWatched) Box(Modifier.align(Alignment.TopEnd).padding(3.dp).size(18.dp).background(Color(0xFF16A34A), RoundedCornerShape(50)), contentAlignment = Alignment.Center) {
+                                        Icon(Icons.Default.Check, "Assistido", tint = Color.White, modifier = Modifier.size(13.dp))
+                                    }
+                                    if (frac != null && !isWatched) Box(Modifier.align(Alignment.BottomStart).fillMaxWidth().height(4.dp).background(Color(0x66000000))) {
+                                        Box(Modifier.fillMaxWidth(frac).fillMaxHeight().background(SeriesAccent))
+                                    }
                                 }
                                 Spacer(Modifier.width(12.dp))
                                 Column(Modifier.weight(1f)) {
-                                    Text(header, color = if (focused) SeriesAccent else HugoColors.TextMuted, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                                    Text(header + when { isWatched -> " · Assistido"; frac != null -> " · ${(frac * 100).toInt()}%"; else -> "" }, color = if (focused) SeriesAccent else HugoColors.TextMuted, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
                                     if (title.isNotBlank()) Text(title, color = Color.White, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                     m?.plot?.let { Text(it, color = HugoColors.TextMuted, fontSize = 11.sp, maxLines = 2, overflow = TextOverflow.Ellipsis) }
                                     if (title.isBlank() && m?.plot == null) Text(seriesName, color = Color.White, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
