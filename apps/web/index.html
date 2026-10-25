@@ -166,7 +166,10 @@ button:disabled { opacity: .55; cursor: not-allowed; }
         <h1>Minhas playlists</h1>
         <p class="desc" style="margin:0" id="dashSub">Tudo o que você mudar aqui aparece no app ao atualizar a lista.</p>
       </div>
-      <button class="btn ghost sm" id="refreshBtn" type="button">↻ Atualizar</button>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn ghost sm" id="transferBtn" type="button">⇄ Transferir de outro aparelho</button>
+        <button class="btn ghost sm" id="refreshBtn" type="button">↻ Atualizar</button>
+      </div>
     </div>
     <section class="card" id="plansCard">
       <h2>Ative o Hugo Player</h2>
@@ -242,7 +245,11 @@ const ERRORS = {
   too_many_pin_attempts: "Muitas tentativas. Aguarde um minuto.",
   playlist_not_found: "Playlist não encontrada.",
   invalid_url: "URL inválida.",
-  validation_error: "Verifique os campos preenchidos."
+  validation_error: "Verifique os campos preenchidos.",
+  invalid_old_device: "Device ID ou Key do aparelho ANTIGO incorretos.",
+  invalid_new_device: "Este aparelho (novo) não foi validado. Entre de novo.",
+  same_device: "O aparelho antigo é o mesmo em que você está logado.",
+  too_many_attempts: "Muitas tentativas erradas. Aguarde 15 minutos."
 };
 let session = null;
 let playlists = [];
@@ -455,7 +462,28 @@ $("plList").addEventListener("click", async function(e) {
   });
 });
 
+// Transferir playlists do aparelho antigo (ID + Key) para o aparelho logado agora.
+$("transferBtn").addEventListener("click", function() {
+  openModal(
+    "Transferir de outro aparelho",
+    "Reinstalou o app ou trocou de aparelho? Digite o Device ID e a Key do aparelho ANTIGO. As playlists dele (com link do EPG e PIN) passam para este aparelho (" + session.deviceId + "). O antigo fica sem playlists.",
+    '<label>Device ID do aparelho antigo</label><input id="tFromId" class="mono" placeholder="A1:B2:C3:D4:E5:F6" maxlength="40" required>' +
+    '<label>Device Key do aparelho antigo</label><input id="tFromKey" class="mono" placeholder="8 caracteres" maxlength="16" required>' +
+    '<p class="desc" style="margin-top:8px">O ID e a Key antigos aparecem na tela de Playlists do app antigo, no e-mail/print que você guardou ou com o suporte. Depois, no app novo, toque em Atualizar.</p>',
+    async function() {
+      var fromId = $("tFromId").value.trim().toUpperCase();
+      var fromKey = $("tFromKey").value.trim();
+      if (!fromId || fromKey.length < 4) throw { error: "Preencha o Device ID e a Key do aparelho antigo." };
+      var r = await api("POST", "/devices/transfer", { fromId: fromId, fromKey: fromKey, toId: session.deviceId, toKey: session.deviceKey });
+      toast(r.moved ? (r.moved + " playlist(s) transferida(s) para este aparelho.") : "O aparelho antigo não tinha playlists.", "ok");
+      await loadPlaylists();
+    }
+  );
+  $("mOk").textContent = "Transferir";
+});
+
 function openModal(title, desc, body, onOk) {
+  $("mOk").textContent = "OK";
   $("mTitle").textContent = title;
   $("mDesc").textContent = desc;
   $("mBody").innerHTML = body || "";
