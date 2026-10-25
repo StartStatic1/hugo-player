@@ -35,11 +35,19 @@ object PlaylistRepository {
         url = o.optString("url", "").takeIf { it.isNotBlank() && it != "null" },
         updatedAt = o.optString("updatedAt", "").takeIf { it.isNotBlank() },
         epgUrl = o.optString("epgUrl", "").takeIf { it.isNotBlank() && it != "null" },
-    ).also { p -> if (!p.isProtected || p.url != null) epgLinks[p.id] = p.epgUrl }
+    ).also { p -> if (!p.isProtected || p.url != null) rememberEpgLink(p.id, p.epgUrl) }
 
-    /** Último link de EPG conhecido por playlist (para o EPG baixado no aparelho). */
-    private val epgLinks = java.util.concurrent.ConcurrentHashMap<String, String?>()
+    /**
+     * Último link de EPG conhecido por playlist (para o EPG baixado no aparelho).
+     * ConcurrentHashMap não aceita valor null: sem link = remove a chave
+     * (guardar null derrubava a lista de playlists com NullPointerException).
+     */
+    private val epgLinks = java.util.concurrent.ConcurrentHashMap<String, String>()
     fun epgUrlFor(playlistId: String): String? = epgLinks[playlistId]
+    internal fun rememberEpgLink(playlistId: String, epgUrl: String?) {
+        val v = epgUrl?.trim()?.takeIf { it.isNotEmpty() }
+        if (v == null) epgLinks.remove(playlistId) else epgLinks[playlistId] = v
+    }
 
     /** Aceita vazio (= automático) ou http(s)://host... */
     fun isValidEpgUrl(s: String): Boolean {
@@ -71,7 +79,7 @@ object PlaylistRepository {
         val body = JSONObject().put("name", name).put("epgUrl", epgUrl.trim())
         HugoApi.patch("/playlists/${HugoApi.enc(playlistId)}", body.toString(), deviceId, deviceKey, pinHeader(playlistId, pin))
         pin?.let { rememberPin(playlistId, it) }
-        epgLinks[playlistId] = epgUrl.trim().takeIf { it.isNotEmpty() }
+        rememberEpgLink(playlistId, epgUrl)
         com.hugo.player.data.epg.LiveEpg.invalidate(playlistId)
     }
 
