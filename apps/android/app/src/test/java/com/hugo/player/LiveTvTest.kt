@@ -117,17 +117,23 @@ class LiveTvTest {
     }
 
     @Test
-    fun previewLeavesRoomForEpgOnShortScreens() {
-        // celular deitado (~400dp de coluna) e TV (~470dp): vídeo + cartão deixam >= 40% para a programação
-        for ((w, h, card) in listOf(Triple(250f, 400f, 76f), Triple(300f, 400f, 76f), Triple(360f, 470f, 120f))) {
+    fun previewFillsColumnWidthAndKeepsEpgRows() {
+        // celular deitado (~340-400dp de coluna) e TV (~480dp)
+        for ((w, h) in listOf(260f to 340f, 320f to 343f, 320f to 400f, 320f to 482f, 380f to 600f)) {
             val l = previewLayout(w, h)
-            val pads = if (l.short) 24f else 36f
-            val epg = h - l.videoHeight - card - pads
-            assertTrue("w=$w h=$h epg=$epg", epg >= 0.38f * h)
-            assertTrue(l.videoWidth <= w)
+            val inner = w - 2 * l.pad
+            val epg = h - l.boxHeight - l.cardHeight - 3 * l.pad
+            assertTrue("w=$w h=$h epg=$epg", epg >= (if (l.short) 3 * 44f else 3 * 56f) - 0.5f)
+            // vídeo sempre 16:9 e nunca esticado; corte <= 22% da altura
+            assertEquals(16f / 9f, l.videoWidth / l.videoHeight, 0.01f)
+            assertTrue(l.boxHeight >= l.videoHeight * 0.78f - 0.5f)
+            assertTrue(l.boxWidth <= inner + 0.5f)
         }
-        assertTrue(previewLayout(250f, 400f).short)
+        // nos tamanhos comuns a prévia ocupa a largura toda (sem faixas vazias dos lados)
+        assertEquals(304f, previewLayout(320f, 343f).boxWidth, 0.5f)
+        assertEquals(296f, previewLayout(320f, 482f).boxWidth, 0.5f)
     }
+
     @Test
     fun headerChipsDropWhatDoesNotFit() {
         val lens = listOf(10, 8, 10, 20)

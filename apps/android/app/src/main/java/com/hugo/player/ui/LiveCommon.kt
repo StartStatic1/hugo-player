@@ -168,16 +168,35 @@ fun epgDisplayList(guide: List<EpgProgram>, fallback: List<EpgProgram>, now: Lon
     return if (base.isNotEmpty()) base else clean(fallback)
 }
 
-/** Tamanho da prévia na 3ª coluna: em tela baixa encolhe para a programação ter pelo menos ~40% da altura. */
-data class PreviewLayout(val videoWidth: Float, val videoHeight: Float, val short: Boolean)
+/**
+ * Prévia da 3ª coluna: caixa na largura toda da coluna; a altura é limitada para a programação ficar
+ * com pelo menos ~3 linhas (ou ~38% da altura). O vídeo é sempre 16:9 ([videoWidth] x [videoHeight]);
+ * se a caixa for mais baixa, corta no máximo ~11% em cima e embaixo. Só se nem assim couber, a caixa estreita.
+ */
+data class PreviewLayout(
+    val boxWidth: Float, val boxHeight: Float,
+    val videoWidth: Float, val videoHeight: Float,
+    val cardHeight: Float, val pad: Float, val short: Boolean,
+)
 
 fun previewLayout(widthDp: Float, heightDp: Float): PreviewLayout {
     val short = heightDp < 440f
-    val inner = (widthDp - if (short) 16f else 24f).coerceAtLeast(80f)
-    // fração máxima da altura para o vídeo; o cartão do canal ocupa ~ 90dp (baixa) / 130dp (TV)
-    val maxFrac = if (short) 0.30f else 0.28f
-    val h = minOf(inner * 9f / 16f, heightDp * maxFrac).coerceAtLeast(60f)
-    return PreviewLayout(videoWidth = minOf(inner, h * 16f / 9f), videoHeight = h, short = short)
+    val pad = if (short) 8f else 12f
+    val card = if (short) 40f else 48f
+    val inner = (widthDp - 2 * pad).coerceAtLeast(80f)
+    val full = inner * 9f / 16f
+    val epgMin = maxOf(if (short) 3 * 44f else 3 * 56f, heightDp * 0.38f)
+    val cap = (heightDp - 3 * pad - card - epgMin).coerceAtLeast(60f)
+    val minCrop = full * 0.78f
+    return when {
+        cap >= full -> PreviewLayout(inner, full, inner, full, card, pad, short)
+        cap >= minCrop -> PreviewLayout(inner, cap, inner, full, card, pad, short)
+        else -> {
+            val vh = cap / 0.78f
+            val vw = vh * 16f / 9f
+            PreviewLayout(vw, cap, vw, vh, card, pad, short)
+        }
+    }
 }
 
 /**

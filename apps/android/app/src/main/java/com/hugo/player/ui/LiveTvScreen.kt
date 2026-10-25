@@ -6,6 +6,10 @@ import android.view.TextureView
 import androidx.annotation.OptIn
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.material3.IconButton
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
@@ -358,7 +362,7 @@ fun LiveTvScreen(playlistId: String, onPlay: (LivePlayRequest) -> Unit, onBack: 
     val shortScreen = maxHeight < 480.dp
     val showPreview = w >= 600.dp
     val catWidth = when { w >= 1000.dp -> 210.dp; w >= 840.dp -> 190.dp; w >= 600.dp -> 160.dp; else -> 130.dp }
-    val previewWidth = when { w >= 1000.dp -> 360.dp; w >= 840.dp -> 300.dp; else -> 250.dp }
+    val previewWidth = when { w >= 1000.dp -> 380.dp; w >= 840.dp -> 320.dp; else -> 260.dp }
     Column(Modifier.fillMaxSize()) {
         // ---------- topo ----------
         Row(
@@ -608,29 +612,47 @@ private fun PreviewPanel(
     val c = vm.focused
     var videoHeight by remember { mutableIntStateOf(0) }
     var playing by remember { mutableStateOf<String?>(null) }
-    // topo FIXO (prévia + cartão do canal); só a programação embaixo rola
+    // topo FIXO (prévia larga + cartão compacto); só a programação embaixo rola
     BoxWithConstraints(modifier.background(HugoColors.Panel)) {
     val layout = previewLayout(maxWidth.value, maxHeight.value)
     val short = layout.short
-    val pad = if (compact || short) 8.dp else 12.dp
+    val pad = layout.pad.dp
     Column(Modifier.fillMaxSize().padding(pad)) {
+        // prévia: ocupa a largura da coluna; tocar (ou OK com foco nela) abre em tela cheia
+        val previewSrc = remember { MutableInteractionSource() }
+        val previewFocused by previewSrc.collectIsFocusedAsState()
         Box(
-            Modifier.align(Alignment.CenterHorizontally).width(layout.videoWidth.dp).height(layout.videoHeight.dp)
-                .clip(RoundedCornerShape(12.dp)).background(Color.Black),
+            Modifier.align(Alignment.CenterHorizontally).width(layout.boxWidth.dp).height(layout.boxHeight.dp)
+                .clip(RoundedCornerShape(12.dp)).background(Color.Black)
+                .border(2.dp, if (previewFocused) Color.White else Color.Transparent, RoundedCornerShape(12.dp))
+                .clickable(interactionSource = previewSrc, indication = null, enabled = c != null) { onWatch() },
             contentAlignment = Alignment.Center,
         ) {
             if (previewAllowed && c != null) {
-                LivePreview(c.url, playerHolder, onVideoHeight = { videoHeight = it }, onPlaying = { playing = it })
+                // vídeo sempre 16:9; se a caixa for mais baixa, corta um pouco em cima/embaixo (sem esticar)
+                Box(Modifier.requiredSize(layout.videoWidth.dp, layout.videoHeight.dp)) {
+                    LivePreview(c.url, playerHolder, onVideoHeight = { videoHeight = it }, onPlaying = { playing = it })
+                }
                 Row(
-                    Modifier.align(Alignment.BottomStart).padding(8.dp).background(Color(0xFF000000), RoundedCornerShape(6.dp)).padding(horizontal = 6.dp, vertical = 2.dp),
+                    Modifier.align(Alignment.BottomStart).padding(8.dp).background(Color(0xCC000000), RoundedCornerShape(6.dp)).padding(horizontal = 6.dp, vertical = 2.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Icon(Icons.Default.VolumeOff, null, tint = HugoColors.TextMuted, modifier = Modifier.size(12.dp))
                     Spacer(Modifier.width(4.dp))
                     Text("Prévia", color = HugoColors.TextMuted, fontSize = 10.sp)
                 }
+                if (previewFocused) {
+                    Row(
+                        Modifier.align(Alignment.BottomEnd).padding(8.dp).background(HugoColors.Accent, RoundedCornerShape(6.dp)).padding(horizontal = 8.dp, vertical = 3.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(Icons.Default.PlayArrow, null, tint = Color.White, modifier = Modifier.size(13.dp))
+                        Spacer(Modifier.width(3.dp))
+                        Text("OK tela cheia", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
             } else if (c != null) {
-                ChannelLogo(c.logo, c.name, size = if (compact) 72.dp else 110.dp)
+                ChannelLogo(c.logo, c.name, size = if (compact) 64.dp else 96.dp)
             } else {
                 Icon(Icons.Default.LiveTv, null, tint = HugoColors.TextDim, modifier = Modifier.size(48.dp))
             }
@@ -641,25 +663,23 @@ private fun PreviewPanel(
             Text("Escolha um canal", color = HugoColors.TextMuted)
             return@Column
         }
-        // cartão do canal
+        // cartão compacto: número, nome, selos e estrela numa linha
         val chips = qualityChips(c, videoHeight, playing)
-        Column(Modifier.fillMaxWidth().background(HugoColors.Card, RoundedCornerShape(12.dp)).padding(if (compact || short) 8.dp else 10.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("${vm.focusedIndex + 1}", color = HugoColors.Accent, fontSize = if (short) 13.sp else 15.sp, fontWeight = FontWeight.Bold)
-                Spacer(Modifier.width(8.dp))
-                Text(c.name, color = Color.White, fontSize = if (compact || short) 13.sp else 16.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-                // tela baixa: selos na mesma linha do nome
-                if (short) chips.take(2).forEach { Spacer(Modifier.width(4.dp)); Chip(it) }
+        val fav = vm.favorites[c.url] == true
+        Row(
+            Modifier.fillMaxWidth().height(layout.cardHeight.dp).background(HugoColors.Card, RoundedCornerShape(10.dp)).padding(start = 10.dp, end = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text("${vm.focusedIndex + 1}", color = HugoColors.Accent, fontSize = if (short) 13.sp else 15.sp, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.width(8.dp))
+            Text(c.name, color = Color.White, fontSize = if (compact || short) 13.sp else 15.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+            chips.take(3).forEach { Spacer(Modifier.width(4.dp)); Chip(it) }
+            IconButton(onClick = { vm.toggleFavorite(c) }, modifier = Modifier.size(if (short) 30.dp else 36.dp)) {
+                Icon(
+                    if (fav) Icons.Default.Star else Icons.Default.StarBorder, if (fav) "Remover dos favoritos" else "Favoritar",
+                    tint = if (fav) Color(0xFFFACC15) else HugoColors.TextMuted, modifier = Modifier.size(if (short) 18.dp else 20.dp),
+                )
             }
-            if (!short) {
-                Spacer(Modifier.height(5.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    chips.forEach { Chip(it) }
-                    if (c.group.isNotBlank() && !compact) Chip(c.group, muted = true)
-                }
-            }
-            Spacer(Modifier.height(if (compact || short) 6.dp else 8.dp))
-            WatchButtons(vm, c, onWatch, height = if (short) 34.dp else 44.dp)
         }
         Spacer(Modifier.height(pad))
 
@@ -721,31 +741,6 @@ private fun EpgCard(p: EpgProgram, live: Boolean, compact: Boolean) {
             }
         }
     }
-}
-
-@Composable
-private fun WatchButtons(vm: LiveTvViewModel, c: ChannelEntity, onWatch: () -> Unit, height: androidx.compose.ui.unit.Dp = 44.dp) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Button(
-                onClick = onWatch,
-                colors = ButtonDefaults.buttonColors(containerColor = HugoColors.Accent),
-                shape = RoundedCornerShape(10.dp),
-                modifier = Modifier.weight(1f).height(height),
-            ) {
-                Icon(Icons.Default.PlayArrow, null)
-                Spacer(Modifier.width(6.dp))
-                Text("OK assistir", fontWeight = FontWeight.Bold, fontSize = if (height < 40.dp) 13.sp else 14.sp)
-            }
-            Spacer(Modifier.width(8.dp))
-            val fav = vm.favorites[c.url] == true
-            OutlinedButton(
-                onClick = { vm.toggleFavorite(c) },
-                shape = RoundedCornerShape(10.dp),
-                modifier = Modifier.height(height),
-            ) {
-                Icon(if (fav) Icons.Default.Star else Icons.Default.StarBorder, if (fav) "Remover dos favoritos" else "Favoritar", tint = if (fav) Color(0xFFFACC15) else Color.White)
-            }
-        }
 }
 
 @Composable
