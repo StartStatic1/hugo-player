@@ -263,7 +263,7 @@ class LiveTvViewModel(app: Application) : AndroidViewModel(app) {
         guideJob = viewModelScope.launch {
             delay(350)
             LiveEpg.nowNext(ctx, playlistId, listOf(c))[c.url]?.let { epg[c.url] = it }
-            guide = LiveEpg.guide(ctx, playlistId, c, limit = 6)
+            guide = LiveEpg.guide(ctx, playlistId, c, limit = 16)
         }
     }
 
@@ -371,26 +371,8 @@ fun LiveTvScreen(playlistId: String, onPlay: (LivePlayRequest) -> Unit, onBack: 
                 Text("TV ao Vivo", color = Color.White, fontSize = 19.sp, fontWeight = FontWeight.Bold)
                 Text(if (vm.loading) "Carregando..." else "${nf.format(vm.total)} canais", color = HugoColors.TextMuted, fontSize = 11.sp)
             }
-            Spacer(Modifier.width(20.dp))
-            OutlinedTextField(
-                value = vm.query,
-                onValueChange = vm::updateQuery,
-                placeholder = { Text("Buscar canal", color = HugoColors.TextDim, fontSize = 14.sp) },
-                leadingIcon = { Icon(Icons.Default.Search, null, tint = HugoColors.TextMuted) },
-                trailingIcon = { if (vm.query.isNotEmpty()) IconButton(onClick = { vm.updateQuery("") }) { Icon(Icons.Default.Clear, "Limpar busca", tint = HugoColors.TextMuted) } },
-                singleLine = true,
-                textStyle = LocalTextStyle.current.copy(fontSize = 14.sp),
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                keyboardActions = KeyboardActions(onSearch = { focusManager.clearFocus(); runCatching { focusTarget.requestFocus() } }),
-                shape = RoundedCornerShape(12.dp),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedTextColor = Color.White, unfocusedTextColor = Color.White,
-                    focusedBorderColor = HugoColors.Accent, unfocusedBorderColor = Color(0xFF2A3148),
-                    focusedContainerColor = Color(0xFF0C0E18), unfocusedContainerColor = Color(0xFF0C0E18), cursorColor = HugoColors.Accent,
-                ),
-                modifier = Modifier.weight(1f).heightIn(min = 48.dp),
-            )
-            if (w >= 700.dp) { Spacer(Modifier.width(16.dp)); Clock() }
+            Spacer(Modifier.weight(1f))
+            Clock()
         }
 
         Row(Modifier.fillMaxSize()) {
@@ -558,6 +540,7 @@ private fun LiveChannelRow(
 }
 
 @OptIn(UnstableApi::class)
+@kotlin.OptIn(ExperimentalComposeUiApi::class)
 @Composable
 private fun PreviewPanel(
     vm: LiveTvViewModel,
@@ -569,10 +552,9 @@ private fun PreviewPanel(
 ) {
     val c = vm.focused
     var videoHeight by remember { mutableIntStateOf(0) }
-    // compacto (celular deitado): rolável e com o botão logo abaixo do nome
-    val col = if (compact) modifier.background(HugoColors.Panel).verticalScroll(rememberScrollState()).padding(10.dp)
-    else modifier.background(HugoColors.Panel).padding(14.dp)
-    Column(col) {
+    val pad = if (compact) 8.dp else 12.dp
+    // topo FIXO (prévia + cartão do canal); só a programação embaixo rola
+    Column(modifier.background(HugoColors.Panel).padding(pad)) {
         Box(
             Modifier.fillMaxWidth().aspectRatio(16f / 9f).clip(RoundedCornerShape(12.dp)).background(Color.Black),
             contentAlignment = Alignment.Center,
@@ -588,62 +570,92 @@ private fun PreviewPanel(
                     Text("Prévia", color = HugoColors.TextMuted, fontSize = 10.sp)
                 }
             } else if (c != null) {
-                ChannelLogo(c.logo, c.name, size = 110.dp)
+                ChannelLogo(c.logo, c.name, size = if (compact) 72.dp else 110.dp)
             } else {
                 Icon(Icons.Default.LiveTv, null, tint = HugoColors.TextDim, modifier = Modifier.size(48.dp))
             }
         }
         LaunchedEffect(c?.url) { videoHeight = 0 }
-        Spacer(Modifier.height(if (compact) 8.dp else 12.dp))
+        Spacer(Modifier.height(pad))
         if (c == null) {
             Text("Escolha um canal", color = HugoColors.TextMuted)
             return@Column
         }
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                "${vm.focusedIndex + 1}", color = HugoColors.Accent, fontSize = 15.sp, fontWeight = FontWeight.Bold,
-            )
-            Spacer(Modifier.width(8.dp))
-            Text(c.name, color = Color.White, fontSize = if (compact) 15.sp else 17.sp, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+        // cartão do canal
+        Column(Modifier.fillMaxWidth().background(HugoColors.Card, RoundedCornerShape(12.dp)).padding(if (compact) 8.dp else 10.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("${vm.focusedIndex + 1}", color = HugoColors.Accent, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.width(8.dp))
+                Text(c.name, color = Color.White, fontSize = if (compact) 14.sp else 16.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+            }
+            Spacer(Modifier.height(5.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                qualityChips(c, videoHeight).forEach { Chip(it) }
+                if (c.group.isNotBlank() && !compact) Chip(c.group, muted = true)
+            }
+            Spacer(Modifier.height(if (compact) 6.dp else 8.dp))
+            WatchButtons(vm, c, onWatch)
         }
-        if (compact) { Spacer(Modifier.height(6.dp)); WatchButtons(vm, c, onWatch) }
-        Spacer(Modifier.height(6.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            qualityChips(c, videoHeight).forEach { Chip(it) }
-            if (c.group.isNotBlank()) Chip(c.group, muted = true)
-        }
-        Spacer(Modifier.height(12.dp))
+        Spacer(Modifier.height(pad))
 
+        // programação: lista própria que rola sozinha (toque ou setas), sem mexer no topo
+        val now = System.currentTimeMillis()
         val nn = vm.cachedEpg(c)
-        val guide = vm.guide.filter { it.stop > System.currentTimeMillis() }
-        Column(if (compact) Modifier else Modifier.weight(1f)) {
-            if (nn?.now == null && nn?.next == null && guide.isEmpty()) {
-                Text("Sem programação (EPG) para este canal.", color = HugoColors.TextDim, fontSize = 12.sp)
-            } else {
-                val now = nn?.now ?: guide.firstOrNull { it.isLive() }
-                val next = nn?.next ?: guide.firstOrNull { it.start > System.currentTimeMillis() }
-                now?.let { p ->
-                    EpgLine("AGORA", p, highlight = true)
-                    Spacer(Modifier.height(4.dp))
-                    LinearProgressIndicator(progress = { p.progress() }, color = HugoColors.Accent, trackColor = Color(0xFF2A3148), modifier = Modifier.fillMaxWidth().height(3.dp))
-                    p.desc?.let { Spacer(Modifier.height(6.dp)); Text(it, color = HugoColors.TextMuted, fontSize = 11.sp, maxLines = 3, overflow = TextOverflow.Ellipsis) }
-                    Spacer(Modifier.height(10.dp))
-                }
-                next?.let { EpgLine("A SEGUIR", it, highlight = false); Spacer(Modifier.height(8.dp)) }
-                val later = guide.filter { g -> g.start > (next?.start ?: now?.start ?: 0L) }.take(if (compact) 2 else 4)
-                if (later.isNotEmpty()) {
-                    HorizontalDivider(color = Color(0xFF232842))
-                    Spacer(Modifier.height(6.dp))
-                    later.forEach { p ->
-                        Row(Modifier.padding(vertical = 2.dp)) {
-                            Text(formatHm(p.start), color = HugoColors.TextMuted, fontSize = 11.sp, modifier = Modifier.width(44.dp))
-                            Text(p.title, color = Color(0xFFCBD5E1), fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        }
-                    }
+        val programs = remember(vm.guide, nn) {
+            val base = vm.guide.filter { it.stop > now }
+            if (base.isNotEmpty()) base else listOfNotNull(nn?.now, nn?.next).filter { it.stop > now }
+        }
+        if (programs.isEmpty()) {
+            Text("Sem programação (EPG) para este canal.", color = HugoColors.TextDim, fontSize = 12.sp)
+        } else {
+            val epgState = rememberLazyListState()
+            LaunchedEffect(c.url) { epgState.scrollToItem(0) }
+            LazyColumn(
+                state = epgState,
+                modifier = Modifier.weight(1f).fillMaxWidth().focusRestorer(),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                itemsIndexed(programs, key = { _, p -> p.start }) { _, p ->
+                    EpgCard(p, live = p.isLive(now), compact = compact)
                 }
             }
         }
-        if (!compact) WatchButtons(vm, c, onWatch)
+    }
+}
+
+@Composable
+private fun EpgCard(p: EpgProgram, live: Boolean, compact: Boolean) {
+    // focável: no controle as setas descem pela programação (a lista rola, o topo fica)
+    FocusSurface(
+        onClick = {},
+        color = if (live) Color(0xFF1F2A4A) else HugoColors.Card,
+        focusedColor = Color(0xFF2A2350),
+        focusScale = 1.0f,
+        shape = RoundedCornerShape(10.dp),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = if (compact) 6.dp else 8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (live) {
+                    Text(
+                        "AGORA", color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.Bold,
+                        modifier = Modifier.background(HugoColors.Pink, RoundedCornerShape(4.dp)).padding(horizontal = 5.dp, vertical = 1.dp),
+                    )
+                    Spacer(Modifier.width(6.dp))
+                }
+                Text("${formatHm(p.start)} – ${formatHm(p.stop)}", color = if (live) Color(0xFFFACC15) else HugoColors.TextMuted, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.width(8.dp))
+                Text(p.title, color = Color.White, fontSize = if (compact) 12.sp else 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+            }
+            if (live) {
+                Spacer(Modifier.height(4.dp))
+                LinearProgressIndicator(progress = { p.progress() }, color = HugoColors.Accent, trackColor = Color(0xFF2A3148), modifier = Modifier.fillMaxWidth().height(3.dp))
+            }
+            p.desc?.let {
+                Spacer(Modifier.height(3.dp))
+                Text(it, color = HugoColors.TextMuted, fontSize = 11.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            }
+        }
     }
 }
 
@@ -670,20 +682,6 @@ private fun WatchButtons(vm: LiveTvViewModel, c: ChannelEntity, onWatch: () -> U
                 Icon(if (fav) Icons.Default.Star else Icons.Default.StarBorder, if (fav) "Remover dos favoritos" else "Favoritar", tint = if (fav) Color(0xFFFACC15) else Color.White)
             }
         }
-}
-
-@Composable
-private fun EpgLine(label: String, p: EpgProgram, highlight: Boolean) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Text(
-            label, color = if (highlight) Color.White else HugoColors.TextMuted, fontSize = 10.sp, fontWeight = FontWeight.Bold,
-            modifier = Modifier.background(if (highlight) HugoColors.Pink else Color(0xFF232842), RoundedCornerShape(4.dp)).padding(horizontal = 6.dp, vertical = 2.dp),
-        )
-        Spacer(Modifier.width(8.dp))
-        Text("${formatHm(p.start)} – ${formatHm(p.stop)}", color = HugoColors.TextMuted, fontSize = 11.sp)
-    }
-    Spacer(Modifier.height(3.dp))
-    Text(p.title, color = Color.White, fontSize = if (highlight) 15.sp else 13.sp, fontWeight = if (highlight) FontWeight.SemiBold else FontWeight.Normal, maxLines = 2, overflow = TextOverflow.Ellipsis)
 }
 
 @Composable
