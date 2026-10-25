@@ -385,7 +385,7 @@ fun LiveTvScreen(playlistId: String, onPlay: (LivePlayRequest) -> Unit, onBack: 
                 item(key = LiveFilters.FAV) { LiveCategoryRow(Icons.Default.Star, "Favoritos", vm.favCount, vm.filter == LiveFilters.FAV && vm.query.isBlank(), { vm.focusFilter(LiveFilters.FAV) }) { vm.selectFilter(LiveFilters.FAV) } }
                 item(key = LiveFilters.REC) { LiveCategoryRow(Icons.Default.History, "Recentes", vm.recCount, vm.filter == LiveFilters.REC && vm.query.isBlank(), { vm.focusFilter(LiveFilters.REC) }) { vm.selectFilter(LiveFilters.REC) } }
                 item(key = LiveFilters.ALL) { LiveCategoryRow(Icons.Default.Apps, "Todos", vm.allCount, vm.filter == LiveFilters.ALL && vm.query.isBlank(), { vm.focusFilter(LiveFilters.ALL) }) { vm.selectFilter(LiveFilters.ALL) } }
-                itemsIndexed(vm.categories, key = { _, c -> "g:" + c.name }) { _, cat ->
+                itemsIndexed(vm.categories, key = { i, c -> "g:$i:" + c.name }) { _, cat ->
                     LiveCategoryRow(Icons.Default.Folder, cat.name, cat.count, vm.filter == cat.name && vm.query.isBlank(), { vm.focusFilter(cat.name) }) { vm.selectFilter(cat.name) }
                 }
             }
@@ -601,10 +601,7 @@ private fun PreviewPanel(
         // programação: lista própria que rola sozinha (toque ou setas), sem mexer no topo
         val now = System.currentTimeMillis()
         val nn = vm.cachedEpg(c)
-        val programs = remember(vm.guide, nn) {
-            val base = vm.guide.filter { it.stop > now }
-            if (base.isNotEmpty()) base else listOfNotNull(nn?.now, nn?.next).filter { it.stop > now }
-        }
+        val programs = remember(vm.guide, nn) { epgDisplayList(vm.guide, listOfNotNull(nn?.now, nn?.next), now) }
         if (programs.isEmpty()) {
             Text("Sem programação (EPG) para este canal.", color = HugoColors.TextDim, fontSize = 12.sp)
         } else {
@@ -612,10 +609,11 @@ private fun PreviewPanel(
             LaunchedEffect(c.url) { epgState.scrollToItem(0) }
             LazyColumn(
                 state = epgState,
-                modifier = Modifier.weight(1f).fillMaxWidth().focusRestorer(),
+                modifier = Modifier.weight(1f).fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                itemsIndexed(programs, key = { _, p -> p.start }) { _, p ->
+                // chave por posição: EPG de painel às vezes repete o mesmo horário (chave duplicada derrubava o app)
+                itemsIndexed(programs, key = { i, p -> "$i:${p.start}" }) { _, p ->
                     EpgCard(p, live = p.isLive(now), compact = compact)
                 }
             }

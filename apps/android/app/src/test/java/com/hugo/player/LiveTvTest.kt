@@ -3,7 +3,9 @@ package com.hugo.player
 import com.hugo.player.data.db.ChannelEntity
 import com.hugo.player.data.epg.LiveEpg
 import androidx.media3.common.PlaybackException
+import com.hugo.player.data.epg.EpgProgram
 import com.hugo.player.ui.LiveAttempt
+import com.hugo.player.ui.epgDisplayList
 import com.hugo.player.ui.LiveFormat
 import com.hugo.player.ui.LiveFormatMemory
 import com.hugo.player.ui.isLiveFormatFailure
@@ -81,5 +83,24 @@ class LiveTvTest {
         // sem extensão: detecta pelo conteúdo, depois HLS
         assertEquals(listOf(LiveAttempt("http://h/u/p/4", false), LiveAttempt("http://h/u/p/4", true)), liveAttempts("http://h/u/p/4"))
         LiveFormatMemory.clear()
+    }
+
+    @Test
+    fun epgListDropsDuplicateStartsAndEndedShows() {
+        val now = 1_000L
+        val guide = listOf(
+            EpgProgram("B", 1_500, 2_000), EpgProgram("A", 900, 1_500),
+            EpgProgram("A dup", 900, 1_500), EpgProgram("old", 100, 500),
+        )
+        val list = epgDisplayList(guide, emptyList(), now)
+        assertEquals(listOf("A", "B"), list.map { it.title })
+        assertEquals(list.size, list.map { it.start }.toSet().size)
+    }
+
+    @Test
+    fun epgListFallsBackToNowNextAndHandlesEmpty() {
+        val nn = listOf(EpgProgram("now", 900, 1_500), EpgProgram("same", 900, 1_500))
+        assertEquals(1, epgDisplayList(emptyList(), nn, 1_000).size)
+        assertTrue(epgDisplayList(emptyList(), emptyList(), 1_000).isEmpty())
     }
 }

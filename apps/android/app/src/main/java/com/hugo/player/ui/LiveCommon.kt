@@ -3,6 +3,7 @@ package com.hugo.player.ui
 import android.app.ActivityManager
 import android.content.Context
 import com.hugo.player.data.db.ChannelEntity
+import com.hugo.player.data.epg.EpgProgram
 import com.hugo.player.player.StreamTypes
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -147,4 +148,15 @@ fun isLiveFormatFailure(errorCode: Int, httpStatus: Int?): Boolean = when (error
     androidx.media3.common.PlaybackException.ERROR_CODE_IO_INVALID_HTTP_CONTENT_TYPE -> true
     androidx.media3.common.PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS -> httpStatus != null && httpStatus in 400..499
     else -> false
+}
+
+/** Programação para mostrar: só o que ainda não acabou, sem horários repetidos, em ordem. */
+fun epgDisplayList(guide: List<EpgProgram>, fallback: List<EpgProgram>, now: Long): List<EpgProgram> {
+    fun clean(list: List<EpgProgram>) = list.asSequence()
+        .filter { it.stop > now && it.stop > it.start }
+        .distinctBy { it.start }
+        .sortedBy { it.start }
+        .toList()
+    val base = clean(guide)
+    return if (base.isNotEmpty()) base else clean(fallback)
 }
