@@ -111,6 +111,7 @@ fun LivePlayerScreen(request: LivePlayRequest, onBack: () -> Unit) {
     var foreground by remember { mutableStateOf(true) }
     var videoHeight by remember { mutableIntStateOf(0) }
     var isPlaying by remember { mutableStateOf(false) }
+    var bitrate by remember { mutableIntStateOf(0) }
 
     var showBanner by remember { mutableStateOf(true) }
     var bannerTick by remember { mutableIntStateOf(0) }
@@ -249,6 +250,7 @@ fun LivePlayerScreen(request: LivePlayRequest, onBack: () -> Unit) {
         var frozenSince = 0L
         while (true) {
             delay(2_000)
+            bitrate = (exoPlayer.videoFormat?.bitrate ?: 0).coerceAtLeast(0)
             if (!foreground || errorMsg != null || !exoPlayer.playWhenReady) { frozenSince = 0L; continue }
             val t = System.currentTimeMillis()
             when (exoPlayer.playbackState) {
@@ -382,10 +384,20 @@ fun LivePlayerScreen(request: LivePlayRequest, onBack: () -> Unit) {
             )
         }
 
+        // selos no topo junto com a barra do canal: ao vivo, taxa, fluxo e resolução
+        if (showBanner && !showList && !showSources && errorMsg == null) {
+            Row(Modifier.align(Alignment.TopEnd).padding(top = 18.dp, end = 24.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                TopBadge("● AO VIVO", Color(0xFFF472B6))
+                if (bitrate > 0) TopBadge("%.1f Mbps".format(bitrate / 1_000_000f), Color(0xFF4ADE80))
+                TopBadge("FLUXO " + if (forceHls || StreamTypes.detect(playUrl) == StreamTypes.Kind.HLS) "HLS" else if (StreamTypes.detect(playUrl) == StreamTypes.Kind.TS) "TS" else "AUTO", Color.White)
+                if (videoHeight > 0) TopBadge("${videoHeight}p", Color.White)
+            }
+        }
+
         if (digits.isNotEmpty()) {
             Text(
                 digits, color = Color.White, fontSize = 40.sp, fontWeight = FontWeight.Bold,
-                modifier = Modifier.align(Alignment.TopEnd).padding(28.dp).background(Color(0xFF12141C), RoundedCornerShape(12.dp))
+                modifier = Modifier.align(Alignment.TopCenter).padding(28.dp).background(Color(0xFF12141C), RoundedCornerShape(12.dp))
                     .border(2.dp, HugoColors.Accent, RoundedCornerShape(12.dp)).padding(horizontal = 18.dp, vertical = 6.dp),
             )
         }
@@ -503,6 +515,7 @@ private fun InfoBanner(
             }
             epg?.next?.let { Text("A SEGUIR  ${formatHm(it.start)}  ${it.title}", color = HugoColors.TextMuted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis) }
             if (epg == null) Text(listTitle, color = HugoColors.TextMuted, fontSize = 12.sp)
+            Text("● Ao vivo", color = Color(0xFF4ADE80), fontSize = 11.sp)
         }
         Spacer(Modifier.width(12.dp))
         Column(horizontalAlignment = Alignment.End) {
@@ -515,6 +528,15 @@ private fun InfoBanner(
             Text("▲▼ / CH± trocar · OK lista", color = HugoColors.TextDim, fontSize = 10.sp)
         }
     }
+}
+
+@Composable
+private fun TopBadge(text: String, color: Color) {
+    Text(
+        text, color = color, fontSize = 11.sp, fontWeight = FontWeight.Bold,
+        modifier = Modifier.background(Color(0xFF12141C), RoundedCornerShape(8.dp))
+            .border(1.dp, Color(0xFF2A3148), RoundedCornerShape(8.dp)).padding(horizontal = 10.dp, vertical = 5.dp),
+    )
 }
 
 @Composable
