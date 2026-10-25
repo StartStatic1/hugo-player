@@ -138,7 +138,7 @@ function hasActiveLicense(device: Device): boolean {
 }
 
 const registerSchema = z.object({
-  deviceId: z.string().min(4).max(128),
+  deviceId: z.string().min(4).max(128).refine((value) => !/^\d+$/.test(value.trim()), "Device ID não pode ser apenas numérico"),
   deviceKey: z.string().min(4).max(64),
   platform: z.string().max(64),
   appVersion: z.string().max(32).optional(),
@@ -161,6 +161,15 @@ app.use("/admin", createAdminRouter({
   persist,
   adminToken: ADMIN_TOKEN,
   playlistCount: (deviceId) => db.playlists.filter((p) => p.deviceId.toUpperCase() === deviceId.toUpperCase()).length,
+  resetDeviceKey: (deviceId) => {
+    const key = Object.keys(db.devices).find((k) => db.devices[k].deviceId.toUpperCase() === deviceId.toUpperCase());
+    if (!key) return null;
+    const deviceKey = randomBytes(6).toString("base64url").slice(0, 8);
+    const hashed = hashKey(deviceKey);
+    db.devices[key].keySalt = hashed.salt;
+    db.devices[key].keyHash = hashed.hash;
+    return deviceKey;
+  },
   deleteDevice: (deviceId) => {
     const key = Object.keys(db.devices).find((k) => db.devices[k].deviceId.toUpperCase() === deviceId.toUpperCase());
     if (key) delete db.devices[key];

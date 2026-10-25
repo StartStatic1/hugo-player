@@ -29,6 +29,7 @@ export interface AdminDeps {
   adminToken: string;
   playlistCount: (deviceId: string) => number;
   deleteDevice: (deviceId: string) => void;
+  resetDeviceKey: (deviceId: string) => string | null;
 }
 
 const planSchema = z.object({
@@ -111,6 +112,20 @@ export function createAdminRouter(deps: AdminDeps): Router {
     delete device.revokedReason;
     await deps.persist();
     res.json({ ok: true, deviceId: device.deviceId, license: device.license });
+  });
+
+  r.post("/devices/:id/reset-key", async (req, res) => {
+    const device = findDevice(req.params.id);
+    if (!device) return res.status(404).json({ error: "device_not_found" });
+    const deviceKey = deps.resetDeviceKey(device.deviceId);
+    if (!deviceKey) return res.status(404).json({ error: "device_not_found" });
+    await deps.persist();
+    res.json({
+      ok: true,
+      deviceId: device.deviceId,
+      deviceKey,
+      warning: "A Key anterior foi invalidada. Guarde esta Key agora; ela não será exibida novamente.",
+    });
   });
 
   r.post("/devices/:id/block", async (req, res) => {
