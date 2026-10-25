@@ -23,6 +23,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.hugo.player.BuildConfig
+import com.hugo.player.data.CrashLog
+import androidx.compose.ui.text.font.FontFamily
 import com.hugo.player.data.AppSettings
 import com.hugo.player.data.DiskCache
 import com.hugo.player.data.HugoApi
@@ -47,6 +49,7 @@ fun SettingsScreen(deviceId: String, deviceKey: String, onBack: () -> Unit) {
     var licenseType by remember { mutableStateOf<String?>(null) }
     var licensePlan by remember { mutableStateOf<String?>(null) }
     var licenseExpires by remember { mutableStateOf<String?>(null) }
+    var crash by remember { mutableStateOf(CrashLog.read(context)) }
 
     fun copy(label: String, value: String) {
         val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
@@ -126,6 +129,26 @@ fun SettingsScreen(deviceId: String, deviceKey: String, onBack: () -> Unit) {
             }
             Spacer(Modifier.height(6.dp))
             OutlinedButton(onClick = { WatchHistory.clearContinue(context); message = "Continuar assistindo limpo" }, modifier = Modifier.fillMaxWidth(), contentPadding = PaddingValues(vertical = 6.dp)) { Text("Limpar continuar assistindo", fontSize = 13.sp) }
+        }
+
+        Section("Diagnóstico") {
+            val log = crash
+            if (log == null) {
+                Text("Nenhum fechamento inesperado registrado.", color = HugoColors.TextMuted, fontSize = 12.sp)
+            } else {
+                Text("Último fechamento do app", color = Color.White, fontSize = 13.sp)
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    log.lineSequence().take(14).joinToString("\n"),
+                    color = HugoColors.TextMuted, fontSize = 10.sp, fontFamily = FontFamily.Monospace,
+                    modifier = Modifier.fillMaxWidth().background(HugoColors.CardAlt, RoundedCornerShape(8.dp)).padding(8.dp),
+                )
+                Spacer(Modifier.height(6.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(onClick = { copy("Erro", log) }, contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)) { Text("Copiar", fontSize = 12.sp) }
+                    OutlinedButton(onClick = { CrashLog.clear(context); crash = null; message = "Registro apagado" }, contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)) { Text("Apagar", fontSize = 12.sp) }
+                }
+            }
         }
 
         Section("Site") {
