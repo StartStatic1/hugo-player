@@ -21,6 +21,8 @@ data class ChannelEntity(
     val seriesName: String? = null,
     val season: Int? = null,
     val episode: Int? = null,
+    /** Ao vivo: tvg-id / epg_channel_id (para casar com o EPG). */
+    val epgId: String? = null,
 )
 
 /** Categoria por playlist + tipo (o mesmo nome pode existir em live e filmes). */
@@ -33,6 +35,9 @@ data class CategoryEntity(
     /** Ordem original da lista. */
     val position: Int = 0,
 )
+
+/** Nome + tvg-id dos canais ao vivo (filtro do EPG baixado no aparelho). */
+data class LiveEpgKey(val name: String, val epgId: String?)
 
 /** Série agrupada (resultado de GROUP BY seriesName). */
 data class SeriesSummary(
@@ -89,6 +94,9 @@ interface ChannelDao {
     @Query("SELECT COUNT(*) FROM channels WHERE playlistId = :playlistId AND type = :type")
     suspend fun countByType(playlistId: String, type: String): Int
 
+    @Query("SELECT name, epgId FROM channels WHERE playlistId = :playlistId AND type = 'live'")
+    suspend fun liveEpgKeys(playlistId: String): List<LiveEpgKey>
+
     @Query("SELECT * FROM categories WHERE playlistId = :playlistId AND type = :type ORDER BY position, name")
     suspend fun getCategories(playlistId: String, type: String): List<CategoryEntity>
 
@@ -105,15 +113,22 @@ interface ChannelDao {
     suspend fun deleteCategories(playlistId: String)
 }
 
-@Database(entities = [ChannelEntity::class, CategoryEntity::class], version = 2, exportSchema = false)
+@Database(entities = [ChannelEntity::class, CategoryEntity::class], version = 3, exportSchema = false)
 abstract class HugoDatabase : RoomDatabase() {
     abstract fun channelDao(): ChannelDao
 
     companion object {
         @Volatile private var INSTANCE: HugoDatabase? = null
+        val MIGRATION_2_3 = object : androidx.room.migration.Migration(2, 3) {
+            override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE channels ADD COLUMN epgId TEXT")
+            }
+        }
         fun get(context: android.content.Context): HugoDatabase =
             INSTANCE ?: synchronized(this) {
                 INSTANCE ?: Room.databaseBuilder(context.applicationContext, HugoDatabase::class.java, "hugo.db")
+                    // 2 -> 3 só acrescenta a coluna do EPG: listas já baixadas continuam (sem reimportar)
+                    .addMigrations(MIGRATION_2_3)
                     .fallbackToDestructiveMigration()
                     .build().also { INSTANCE = it }
             }

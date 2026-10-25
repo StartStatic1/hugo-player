@@ -194,6 +194,7 @@ class CatalogRepository(context: Context) {
                             var seriesName: String? = null
                             var season: Int? = null
                             var episode: Int? = null
+                            var epgId: String? = null
                             while (reader.hasNext()) {
                                 when (reader.nextName()) {
                                     "name" -> name = reader.nextStringOrNull() ?: "Canal"
@@ -204,6 +205,7 @@ class CatalogRepository(context: Context) {
                                     "seriesName" -> seriesName = reader.nextStringOrNull()
                                     "season" -> season = reader.nextIntOrNull()
                                     "episode" -> episode = reader.nextIntOrNull()
+                                    "epgId" -> epgId = reader.nextStringOrNull()?.takeIf { it.isNotBlank() }
                                     else -> reader.skipValue()
                                 }
                             }
@@ -221,6 +223,7 @@ class CatalogRepository(context: Context) {
                                     id = 0L, name = name, url = url, logo = logo, group = group,
                                     type = type, playlistId = playlistId,
                                     seriesName = seriesName, season = season, episode = episode,
+                                    epgId = if (type == "live") epgId else null,
                                 )
                             )
                             total++
@@ -337,6 +340,7 @@ class CatalogRepository(context: Context) {
         var pendingName = "Canal"
         var pendingGroup = "Outros"
         var pendingLogo: String? = null
+        var pendingTvgId: String? = null
         val fileLen = tmp.length().coerceAtLeast(1L)
         var processedBytes = 0L
 
@@ -351,6 +355,8 @@ class CatalogRepository(context: Context) {
                     pendingGroup = Regex("group-title=\"([^\"]*)\"", RegexOption.IGNORE_CASE)
                         .find(t)?.groupValues?.get(1)?.trim()?.ifBlank { "Outros" } ?: "Outros"
                     pendingLogo = Regex("tvg-logo=\"([^\"]*)\"", RegexOption.IGNORE_CASE)
+                        .find(t)?.groupValues?.get(1)?.trim()?.takeIf { it.isNotEmpty() }
+                    pendingTvgId = Regex("tvg-id=\"([^\"]*)\"", RegexOption.IGNORE_CASE)
                         .find(t)?.groupValues?.get(1)?.trim()?.takeIf { it.isNotEmpty() }
                 } else if (t.isNotEmpty() && !t.startsWith("#")) {
                     val type = classifyType(pendingName, pendingGroup, t)
@@ -370,6 +376,7 @@ class CatalogRepository(context: Context) {
                             id = 0L, name = pendingName, url = t, logo = pendingLogo,
                             group = pendingGroup, type = type, playlistId = playlistId,
                             seriesName = seriesName, season = season, episode = episode,
+                            epgId = if (type == "live") pendingTvgId else null,
                         )
                     )
                     val ck = "$type\t$pendingGroup"
@@ -388,6 +395,7 @@ class CatalogRepository(context: Context) {
                     pendingName = "Canal"
                     pendingGroup = "Outros"
                     pendingLogo = null
+                    pendingTvgId = null
                 }
             }
         } finally {
@@ -438,6 +446,9 @@ class CatalogRepository(context: Context) {
 
     suspend fun episodes(playlistId: String, seriesName: String): List<ChannelEntity> =
         withContext(Dispatchers.IO) { dao.episodes(playlistId, seriesName) }
+
+    suspend fun liveEpgKeys(playlistId: String) =
+        withContext(Dispatchers.IO) { dao.liveEpgKeys(playlistId) }
 
     suspend fun getCategories(playlistId: String, type: String) =
         withContext(Dispatchers.IO) { dao.getCategories(playlistId, type) }

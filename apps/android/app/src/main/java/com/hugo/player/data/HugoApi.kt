@@ -7,7 +7,8 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
 
-class ApiException(val status: Int, message: String) : Exception(message)
+/** apiError: código bruto do backend (ex.: "upstream_403"), quando houver. */
+class ApiException(val status: Int, message: String, val apiError: String? = null) : Exception(message)
 
 /** Cliente HTTP mínimo para o backend do Hugo Player. */
 object HugoApi {
@@ -84,7 +85,7 @@ object HugoApi {
             if (code !in 200..299) {
                 val err = conn.errorStream?.bufferedReader()?.use { it.readText() }.orEmpty()
                 val apiErr = Regex("\"error\"\\s*:\\s*\"([^\"]+)\"").find(err)?.groupValues?.get(1)
-                throw ApiException(code, friendlyApiError(code, apiErr))
+                throw ApiException(code, friendlyApiError(code, apiErr), apiErr)
             }
             conn.inputStream.bufferedReader().use { it.readText() }
         } finally {

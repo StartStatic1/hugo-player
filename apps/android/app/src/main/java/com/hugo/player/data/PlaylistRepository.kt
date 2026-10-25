@@ -12,6 +12,8 @@ data class RemotePlaylist(
     /** null quando a lista é protegida por PIN e ainda não foi desbloqueada. */
     val url: String?,
     val updatedAt: String?,
+    /** Link próprio do EPG (XMLTV); null = automático (xmltv.php do Xtream / url-tvg). */
+    val epgUrl: String? = null,
 )
 
 /** CRUD de playlists no backend + PINs desbloqueados nesta sessão (só em memória). */
@@ -32,7 +34,19 @@ object PlaylistRepository {
         isProtected = o.optBoolean("protected", false),
         url = o.optString("url", "").takeIf { it.isNotBlank() && it != "null" },
         updatedAt = o.optString("updatedAt", "").takeIf { it.isNotBlank() },
-    )
+        epgUrl = o.optString("epgUrl", "").takeIf { it.isNotBlank() && it != "null" },
+    ).also { p -> if (!p.isProtected || p.url != null) epgLinks[p.id] = p.epgUrl }
+
+    /** Último link de EPG conhecido por playlist (para o EPG baixado no aparelho). */
+    private val epgLinks = java.util.concurrent.ConcurrentHashMap<String, String?>()
+    fun epgUrlFor(playlistId: String): String? = epgLinks[playlistId]
+
+    /** Aceita vazio (= automático) ou http(s)://host... */
+    fun isValidEpgUrl(s: String): Boolean {
+        val t = s.trim()
+        if (t.isEmpty()) return true
+        return Regex("^https?://[^\\s/?#]+[^\\s]*$", RegexOption.IGNORE_CASE).matches(t)
+    }
 
     suspend fun list(deviceId: String, deviceKey: String): List<RemotePlaylist> {
         val json = JSONObject(HugoApi.get("/playlists", deviceId, deviceKey, readTimeoutMs = 20_000))
@@ -40,8 +54,9 @@ object PlaylistRepository {
         return (0 until arr.length()).map { parse(arr.getJSONObject(it)) }
     }
 
-    suspend fun add(deviceId: String, deviceKey: String, name: String, url: String): RemotePlaylist {
+    suspend fun add(deviceId: String, deviceKey: String, name: String, url: String, epgUrl: String? = null): RemotePlaylist {
         val body = JSONObject().put("name", name).put("type", "m3u").put("url", url)
+        epgUrl?.trim()?.takeIf { it.isNotEmpty() }?.let { body.put("epgUrl", it) }
         val json = JSONObject(HugoApi.post("/playlists", body.toString(), deviceId, deviceKey, readTimeoutMs = 20_000))
         return parse(json.getJSONObject("playlist").apply { if (!has("name")) put("name", name) })
     }
@@ -49,6 +64,15 @@ object PlaylistRepository {
     suspend fun rename(deviceId: String, deviceKey: String, playlistId: String, name: String, pin: String? = null) {
         HugoApi.patch("/playlists/${HugoApi.enc(playlistId)}", JSONObject().put("name", name).toString(), deviceId, deviceKey, pinHeader(playlistId, pin))
         pin?.let { rememberPin(playlistId, it) }
+    }
+
+    /** Nome e link do EPG (vazio = volta ao automático). */
+    suspend fun update(deviceId: String, deviceKey: String, playlistId: String, name: String, epgUrl: String, pin: String? = null) {
+        val body = JSONObject().put("name", name).put("epgUrl", epgUrl.trim())
+        HugoApi.patch("/playlists/${HugoApi.enc(playlistId)}", body.toString(), deviceId, deviceKey, pinHeader(playlistId, pin))
+        pin?.let { rememberPin(playlistId, it) }
+        epgLinks[playlistId] = epgUrl.trim().takeIf { it.isNotEmpty() }
+        com.hugo.player.data.epg.LiveEpg.invalidate(playlistId)
     }
 
     suspend fun delete(deviceId: String, deviceKey: String, playlistId: String, pin: String? = null) {
