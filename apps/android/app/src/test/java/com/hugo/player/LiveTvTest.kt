@@ -153,4 +153,13 @@ class LiveTvTest {
         assertTrue(!liveDpadRight(android.view.KeyEvent.KEYCODE_DPAD_RIGHT, isDown = false))
         assertTrue(!liveDpadRight(android.view.KeyEvent.KEYCODE_DPAD_LEFT, isDown = true))
     }
+
+    @Test
+    fun crashLogFormatKeepsCauseAndIsBounded() {
+        val text = com.hugo.player.data.CrashLog.format(IllegalStateException("FocusRequester is not initialized"), "main", "0.5.27", now = 0L)
+        assertTrue(text.contains("FocusRequester is not initialized"))
+        assertTrue(text.contains("0.5.27"))
+        val deep = RuntimeException("x".repeat(50_000))
+        assertTrue(com.hugo.player.data.CrashLog.format(deep, "main", "v").length <= 12_000)
+    }
 }

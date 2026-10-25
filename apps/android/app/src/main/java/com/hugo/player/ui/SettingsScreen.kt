@@ -139,7 +139,7 @@ fun SettingsScreen(deviceId: String, deviceKey: String, onBack: () -> Unit) {
                 Text("Último fechamento do app", color = Color.White, fontSize = 13.sp)
                 Spacer(Modifier.height(6.dp))
                 Text(
-                    log.lineSequence().take(14).joinToString("\n"),
+                    log.lineSequence().take(30).joinToString("\n"),
                     color = HugoColors.TextMuted, fontSize = 10.sp, fontFamily = FontFamily.Monospace,
                     modifier = Modifier.fillMaxWidth().background(HugoColors.CardAlt, RoundedCornerShape(8.dp)).padding(8.dp),
                 )

@@ -9,6 +9,7 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.DefaultLoadControl
+import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.extractor.DefaultExtractorsFactory
@@ -17,7 +18,7 @@ import androidx.media3.extractor.ts.DefaultTsPayloadReaderFactory
 /** Cria ExoPlayers configurados para IPTV (HLS, TS, MP4/MKV). */
 object HugoPlayerFactory {
     @OptIn(UnstableApi::class)
-    fun create(context: Context, userAgent: String, lowLatencyPreview: Boolean = false): ExoPlayer {
+    fun create(context: Context, userAgent: String, lowLatencyPreview: Boolean = false, decoderFallback: Boolean = false): ExoPlayer {
         val http = DefaultHttpDataSource.Factory()
             .setUserAgent(userAgent)
             .setAllowCrossProtocolRedirects(true)
@@ -33,7 +34,10 @@ object HugoPlayerFactory {
             // buffers pensados para IPTV: começa rápido, segura oscilações
             DefaultLoadControl.Builder().setBufferDurationsMs(15_000, 50_000, 2_000, 4_000).build()
         }
-        return ExoPlayer.Builder(context)
+        val builder = ExoPlayer.Builder(context)
+        // ao vivo: se o decodificador de hardware falhar (Fire TV tem poucos), tenta outro em vez de dar erro
+        if (decoderFallback) builder.setRenderersFactory(DefaultRenderersFactory(context).setEnableDecoderFallback(true))
+        return builder
             .setMediaSourceFactory(DefaultMediaSourceFactory(dataSource, extractors))
             .setLoadControl(loadControl)
             .build()

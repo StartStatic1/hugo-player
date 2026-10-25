@@ -12,6 +12,7 @@ import androidx.compose.ui.graphics.Color
 import com.hugo.player.data.AppSettings
 import com.hugo.player.data.CrashLog
 import com.hugo.player.ui.AppNavigation
+import com.hugo.player.ui.CrashNotice
 import com.hugo.player.ui.LiveTvCache
 
 class MainActivity : ComponentActivity() {
@@ -24,8 +25,12 @@ class MainActivity : ComponentActivity() {
             MaterialTheme(colorScheme = darkColorScheme(background = Color(0xFF07080F))) {
                 Surface(Modifier.fillMaxSize()) {
                     AppNavigation()
+                    CrashNotice()
                 }
             }
         }
     }
+
+    override fun onResume() { super.onResume(); CrashLog.setForeground(true) }
+    override fun onPause() { CrashLog.setForeground(false); super.onPause() }
 }

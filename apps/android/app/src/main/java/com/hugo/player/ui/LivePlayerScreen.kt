@@ -129,7 +129,7 @@ fun LivePlayerScreen(request: LivePlayRequest, onBack: () -> Unit) {
     val sourcesFocus = remember { FocusRequester() }
     val listState = rememberLazyListState()
 
-    val exoPlayer = remember { HugoPlayerFactory.create(context, playerUserAgent(context)) }
+    val exoPlayer = remember { HugoPlayerFactory.create(context, playerUserAgent(context), decoderFallback = true) }
 
     // lista para zapear (mesma ordem/numeração da tela)
     suspend fun loadWindowAround(number: Int): Boolean {

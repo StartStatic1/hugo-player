@@ -78,6 +78,7 @@ import com.hugo.player.data.LiveRecents
 import com.hugo.player.data.WatchHistory
 import com.hugo.player.data.db.CategoryEntity
 import com.hugo.player.data.db.ChannelEntity
+import com.hugo.player.data.CrashLog
 import com.hugo.player.data.epg.EpgNowNext
 import com.hugo.player.data.epg.EpgProgram
 import com.hugo.player.data.epg.LiveEpg
@@ -313,7 +314,7 @@ class LiveTvViewModel(app: Application) : AndroidViewModel(app) {
 fun LiveTvScreen(playlistId: String, onPlay: (LivePlayRequest) -> Unit, onBack: () -> Unit) {
     val context = LocalContext.current
     val vm: LiveTvViewModel = viewModel()
-    LaunchedEffect(playlistId) { vm.bind(playlistId) }
+    LaunchedEffect(playlistId) { vm.bind(playlistId); CrashLog.step("TV ao vivo: abriu") }
     val nf = remember { NumberFormat.getIntegerInstance(Locale("pt", "BR")) }
     val focusManager = LocalFocusManager.current
     val listState = rememberLazyListState()
@@ -450,7 +451,7 @@ fun LiveTvScreen(playlistId: String, onPlay: (LivePlayRequest) -> Unit, onBack: 
                                 isFavorite = vm.favorites[c.url] == true,
                                 selected = vm.focused?.url == c.url,
                                 modifier = mod,
-                                onFocused = { vm.setFocus(c, index) },
+                                onFocused = { vm.setFocus(c, index); CrashLog.step("TV ao vivo: canal ${index + 1}") },
                                 onClick = {
                                     // toque (tablet): 1º toque mostra a prévia, 2º assiste; no controle o foco já selecionou
                                     if (!showPreview || vm.focused?.url == c.url) play(c, index) else vm.setFocus(c, index)
@@ -643,6 +644,7 @@ private fun PreviewPanel(
         // prévia: ocupa a largura da coluna; tocar (ou OK com foco nela) abre em tela cheia
         val previewSrc = remember { MutableInteractionSource() }
         val previewFocused by previewSrc.collectIsFocusedAsState()
+        LaunchedEffect(previewFocused) { if (previewFocused) CrashLog.step("TV ao vivo: foco na prévia (vídeo=${previewAllowed})") }
         Box(
             Modifier.align(Alignment.CenterHorizontally).width(layout.boxWidth.dp).height(layout.boxHeight.dp)
                 .clip(RoundedCornerShape(12.dp)).background(Color.Black)
@@ -739,6 +741,7 @@ private fun EpgCard(p: EpgProgram, live: Boolean, compact: Boolean) {
     // focável: no controle as setas descem pela programação (a lista rola, o topo fica)
     FocusSurface(
         onClick = {},
+        onFocused = { CrashLog.step("TV ao vivo: guia") },
         color = if (live) Color(0xFF1F2A4A) else HugoColors.Card,
         focusedColor = Color(0xFF2A2350),
         focusScale = 1.0f,
@@ -788,7 +791,7 @@ private fun LivePreview(url: String, holder: MutableState<ExoPlayer?>, onVideoHe
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val player = remember {
-        HugoPlayerFactory.create(context, playerUserAgent(context), lowLatencyPreview = true).apply {
+        HugoPlayerFactory.create(context, playerUserAgent(context), lowLatencyPreview = true, decoderFallback = true).apply {
             volume = 0f
             repeatMode = Player.REPEAT_MODE_OFF
             // prévia leve: no HLS pega a variante menor
@@ -848,6 +851,7 @@ private fun LivePreview(url: String, holder: MutableState<ExoPlayer?>, onVideoHe
     }
     LaunchedEffect(cur, foreground) {
         playingCb(null)
+        CrashLog.step("TV ao vivo: prévia tocando")
         player.stop()
         player.clearMediaItems()
         failed = false
