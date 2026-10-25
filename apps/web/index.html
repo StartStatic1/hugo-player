@@ -198,6 +198,9 @@ button:disabled { opacity: .55; cursor: not-allowed; }
             <div><label for="xtPass">Senha</label><input id="xtPass" type="password"></div>
           </div>
         </div>
+        <label for="plEpg">Link do EPG (XMLTV) <span style="opacity:.6;font-weight:400">— opcional</span></label>
+        <input id="plEpg" class="mono" placeholder="http://servidor.com/epg.xml.gz" inputmode="url" maxlength="2000">
+        <div style="font-size:12px;opacity:.65;margin-top:4px">Aceita .xml e .xml.gz. Em branco: o app usa o guia do próprio Xtream (xmltv.php) quando houver.</div>
         <label class="check"><input type="checkbox" id="plPinOn"> Proteger com PIN</label>
         <div id="pinFields" class="hidden">
           <label for="plPin">PIN (4 a 8 dígitos)</label>
@@ -247,6 +250,9 @@ const unlocked = {};
 let addType = "m3u";
 let licenseActive = true;
 
+function isHttpUrl(v) {
+  try { var u = new URL(v); return (u.protocol === "http:" || u.protocol === "https:") && !!u.hostname; } catch (e) { return false; }
+}
 function esc(s) {
   return String(s == null ? "" : s).replace(/[&<>"']/g, function(c) {
     return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];
@@ -381,6 +387,8 @@ function render() {
     var canManage = !hasPin || Boolean(u);
     var lock = hasPin ? '<span class="badge lock">🔒 PIN</span>' : '';
     var url = u ? esc(u.url) : (hasPin ? '<i>protegida por PIN</i>' : esc(p.url || ''));
+    var epgShown = u ? u.epgUrl : p.epgUrl;
+    if (epgShown) url += '<br><span style="opacity:.7">EPG: ' + esc(epgShown) + '</span>';
     return '<div class="pl"><div class="ico">' + (p.type === 'xtream' ? '📡' : '📺') + '</div><div><div class="name">' + esc(p.name) + '</div><div class="meta"><span class="badge">' + p.type + '</span>' + lock + '</div><div class="url">' + url + '</div></div><div class="actions">' +
       (hasPin && !u ? '<button class="icon-btn" data-act="unlock" data-id="' + p.id + '">Desbloquear</button>' : '') +
       (canManage ? '<button class="icon-btn" data-act="edit" data-id="' + p.id + '" title="Editar playlist">✎ Editar</button>' +
@@ -401,16 +409,19 @@ $("plList").addEventListener("click", async function(e) {
   if (act === "unlock") openModal("Desbloquear", "Digite o PIN.", '<label>PIN</label><input id="mPin" class="mono" maxlength="8">', async function() {
     var pin = $("mPin").value.trim();
     var data = await api("POST", "/playlists/" + id + "/verify-pin", { pin: pin });
-    unlocked[id] = { pin: pin, url: data.playlist.url };
+    unlocked[id] = { pin: pin, url: data.playlist.url, epgUrl: data.playlist.epgUrl || "" };
     render();
   });
-  if (act === "edit") openModal("Editar playlist", "Atualize o nome e a URL M3U.",
+  if (act === "edit") openModal("Editar playlist", "Atualize o nome, a URL M3U e o EPG (opcional).",
     '<label>Nome</label><input id="mName" value="' + esc(p.name) + '" maxlength="80" required>' +
-    '<label>URL M3U</label><input id="mUrl" class="mono" value="' + esc(p.url || (unlocked[id] ? unlocked[id].url : '')) + '" maxlength="2000" required>', async function() {
+    '<label>URL M3U</label><input id="mUrl" class="mono" value="' + esc(p.url || (unlocked[id] ? unlocked[id].url : '')) + '" maxlength="2000" required>' +
+    '<label>Link do EPG (XMLTV, .xml ou .xml.gz) — opcional</label><input id="mEpg" class="mono" placeholder="em branco = automático (Xtream)" value="' + esc(p.epgUrl || (unlocked[id] && unlocked[id].epgUrl) || '') + '" maxlength="2000">', async function() {
       var name = $("mName").value.trim();
       var url = $("mUrl").value.trim();
+      var epgUrl = $("mEpg").value.trim();
+      if (epgUrl && !isHttpUrl(epgUrl)) throw { error: "O link do EPG deve começar com http:// ou https://" };
       var headers = unlocked[id] ? { "x-playlist-pin": unlocked[id].pin } : {};
-      await api("PATCH", "/playlists/" + id, { name: name, url: url }, headers);
+      await api("PATCH", "/playlists/" + id, { name: name, url: url, epgUrl: epgUrl }, headers);
       toast("Playlist atualizada.");
       await loadPlaylists();
     });
@@ -478,6 +489,11 @@ $("addForm").addEventListener("submit", async function(e) {
   }
   if (!url) return show(st, "Informe a URL.", "err");
   var body = { name: name, type: addType, url: url };
+  var epg = $("plEpg").value.trim();
+  if (epg) {
+    if (!isHttpUrl(epg)) return show(st, "O link do EPG deve começar com http:// ou https://", "err");
+    body.epgUrl = epg;
+  }
   if ($("plPinOn").checked) {
     var pin = $("plPin").value.trim();
     if (pin.length < 4) return show(st, "PIN precisa de 4 a 8 dígitos.", "err");
