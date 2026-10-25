@@ -4,6 +4,8 @@ import android.view.KeyEvent as AndroidKeyEvent
 import androidx.activity.compose.BackHandler
 import androidx.annotation.OptIn
 import androidx.compose.foundation.background
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
@@ -55,7 +57,6 @@ import com.hugo.player.data.db.ChannelEntity
 import com.hugo.player.data.epg.EpgNowNext
 import com.hugo.player.data.epg.LiveEpg
 import com.hugo.player.player.HugoPlayerFactory
-import com.hugo.player.player.StreamTypes
 import com.hugo.player.ui.components.ChannelLogo
 import com.hugo.player.ui.components.FocusSurface
 import com.hugo.player.ui.components.HugoColors
@@ -103,6 +104,8 @@ fun LivePlayerScreen(request: LivePlayRequest, onBack: () -> Unit) {
     val playUrl = attempts.getOrNull(attempt)?.url ?: current.url
     val forceHls = attempts.getOrNull(attempt)?.forceHls ?: false
     var resizeIndex by remember { mutableIntStateOf(0) }
+    // formato que está TOCANDO de verdade (null até a primeira imagem)
+    var playing by remember { mutableStateOf<String?>(null) }
     var loading by remember { mutableStateOf(true) }
     var bufferingSince by remember { mutableLongStateOf(0L) }
     var errorMsg by remember { mutableStateOf<String?>(null) }
@@ -193,6 +196,7 @@ fun LivePlayerScreen(request: LivePlayRequest, onBack: () -> Unit) {
 
     LaunchedEffect(playUrl, forceHls, foreground) {
         errorMsg = null
+        playing = null
         if (!foreground) { exoPlayer.stop(); return@LaunchedEffect }
         loading = true
         bufferingSince = System.currentTimeMillis()
@@ -216,18 +220,24 @@ fun LivePlayerScreen(request: LivePlayRequest, onBack: () -> Unit) {
                 if (error.errorCode == PlaybackException.ERROR_CODE_BEHIND_LIVE_WINDOW) {
                     exoPlayer.seekToDefaultPosition(); exoPlayer.prepare(); return
                 }
-                // painel que devolve HTML no .m3u8 (ou vídeo no lugar de playlist): tenta a próxima variante
-                if (isLiveFormatFailure(error.errorCode, httpStatus(error)) && attempt + 1 < attempts.size) {
-                    attempt++; retryCount = 0; return
+                // qualquer erro: tenta a outra variante (.ts <-> .m3u8) antes de desistir
+                if (attempt + 1 < attempts.size) { attempt++; return }
+                if ((isRetryable(error) || isLiveFormatFailure(error.errorCode, httpStatus(error))) && retryCount < MAX_LIVE_RETRIES) {
+                    retryCount++
+                    // recomeça pela primeira variante (TS); com uma só variante, reconecta com espera crescente
+                    if (attempts.size > 1) attempt = 0 else reconnectTick++
+                    return
                 }
-                if (isRetryable(error) && retryCount < MAX_LIVE_RETRIES) { retryCount++; reconnectTick++; return }
                 errorMsg = friendlyError(error)
                 loading = false
             }
             override fun onPlaybackStateChanged(state: Int) {
                 loading = state == Player.STATE_BUFFERING || (state == Player.STATE_IDLE && errorMsg == null && exoPlayer.playWhenReady)
                 if (state == Player.STATE_BUFFERING) bufferingSince = System.currentTimeMillis()
-                if (state == Player.STATE_READY) { errorMsg = null; retryCount = 0; LiveFormatMemory.remember(playUrl) }
+                if (state == Player.STATE_READY) {
+                    errorMsg = null; retryCount = 0
+                    attempts.getOrNull(attempt)?.let { a -> LiveFormatMemory.remember(a.url); playing = playingFormat(a.url, a.forceHls) }
+                }
                 // ao vivo não "acaba": se acabar, reconecta
                 if (state == Player.STATE_ENDED) reconnectTick++
             }
@@ -379,7 +389,7 @@ fun LivePlayerScreen(request: LivePlayRequest, onBack: () -> Unit) {
 
         if (showBanner && !showList && !showSources) {
             InfoBanner(
-                offset + index + 1, current, epg, videoHeight, src.title, Modifier.align(Alignment.BottomCenter),
+                offset + index + 1, current, epg, videoHeight, playing, src.title, Modifier.align(Alignment.BottomCenter),
                 onChannels = { showList = true }, onSources = { showSources = true },
             )
         }
@@ -389,7 +399,7 @@ fun LivePlayerScreen(request: LivePlayRequest, onBack: () -> Unit) {
             Row(Modifier.align(Alignment.TopEnd).padding(top = 18.dp, end = 24.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 TopBadge("● AO VIVO", Color(0xFFF472B6))
                 if (bitrate > 0) TopBadge("%.1f Mbps".format(bitrate / 1_000_000f), Color(0xFF4ADE80))
-                TopBadge("FLUXO " + if (forceHls || StreamTypes.detect(playUrl) == StreamTypes.Kind.HLS) "HLS" else if (StreamTypes.detect(playUrl) == StreamTypes.Kind.TS) "TS" else "AUTO", Color.White)
+                playing?.let { TopBadge("FLUXO $it", Color.White) }
                 if (videoHeight > 0) TopBadge("${videoHeight}p", Color.White)
             }
         }
@@ -452,7 +462,9 @@ fun LivePlayerScreen(request: LivePlayRequest, onBack: () -> Unit) {
                     .onPreviewKeyEvent { ev ->
                         if (ev.type == KeyEventType.KeyDown && ev.key.nativeKeyCode == AndroidKeyEvent.KEYCODE_DPAD_LEFT) { showSources = false; true } else false
                     }
-                    .padding(14.dp),
+                    // rola (toque ou setas: o item focado é trazido para a vista); nada fica cortado embaixo
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 14.dp, vertical = 14.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 Text("Fonte", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold)
@@ -460,7 +472,7 @@ fun LivePlayerScreen(request: LivePlayRequest, onBack: () -> Unit) {
                     PanelOption(f.label, selected = format == f, modifier = if (i == 0) Modifier.focusRequester(sourcesFocus) else Modifier) { format = f }
                 }
                 Text(
-                    "Tocando: " + when { forceHls || StreamTypes.detect(playUrl) == StreamTypes.Kind.HLS -> "HLS"; StreamTypes.detect(playUrl) == StreamTypes.Kind.TS -> "TS"; else -> "auto" } +
+                    "Tocando: " + (playing ?: "conectando…") +
                         (if (videoHeight > 0) " · ${videoHeight}p" else ""),
                     color = HugoColors.TextMuted, fontSize = 11.sp,
                 )
@@ -469,6 +481,7 @@ fun LivePlayerScreen(request: LivePlayRequest, onBack: () -> Unit) {
                 liveResizeModes.forEachIndexed { i, (_, label) -> PanelOption(label, selected = resizeIndex == i) { resizeIndex = i } }
                 Spacer(Modifier.height(8.dp))
                 PanelOption("Recarregar canal", selected = false) { retryCount = 0; if (attempt == 0) reconnect() else attempt = 0; showSources = false }
+                Spacer(Modifier.height(16.dp))
             }
         }
     }
@@ -487,7 +500,7 @@ private fun PanelOption(label: String, selected: Boolean, modifier: Modifier = M
 
 @Composable
 private fun InfoBanner(
-    number: Int, c: ChannelEntity, epg: EpgNowNext?, videoHeight: Int, listTitle: String, modifier: Modifier,
+    number: Int, c: ChannelEntity, epg: EpgNowNext?, videoHeight: Int, playing: String?, listTitle: String, modifier: Modifier,
     onChannels: () -> Unit, onSources: () -> Unit,
 ) {
     Row(
@@ -503,7 +516,7 @@ private fun InfoBanner(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(c.name, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
                 Spacer(Modifier.width(10.dp))
-                qualityChips(c, videoHeight).forEach {
+                qualityChips(c, videoHeight, playing).forEach {
                     Text(it, color = Color.White, fontSize = 10.sp, modifier = Modifier.padding(end = 4.dp).border(1.dp, HugoColors.Accent, RoundedCornerShape(4.dp)).padding(horizontal = 5.dp, vertical = 1.dp))
                 }
             }

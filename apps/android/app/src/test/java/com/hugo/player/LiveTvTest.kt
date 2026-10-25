@@ -6,6 +6,8 @@ import androidx.media3.common.PlaybackException
 import com.hugo.player.data.epg.EpgProgram
 import com.hugo.player.ui.LiveAttempt
 import com.hugo.player.ui.epgDisplayList
+import com.hugo.player.ui.playingFormat
+import com.hugo.player.ui.previewLayout
 import com.hugo.player.ui.LiveFormat
 import com.hugo.player.ui.LiveFormatMemory
 import com.hugo.player.ui.isLiveFormatFailure
@@ -57,7 +59,11 @@ class LiveTvTest {
     fun qualityFromNameAndFormat() {
         val c = ChannelEntity(name = "Globo FHD H265", url = "http://h/u/p/1.ts", logo = null, group = "BR", type = "live", playlistId = "p")
         val chips = qualityChips(c)
-        assertTrue(chips.containsAll(listOf("FHD", "H.265", "TS")))
+        assertTrue(chips.containsAll(listOf("FHD", "H.265")))
+        // formato só aparece quando se sabe o que está tocando (a URL da lista não manda)
+        assertTrue("TS" !in chips && "HLS" !in chips)
+        assertTrue("TS" in qualityChips(c, 1080, playing = playingFormat("http://h/live/u/p/1.ts", false)))
+        assertEquals("HLS", playingFormat("http://h/live/u/p/1.ts", forceHls = true))
         assertEquals("4K", qualityChips(c, videoHeight = 2160).first())
     }
 
@@ -66,10 +72,15 @@ class LiveTvTest {
     fun m3u8FallsBackToTsAndRemembersServer() {
         LiveFormatMemory.clear()
         val u = "http://panel.example.test/live/u/p/1479281.m3u8"
+        // automático: TS primeiro, HLS de reserva
         assertEquals(
-            listOf(LiveAttempt(u, true), LiveAttempt("http://panel.example.test/live/u/p/1479281.ts", false)),
+            listOf(LiveAttempt("http://panel.example.test/live/u/p/1479281.ts", false), LiveAttempt(u, true)),
             liveAttempts(u),
         )
+        assertEquals("http://h/live/u/p/9.ts", liveAttempts("http://h/live/u/p/9.ts").first().url)
+        // TS falhou e HLS funcionou neste servidor: HLS passa a vir primeiro
+        LiveFormatMemory.remember("http://h/live/u/p/9.m3u8")
+        assertEquals("http://h/live/u/p/10.m3u8", liveAttempts("http://h/live/u/p/10.ts").first().url)
         // HTML no lugar do manifesto = falha de formato -> tenta a próxima
         assertTrue(isLiveFormatFailure(PlaybackException.ERROR_CODE_PARSING_MANIFEST_MALFORMED, null))
         assertTrue(isLiveFormatFailure(PlaybackException.ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED, null))
@@ -102,5 +113,18 @@ class LiveTvTest {
         val nn = listOf(EpgProgram("now", 900, 1_500), EpgProgram("same", 900, 1_500))
         assertEquals(1, epgDisplayList(emptyList(), nn, 1_000).size)
         assertTrue(epgDisplayList(emptyList(), emptyList(), 1_000).isEmpty())
+    }
+
+    @Test
+    fun previewLeavesRoomForEpgOnShortScreens() {
+        // celular deitado (~400dp de coluna) e TV (~470dp): vídeo + cartão deixam >= 40% para a programação
+        for ((w, h, card) in listOf(Triple(250f, 400f, 76f), Triple(300f, 400f, 76f), Triple(360f, 470f, 120f))) {
+            val l = previewLayout(w, h)
+            val pads = if (l.short) 24f else 36f
+            val epg = h - l.videoHeight - card - pads
+            assertTrue("w=$w h=$h epg=$epg", epg >= 0.38f * h)
+            assertTrue(l.videoWidth <= w)
+        }
+        assertTrue(previewLayout(250f, 400f).short)
     }
 }

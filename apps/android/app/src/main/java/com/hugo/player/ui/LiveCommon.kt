@@ -57,7 +57,11 @@ private val qSd = Regex("\\bsd\\b", RegexOption.IGNORE_CASE)
 private val qHevc = Regex("\\b(h\\.?265|hevc)\\b", RegexOption.IGNORE_CASE)
 
 /** Etiquetas de qualidade pelo nome do canal + formato do stream. */
-fun qualityChips(c: ChannelEntity, videoHeight: Int = 0): List<String> {
+/**
+ * Selos do canal. O formato (TS/HLS) só aparece quando se sabe o que está TOCANDO de verdade
+ * ([playing] = "TS"/"HLS"); a extensão da URL da lista não conta, porque o app pode cair no outro formato.
+ */
+fun qualityChips(c: ChannelEntity, videoHeight: Int = 0, playing: String? = null): List<String> {
     val out = ArrayList<String>()
     when {
         videoHeight >= 2000 -> out.add("4K")
@@ -71,12 +75,15 @@ fun qualityChips(c: ChannelEntity, videoHeight: Int = 0): List<String> {
     }
     if (videoHeight > 0) out.add("${videoHeight}p")
     if (qHevc.containsMatchIn(c.name)) out.add("H.265")
-    when (StreamTypes.detect(c.url)) {
-        StreamTypes.Kind.HLS -> out.add("HLS")
-        StreamTypes.Kind.TS -> out.add("TS")
-        else -> Unit
-    }
+    playing?.let { out.add(it) }
     return out
+}
+
+/** "TS" / "HLS" de uma tentativa que está tocando (null = ainda não se sabe). */
+fun playingFormat(url: String, forceHls: Boolean): String? = when {
+    forceHls || StreamTypes.detect(url) == StreamTypes.Kind.HLS -> "HLS"
+    StreamTypes.detect(url) == StreamTypes.Kind.TS -> "TS"
+    else -> null
 }
 
 /** Xtream: mesmo canal em .ts <-> .m3u8 (alguns painéis só entregam um dos dois). */
@@ -115,8 +122,8 @@ object LiveFormatMemory {
 }
 
 /**
- * Ordem de tentativas para um canal ao vivo. No automático: o formato que já funcionou neste
- * servidor primeiro, depois o outro (.m3u8 <-> .ts); sem extensão: detecta pelo conteúdo, depois HLS.
+ * Ordem de tentativas para um canal ao vivo. No automático: TS (.ts) primeiro e HLS (.m3u8) de reserva,
+ * a não ser que neste servidor o TS já tenha falhado e o HLS funcionado; sem extensão: detecta pelo conteúdo, depois HLS.
  */
 fun liveAttempts(base: String, format: LiveFormat = LiveFormat.AUTO): List<LiveAttempt> {
     val kind = StreamTypes.detect(base)
@@ -128,7 +135,7 @@ fun liveAttempts(base: String, format: LiveFormat = LiveFormat.AUTO): List<LiveA
         LiveFormat.HLS -> listOf(LiveAttempt(hls ?: base, true))
         LiveFormat.AUTO -> when {
             ts != null && hls != null -> {
-                val tsFirst = when (LiveFormatMemory.preferredExt(base)) { "ts" -> true; "m3u8" -> false; else -> kind == StreamTypes.Kind.TS }
+                val tsFirst = LiveFormatMemory.preferredExt(base) != "m3u8"
                 if (tsFirst) listOf(LiveAttempt(ts, false), LiveAttempt(hls, true)) else listOf(LiveAttempt(hls, true), LiveAttempt(ts, false))
             }
             else -> listOf(LiveAttempt(base, false), LiveAttempt(base, true))
@@ -159,4 +166,16 @@ fun epgDisplayList(guide: List<EpgProgram>, fallback: List<EpgProgram>, now: Lon
         .toList()
     val base = clean(guide)
     return if (base.isNotEmpty()) base else clean(fallback)
+}
+
+/** Tamanho da prévia na 3ª coluna: em tela baixa encolhe para a programação ter pelo menos ~40% da altura. */
+data class PreviewLayout(val videoWidth: Float, val videoHeight: Float, val short: Boolean)
+
+fun previewLayout(widthDp: Float, heightDp: Float): PreviewLayout {
+    val short = heightDp < 440f
+    val inner = (widthDp - if (short) 16f else 24f).coerceAtLeast(80f)
+    // fração máxima da altura para o vídeo; o cartão do canal ocupa ~ 90dp (baixa) / 130dp (TV)
+    val maxFrac = if (short) 0.30f else 0.28f
+    val h = minOf(inner * 9f / 16f, heightDp * maxFrac).coerceAtLeast(60f)
+    return PreviewLayout(videoWidth = minOf(inner, h * 16f / 9f), videoHeight = h, short = short)
 }
