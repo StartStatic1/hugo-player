@@ -13,8 +13,8 @@ android {
         applicationId = "com.hugo.player"
         minSdk = 24
         targetSdk = 35
-        versionCode = 26
-        versionName = "0.5.21"
+        versionCode = 27
+        versionName = "0.5.22"
         // Servidor da API; para testar contra outro: ./gradlew assembleDebug -PhugoApiUrl=http://10.0.2.2:8080
         val apiUrl = (project.findProperty("hugoApiUrl") as String?) ?: "https://api-hugo.streamflixvip.online"
         buildConfigField("String", "API_BASE_URL", "\"$apiUrl\"")
