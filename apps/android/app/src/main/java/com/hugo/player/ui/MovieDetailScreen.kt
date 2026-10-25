@@ -1,9 +1,15 @@
 package com.hugo.player.ui
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import android.widget.Toast
+import com.hugo.player.data.CatalogRepository
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -61,6 +67,7 @@ fun MovieDetailScreen(
     onBack: () -> Unit,
 ) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val key = remember(movie) { WatchHistory.contentKey(movie.playlistId, movie.url) }
     var isFav by remember { mutableStateOf(WatchHistory.isFavorite(context, key)) }
     var info by remember { mutableStateOf<TmdbClient.Info?>(null) }
@@ -129,12 +136,18 @@ fun MovieDetailScreen(
                         )
                     }
                     Spacer(Modifier.height(14.dp))
+                    val playSrc = remember { MutableInteractionSource() }
+                    val favSrc = remember { MutableInteractionSource() }
+                    val playFocused by playSrc.collectIsFocusedAsState()
+                    val favFocused by favSrc.collectIsFocusedAsState()
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Button(
                             onClick = {
                                 onPlay(PlaybackRequest(url = movie.url, title = movie.name, subtitle = "Filme", isLive = false, playlistId = movie.playlistId, logo = movie.logo))
                             },
                             colors = ButtonDefaults.buttonColors(containerColor = HugoColors.Accent),
+                            interactionSource = playSrc,
+                            border = if (playFocused) BorderStroke(2.dp, Color.White) else null,
                             contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
                         ) {
                             Icon(Icons.Default.PlayArrow, null, modifier = Modifier.size(16.dp))
@@ -147,6 +160,8 @@ fun MovieDetailScreen(
                                 if (isFav) WatchHistory.saveFavoriteMeta(context, key, movie.name, movie.url, movie.logo, movie.playlistId)
                             },
                             colors = ButtonDefaults.buttonColors(containerColor = if (isFav) Color(0xFFEC4899) else HugoColors.CardAlt),
+                            interactionSource = favSrc,
+                            border = if (favFocused) BorderStroke(2.dp, Color.White) else null,
                             contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
                         ) {
                             Icon(if (isFav) Icons.Default.Favorite else Icons.Default.FavoriteBorder, null, modifier = Modifier.size(16.dp))
@@ -161,19 +176,36 @@ fun MovieDetailScreen(
                 Spacer(Modifier.height(20.dp))
                 Text("Semelhantes", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
                 Spacer(Modifier.height(8.dp))
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    items(similar, key = { it.id }) { s ->
-                        Column(Modifier.width(110.dp)) {
-                            Box(
-                                Modifier.fillMaxWidth().aspectRatio(2f / 3f).clip(RoundedCornerShape(10.dp)).background(HugoColors.Card),
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                s.poster?.let {
-                                    SubcomposeAsyncImage(model = it, contentDescription = s.title, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(horizontal = 4.dp, vertical = 6.dp)) {
+                    itemsIndexed(similar, key = { i, s -> "$i:${s.id}" }) { _, s ->
+                        // cartão focável: no controle remoto a seleção aparece e a tela desce até a fileira
+                        FocusSurface(
+                            onClick = {
+                                scope.launch {
+                                    val found = runCatching {
+                                        CatalogRepository.get(context).page(movie.playlistId, "movie", null, s.title, 0, 1).firstOrNull()
+                                    }.getOrNull()
+                                    if (found != null) onOpenSimilar(found)
+                                    else Toast.makeText(context, "\"${s.title}\" não está na sua lista", Toast.LENGTH_SHORT).show()
                                 }
+                            },
+                            modifier = Modifier.width(110.dp),
+                            color = Color.Transparent,
+                            focusedColor = HugoColors.Accent.copy(alpha = 0.35f),
+                            focusScale = 1.06f,
+                        ) { focused ->
+                            Column(Modifier.fillMaxWidth().padding(3.dp)) {
+                                Box(
+                                    Modifier.fillMaxWidth().aspectRatio(2f / 3f).clip(RoundedCornerShape(10.dp)).background(HugoColors.Card),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    s.poster?.let {
+                                        SubcomposeAsyncImage(model = it, contentDescription = s.title, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+                                    }
+                                }
+                                Spacer(Modifier.height(4.dp))
+                                Text(s.title, color = if (focused) Color.White else HugoColors.TextMuted, fontSize = 11.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
                             }
-                            Spacer(Modifier.height(4.dp))
-                            Text(s.title, color = Color.White, fontSize = 11.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
                         }
                     }
                 }

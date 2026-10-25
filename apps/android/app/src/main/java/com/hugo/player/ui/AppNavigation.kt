@@ -133,7 +133,7 @@ fun AppNavigation() {
         composable("movieDetail") {
             val movie = remember { MovieSession.current }
             if (movie != null) {
-                MovieDetailScreen(movie = movie, onPlay = { req -> nav.openPlayer(req) }, onOpenSimilar = { m -> MovieSession.current = m; nav.navigate("movieDetail") { launchSingleTop = true } }, onBack = { nav.popBackStack() })
+                MovieDetailScreen(movie = movie, onPlay = { req -> nav.openPlayer(req) }, onOpenSimilar = { m -> MovieSession.current = m; nav.navigate("movieDetail") }, onBack = { nav.popBackStack() })
             } else LaunchedEffect(Unit) { nav.popBackStack() }
         }
         composable("settings") { SettingsScreen(identity.deviceId, identity.deviceKey, onBack = { nav.popBackStack() }) }
