@@ -116,6 +116,8 @@ object LiveEpg {
                 cache[key(playlistId, c)] = Entry(v, t)
                 if (v != null) out[c.url] = v
             }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (e: Exception) {
             Log.w(TAG, "EPG indisponível: ${e.message}")
             unavailable[playlistId] = System.currentTimeMillis()
@@ -140,6 +142,8 @@ object LiveEpg {
                 )
                 parsePrograms(json.optJSONArray("programmes"))
             }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (e: Exception) {
             Log.w(TAG, "guia: ${e.message}")
             listOfNotNull(nn.now, nn.next)
@@ -308,6 +312,8 @@ object LiveEpg {
 
         val p = Xml.newPullParser()
         p.setFeature(XmlPullParser.FEATURE_PROCESS_NAMESPACES, false)
+        // XMLTV de IPTV costuma ter &nbsp; e afins: modo tolerante do kXML
+        runCatching { p.setFeature("http://xmlpull.org/v1/doc/features.html#relaxed", true) }
         p.setInput(input, null)
         var chId: String? = null
         val chNames = ArrayList<String>()
