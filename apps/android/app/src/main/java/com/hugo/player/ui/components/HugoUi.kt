@@ -58,6 +58,9 @@ fun FocusSurface(
     selectedColor: Color = HugoColors.Accent,
     focusScale: Float = 1.04f,
     onFocused: (() -> Unit)? = null,
+    /** borda do foco (pôsteres usam mais grossa, para enxergar de longe na TV) */
+    focusBorderWidth: Dp = 2.dp,
+    focusBorderColor: Color = Color.White,
     content: @Composable BoxScope.(focused: Boolean) -> Unit,
 ) {
     val interaction = remember { MutableInteractionSource() }
@@ -74,7 +77,7 @@ fun FocusSurface(
                     else -> color
                 }
             )
-            .border(2.dp, if (focused) Color.White else Color.Transparent, shape)
+            .border(focusBorderWidth, if (focused) focusBorderColor else Color.Transparent, shape)
             .onFocusChanged { if (it.isFocused) onFocused?.invoke() }
             .clickable(interactionSource = interaction, indication = null, onClick = onClick)
     ) {
@@ -124,7 +127,7 @@ fun PosterCard(
     onFocused: (() -> Unit)? = null,
 ) {
     val ctx = LocalContext.current
-    FocusSurface(onClick = onClick, modifier = modifier, focusScale = 1.07f, onFocused = onFocused) { focused ->
+    FocusSurface(onClick = onClick, modifier = modifier, focusScale = 1.07f, onFocused = onFocused, focusBorderWidth = 3.dp, focusedColor = HugoColors.Accent.copy(alpha = 0.45f)) { focused ->
         Column {
             Box(Modifier.fillMaxWidth().aspectRatio(2f / 3f).background(Color(0xFF0F1220))) {
                 PosterPlaceholder(title)

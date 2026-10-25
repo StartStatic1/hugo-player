@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { buildCatalogFromXtream, fetchSeriesInfo, fetchShortEpg, parseXtreamUrl } from "../content/xtream.js";
+import { buildCatalogFromXtream, fetchSeriesInfo, fetchShortEpg, hmsToSecs, parseXtreamUrl } from "../content/xtream.js";
 
 test("detecta credenciais Xtream", () => {
   const c = parseXtreamUrl("http://panel.example.test:8080/get.php?username=u1&password=p1&type=m3u_plus&output=ts")!;
@@ -68,7 +68,7 @@ test("get_series_info → temporadas e episódios", async () => {
         "2": [{ id: "502", episode_num: 1, title: "S2E1", container_extension: "mp4", season: 2, info: { duration_secs: 3000 } }],
         "1": [
           { id: "402", episode_num: 2, title: "S1E2", container_extension: "mkv", season: 1, info: { movie_image: "http://img.example.test/e.jpg" } },
-          { id: "401", episode_num: 1, title: "S1E1", container_extension: "mkv", season: 1 },
+          { id: "401", episode_num: 1, title: "S1E1", container_extension: "mkv", season: 1, info: { plot: "Piloto", duration: "00:42:30" } },
         ],
       },
     },
@@ -79,6 +79,18 @@ test("get_series_info → temporadas e episódios", async () => {
   assert.equal(info.seasons[0].episodes[0].url, "http://panel.example.test:8080/series/u1/p1/401.mkv");
   assert.equal(info.seasons[0].episodes[1].cover, "http://img.example.test/e.jpg");
   assert.equal(info.seasons[1].episodes[0].durationSecs, 3000);
+  // sinopse e duração "hh:mm:ss" do episódio
+  assert.equal(info.seasons[0].episodes[0].plot, "Piloto");
+  assert.equal(info.seasons[0].episodes[0].durationSecs, 2550);
+  // sem miniatura própria: usa a capa da série
+  assert.equal(info.seasons[0].episodes[0].cover, "http://img.example.test/s.jpg");
+});
+
+test("hmsToSecs", () => {
+  assert.equal(hmsToSecs("01:02:03"), 3723);
+  assert.equal(hmsToSecs("45:10"), 2710);
+  assert.equal(hmsToSecs("x"), undefined);
+  assert.equal(hmsToSecs(undefined), undefined);
 });
 
 test("get_short_epg decodifica base64", async () => {

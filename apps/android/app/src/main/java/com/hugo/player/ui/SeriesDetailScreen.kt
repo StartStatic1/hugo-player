@@ -1,5 +1,8 @@
 package com.hugo.player.ui
 
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -51,13 +54,7 @@ import com.hugo.player.ui.components.HugoIconButton
 
 private val SeriesAccent = Color(0xFF06B6D4)
 
-internal fun episodeTitle(ep: ChannelEntity): String {
-    var t = ep.name
-    ep.seriesName?.let { if (t.startsWith(it, ignoreCase = true)) t = t.substring(it.length) }
-    t = t.replace(Regex("^[\\s._-]*([Ss]\\d{1,2}[\\s._-]*[Ee]\\d{1,3}|\\d{1,2}x\\d{1,3}|[Tt]emp(?:orada)?\\.?\\s*\\d+\\s*[Ee]p(?:is[oó]dio)?\\.?\\s*\\d+)"), "")
-    t = t.trim().trimStart('-', '|', ':', '.', '_').trim()
-    return t
-}
+internal fun episodeTitle(ep: ChannelEntity): String = cleanEpisodeTitle(ep.name, ep.seriesName)
 
 @Composable
 fun SeriesDetailScreen(
@@ -69,6 +66,8 @@ fun SeriesDetailScreen(
     val context = LocalContext.current
     val repo = remember { CatalogRepository.get(context) }
     var episodes by remember { mutableStateOf<List<ChannelEntity>?>(null) }
+    // sinopse/duração por URL do episódio (quando o servidor manda)
+    var meta by remember { mutableStateOf<Map<String, EpisodeMeta>>(emptyMap()) }
     var errorMsg by remember { mutableStateOf<String?>(null) }
     var selectedSeason by rememberSaveable { mutableStateOf<Int?>(null) }
     var info by remember { mutableStateOf<TmdbClient.Info?>(null) }
@@ -101,12 +100,17 @@ fun SeriesDetailScreen(
                 val json = JSONObject(body)
                 val arr = json.optJSONArray("episodes")
                 val list = mutableListOf<ChannelEntity>()
+                val metaOut = HashMap<String, EpisodeMeta>()
                 if (arr != null) {
                     for (i in 0 until arr.length()) {
                         val e = arr.getJSONObject(i)
+                        val plot = e.optString("plot").takeIf { it.isNotBlank() && it != "null" }
+                        val dur = e.optInt("durationSecs", 0).takeIf { it > 0 }
+                        if (plot != null || dur != null) metaOut[e.getString("url")] = EpisodeMeta(plot, dur)
                         list.add(ChannelEntity(name = e.optString("name", seriesName), url = e.getString("url"), logo = e.optString("logo").takeIf { it.isNotEmpty() }, group = "", type = "series", playlistId = playlistId, seriesName = seriesName, season = e.optInt("season", 1), episode = e.optInt("episode", i + 1)))
                     }
                 }
+                meta = metaOut
                 episodes = list
             } catch (ex: Exception) {
                 errorMsg = "Erro: ${ex.javaClass.simpleName}: ${ex.message}"
@@ -144,26 +148,47 @@ fun SeriesDetailScreen(
             }
             Spacer(Modifier.width(24.dp))
             Column(Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(seriesName, color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                Text(seriesName, color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                info?.genres?.let { Text(it, color = HugoColors.Accent, fontSize = 12.sp, modifier = Modifier.padding(top = 2.dp)) }
+                Text(info?.overview ?: "Sinopse não disponível.", color = HugoColors.TextMuted, fontSize = 12.sp, maxLines = 3, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 4.dp))
+                Spacer(Modifier.height(4.dp))
+                Text(if (episodes == null) "Carregando..." else "${bySeason.size} temporada(s) · ${episodes!!.size} episódio(s)", color = HugoColors.TextMuted, fontSize = 13.sp)
+                Spacer(Modifier.height(10.dp))
+                // ações: Assistir (1º episódio da temporada escolhida) + Favoritar lado a lado
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    val first = selectedSeason?.let { bySeason[it] }?.firstOrNull()
+                    val playSrc = remember { MutableInteractionSource() }
+                    val favSrc = remember { MutableInteractionSource() }
+                    val playFocused by playSrc.collectIsFocusedAsState()
+                    val favFocused by favSrc.collectIsFocusedAsState()
+                    Button(
+                        onClick = { first?.let { play(it) } },
+                        enabled = first != null,
+                        colors = ButtonDefaults.buttonColors(containerColor = SeriesAccent, contentColor = Color.White),
+                        interactionSource = playSrc,
+                        border = if (playFocused) BorderStroke(2.dp, Color.White) else null,
+                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
+                    ) {
+                        Icon(Icons.Default.PlayArrow, null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text(first?.let { "Assistir T${it.season ?: 1} E${it.episode ?: 1}" } ?: "Assistir", fontSize = 13.sp)
+                    }
                     Button(
                         onClick = {
                             isFav = WatchHistory.toggleFavorite(context, favKey)
                             if (isFav) WatchHistory.saveFavoriteMeta(context, favKey, seriesName, "", poster, playlistId)
                         },
-                        colors = ButtonDefaults.buttonColors(containerColor = if (isFav) Color(0xFFEC4899) else HugoColors.CardAlt),
-                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = if (isFav) Color(0xFFEC4899) else Color(0xFF2A2140), contentColor = Color.White),
+                        interactionSource = favSrc,
+                        border = if (favFocused) BorderStroke(2.dp, Color.White) else BorderStroke(1.dp, Color(0xFFEC4899)),
+                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
                     ) {
                         Icon(if (isFav) Icons.Default.Favorite else Icons.Default.FavoriteBorder, null, modifier = Modifier.size(16.dp))
                         Spacer(Modifier.width(4.dp))
-                        Text(if (isFav) "Favorito" else "Favoritar", fontSize = 12.sp)
+                        Text(if (isFav) "Favorito" else "Favoritar", fontSize = 13.sp)
                     }
                 }
-                info?.genres?.let { Text(it, color = HugoColors.Accent, fontSize = 12.sp, modifier = Modifier.padding(top = 2.dp)) }
-                Text(info?.overview ?: "Sinopse não disponível.", color = HugoColors.TextMuted, fontSize = 12.sp, maxLines = 3, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 4.dp))
-                Spacer(Modifier.height(4.dp))
-                Text(if (episodes == null) "Carregando..." else "${bySeason.size} temporada(s) · ${episodes!!.size} episódio(s)", color = HugoColors.TextMuted, fontSize = 13.sp)
-                Spacer(Modifier.height(12.dp))
+                Spacer(Modifier.height(10.dp))
 
                 if (episodes == null) { Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = SeriesAccent) }; return@Column }
                 if (episodes!!.isEmpty()) { Text("Nenhum episódio encontrado.", color = HugoColors.TextMuted); return@Column }
@@ -182,16 +207,22 @@ fun SeriesDetailScreen(
 
                 LazyColumn(state = listState, verticalArrangement = Arrangement.spacedBy(6.dp), contentPadding = PaddingValues(bottom = 24.dp)) {
                     itemsIndexed(seasonEps, key = { i, it -> "${it.id}-$i" }) { index, ep ->
-                        FocusSurface(onClick = { play(ep) }, focusScale = 1.01f, shape = RoundedCornerShape(10.dp), modifier = Modifier.fillMaxWidth().height(64.dp).then(if (index == 0) Modifier.focusRequester(firstEpisodeFocus) else Modifier)) { focused ->
-                            Row(Modifier.fillMaxSize().padding(horizontal = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-                                Box(Modifier.width(80.dp).height(48.dp).clip(RoundedCornerShape(6.dp)).background(Color(0xFF0F1220)), contentAlignment = Alignment.Center) {
-                                    if (!ep.logo.isNullOrBlank()) SubcomposeAsyncImage(model = ep.logo, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+                        val m = meta[ep.url]
+                        val title = episodeTitle(ep)
+                        val header = listOfNotNull(ep.episode?.let { "Episódio $it" } ?: "Episódio ${index + 1}", formatEpisodeDuration(m?.durationSecs)).joinToString(" · ")
+                        FocusSurface(onClick = { play(ep) }, focusScale = 1.01f, focusBorderWidth = 3.dp, shape = RoundedCornerShape(10.dp), modifier = Modifier.fillMaxWidth().heightIn(min = 72.dp).then(if (index == 0) Modifier.focusRequester(firstEpisodeFocus) else Modifier)) { focused ->
+                            Row(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Box(Modifier.width(112.dp).height(63.dp).clip(RoundedCornerShape(6.dp)).background(Color(0xFF0F1220)), contentAlignment = Alignment.Center) {
+                                    val thumb = ep.logo?.takeIf { it.isNotBlank() } ?: poster
+                                    if (!thumb.isNullOrBlank()) SubcomposeAsyncImage(model = thumb, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
                                     Icon(Icons.Default.PlayCircle, null, tint = Color.White.copy(alpha = if (focused) 1f else 0.7f), modifier = Modifier.size(22.dp))
                                 }
                                 Spacer(Modifier.width(12.dp))
                                 Column(Modifier.weight(1f)) {
-                                    Text(ep.episode?.let { "Episódio $it" } ?: "Episódio ${index + 1}", color = if (focused) SeriesAccent else HugoColors.TextMuted, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
-                                    Text(episodeTitle(ep).ifBlank { ep.name }, color = Color.White, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    Text(header, color = if (focused) SeriesAccent else HugoColors.TextMuted, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                                    if (title.isNotBlank()) Text(title, color = Color.White, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    m?.plot?.let { Text(it, color = HugoColors.TextMuted, fontSize = 11.sp, maxLines = 2, overflow = TextOverflow.Ellipsis) }
+                                    if (title.isBlank() && m?.plot == null) Text(seriesName, color = Color.White, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                 }
                                 if (focused) Icon(Icons.Default.PlayArrow, null, tint = Color.White)
                             }

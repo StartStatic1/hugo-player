@@ -185,6 +185,15 @@ export async function buildCatalogFromXtream(c: XtreamCredentials, fetchJson: Js
   };
 }
 
+/** "01:02:03" / "45:10" -> segundos */
+export function hmsToSecs(v: unknown): number | undefined {
+  if (typeof v !== "string") return undefined;
+  const parts = v.trim().split(":").map((x) => parseInt(x, 10));
+  if (!parts.length || parts.some((x) => !Number.isFinite(x) || x < 0)) return undefined;
+  const secs = parts.reduce((acc, x) => acc * 60 + x, 0);
+  return secs > 0 ? secs : undefined;
+}
+
 export interface SeriesInfo {
   seriesId: number;
   name: string;
@@ -217,7 +226,7 @@ export async function fetchSeriesInfo(c: XtreamCredentials, seriesId: number, fe
         url: episodeStreamUrl(c, epId, str(e.container_extension) || "mp4"),
         cover: img(epInfo.movie_image) ?? img(info.cover),
         plot: str(epInfo.plot) || undefined,
-        durationSecs: num(epInfo.duration_secs),
+        durationSecs: num(epInfo.duration_secs) ?? hmsToSecs(epInfo.duration),
       };
     });
     episodes.sort((a, b) => a.episode - b.episode);

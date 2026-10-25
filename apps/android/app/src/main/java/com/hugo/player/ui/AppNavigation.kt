@@ -35,6 +35,7 @@ import com.hugo.player.data.WatchHistory
 import com.hugo.player.data.db.ChannelEntity
 import com.hugo.player.player.PlaybackRequest
 import com.hugo.player.player.PlaybackSession
+import com.hugo.player.ui.components.FocusSurface
 import com.hugo.player.ui.components.HugoColors
 import com.hugo.player.ui.components.HugoIconButton
 import java.net.URLDecoder
@@ -185,15 +186,21 @@ private fun FavoritesScreen(onOpen: (WatchHistory.FavoriteItem) -> Unit, onBack:
             ) {
                 items(items, key = { it.key }) { fav ->
                     Box {
-                        Column(
-                            Modifier
-                                .fillMaxWidth()
-                                .clickable(indication = null, interactionSource = remember { MutableInteractionSource() }) { onOpen(fav) }
-                        ) {
-                            Box(Modifier.fillMaxWidth().aspectRatio(2f / 3f).clip(RoundedCornerShape(10.dp)).background(HugoColors.Card)) {
-                                fav.logo?.let { SubcomposeAsyncImage(model = it, contentDescription = fav.title, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize()) }
+                        // cartão focável com borda visível no controle remoto
+                        FocusSurface(
+                            onClick = { onOpen(fav) },
+                            modifier = Modifier.fillMaxWidth(),
+                            color = Color.Transparent,
+                            focusedColor = HugoColors.Accent.copy(alpha = 0.35f),
+                            focusScale = 1.05f,
+                            focusBorderWidth = 3.dp,
+                        ) { _ ->
+                            Column(Modifier.fillMaxWidth().padding(3.dp)) {
+                                Box(Modifier.fillMaxWidth().aspectRatio(2f / 3f).clip(RoundedCornerShape(10.dp)).background(HugoColors.Card)) {
+                                    fav.logo?.let { SubcomposeAsyncImage(model = it, contentDescription = fav.title, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize()) }
+                                }
+                                Text(fav.title, color = Color.White, fontSize = 11.sp, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 4.dp, start = 2.dp, end = 2.dp))
                             }
-                            Text(fav.title, color = Color.White, fontSize = 11.sp, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 4.dp, start = 2.dp, end = 2.dp))
                         }
                         IconButton(
                             onClick = { WatchHistory.removeFavorite(context, fav.key); items = WatchHistory.listFavorites(context) },

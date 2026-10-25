@@ -35,7 +35,10 @@ channelsRouter.get("/series-episodes", async (req, res) => {
         url: e.url,
         season: s.season,
         episode: e.episode,
-        logo: info.cover,
+        // miniatura do próprio episódio quando o painel tem; senão a capa da série (apps antigos usam "logo")
+        logo: e.cover ?? info.cover,
+        ...(e.plot ? { plot: e.plot } : {}),
+        ...(e.durationSecs ? { durationSecs: e.durationSecs } : {}),
       })),
     );
     res.json({ name: info.name, cover: info.cover, plot: info.plot, episodes });

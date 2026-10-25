@@ -145,7 +145,7 @@ fun MovieDetailScreen(
                             onClick = {
                                 onPlay(PlaybackRequest(url = movie.url, title = movie.name, subtitle = "Filme", isLive = false, playlistId = movie.playlistId, logo = movie.logo))
                             },
-                            colors = ButtonDefaults.buttonColors(containerColor = HugoColors.Accent),
+                            colors = ButtonDefaults.buttonColors(containerColor = HugoColors.Accent, contentColor = Color.White),
                             interactionSource = playSrc,
                             border = if (playFocused) BorderStroke(2.dp, Color.White) else null,
                             contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
@@ -159,9 +159,10 @@ fun MovieDetailScreen(
                                 isFav = WatchHistory.toggleFavorite(context, key)
                                 if (isFav) WatchHistory.saveFavoriteMeta(context, key, movie.name, movie.url, movie.logo, movie.playlistId)
                             },
-                            colors = ButtonDefaults.buttonColors(containerColor = if (isFav) Color(0xFFEC4899) else HugoColors.CardAlt),
+                            // legível sem foco: texto branco + contorno rosa
+                            colors = ButtonDefaults.buttonColors(containerColor = if (isFav) Color(0xFFEC4899) else Color(0xFF2A2140), contentColor = Color.White),
                             interactionSource = favSrc,
-                            border = if (favFocused) BorderStroke(2.dp, Color.White) else null,
+                            border = if (favFocused) BorderStroke(2.dp, Color.White) else BorderStroke(1.dp, Color(0xFFEC4899)),
                             contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
                         ) {
                             Icon(if (isFav) Icons.Default.Favorite else Icons.Default.FavoriteBorder, null, modifier = Modifier.size(16.dp))
@@ -193,6 +194,7 @@ fun MovieDetailScreen(
                             color = Color.Transparent,
                             focusedColor = HugoColors.Accent.copy(alpha = 0.35f),
                             focusScale = 1.06f,
+                            focusBorderWidth = 3.dp,
                         ) { focused ->
                             Column(Modifier.fillMaxWidth().padding(3.dp)) {
                                 Box(
