@@ -76,6 +76,8 @@ data class BrowseItem(
     val url: String?,
     val seriesName: String? = null,
     val channel: ChannelEntity? = null,
+    /** Filme: versão legendada do mesmo título (o card vira "Dublado | Legendado"). */
+    val legendado: ChannelEntity? = null,
 )
 
 class BrowseViewModel(app: Application) : AndroidViewModel(app) {
@@ -106,8 +108,12 @@ class BrowseViewModel(app: Application) : AndroidViewModel(app) {
         this.playlistId = playlistId
         this.type = type
         viewModelScope.launch {
-            categories = repo.getCategories(playlistId, type.dbType)
-            allCount = if (type == BrowseType.SERIES) repo.seriesCount(playlistId, null, null) else repo.count(playlistId, type.dbType)
+            categories = repo.getCategoriesMerged(playlistId, type.dbType)
+            allCount = when (type) {
+                BrowseType.SERIES -> repo.seriesCount(playlistId, null, null)
+                BrowseType.MOVIES -> repo.mergedMovieCount(playlistId)
+                else -> repo.count(playlistId, type.dbType)
+            }
         }
         reload()
     }
@@ -160,6 +166,14 @@ class BrowseViewModel(app: Application) : AndroidViewModel(app) {
         BrowseType.SERIES -> repo.seriesPage(playlistId, selectedGroup, query, p).map {
             BrowseItem(key = "s:" + it.seriesName, title = it.seriesName, image = it.logo, subtitle = null, url = null, seriesName = it.seriesName)
         }
+        BrowseType.MOVIES -> {
+            val list = repo.page(playlistId, type.dbType, selectedGroup, query, p)
+            val twins = runCatching { repo.legendadoTwins(playlistId, list) }.getOrDefault(emptyMap())
+            list.map {
+                val l = twins[it.id]
+                BrowseItem(key = "c:${it.id}", title = it.name, image = it.logo ?: l?.logo, subtitle = if (l != null) "Dublado · Legendado" else null, url = it.url, channel = it, legendado = l)
+            }
+        }
         else -> repo.page(playlistId, type.dbType, selectedGroup, query, p).map {
             BrowseItem(key = "c:${it.id}", title = it.name, image = it.logo, subtitle = null, url = it.url, channel = it)
         }
@@ -184,6 +198,16 @@ fun BrowseScreen(
     val gridFocus = remember { FocusRequester() }
     var handledReset by rememberSaveable { mutableIntStateOf(-1) }
     val nf = remember { NumberFormat.getIntegerInstance(Locale("pt", "BR")) }
+    // filme com as duas versões: pergunta Dublado / Legendado antes de abrir
+    var audioChoice by remember { mutableStateOf<BrowseItem?>(null) }
+    audioChoice?.let { item ->
+        AudioVersionDialog(
+            title = item.title,
+            onDubbed = { audioChoice = null; item.channel?.let(onOpenMovie) },
+            onSubtitled = { audioChoice = null; item.legendado?.let(onOpenMovie) },
+            onDismiss = { audioChoice = null },
+        )
+    }
 
     LaunchedEffect(vm.resetToken) {
         if (handledReset != -1 && handledReset != vm.resetToken) gridState.scrollToItem(0)
@@ -256,6 +280,7 @@ fun BrowseScreen(
                             val click = {
                                 when {
                                     item.seriesName != null -> onOpenSeries(item.seriesName)
+                                    type == BrowseType.MOVIES && item.channel != null && item.legendado != null -> audioChoice = item
                                     type == BrowseType.MOVIES && item.channel != null -> onOpenMovie(item.channel)
                                     else -> item.url?.let { onPlay(it, item.title) }
                                 }

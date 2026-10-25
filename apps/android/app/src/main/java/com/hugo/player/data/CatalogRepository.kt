@@ -432,11 +432,30 @@ class CatalogRepository(context: Context) {
 
     suspend fun page(playlistId: String, type: String, group: String?, query: String?, page: Int, pageSize: Int = PAGE_SIZE): List<ChannelEntity> =
         withContext(Dispatchers.IO) {
-            dao.page(playlistId, type, group, query?.trim()?.takeIf { it.isNotEmpty() }, type == "live", pageSize, page * pageSize)
+            // filmes: o "Nome [L] (Ano)" some quando o dublado igual está na mesma lista (vira opção no card)
+            dao.page(playlistId, type, group, query?.trim()?.takeIf { it.isNotEmpty() }, type == "live", pageSize, page * pageSize, type == "movie")
         }
 
     suspend fun countFiltered(playlistId: String, type: String, group: String?, query: String?): Int =
-        withContext(Dispatchers.IO) { dao.countFiltered(playlistId, type, group, query?.trim()?.takeIf { it.isNotEmpty() }) }
+        withContext(Dispatchers.IO) { dao.countFiltered(playlistId, type, group, query?.trim()?.takeIf { it.isNotEmpty() }, type == "movie") }
+
+    /** Filmes contando dublado+legendado como um só. */
+    suspend fun mergedMovieCount(playlistId: String): Int =
+        withContext(Dispatchers.IO) { dao.countFiltered(playlistId, "movie", null, null, true) }
+
+    /** Para cada filme dublado da lista, a versão legendada exata ("Nome [L] (Ano)"), se existir. Chave = id do dublado. */
+    suspend fun legendadoTwins(playlistId: String, movies: List<ChannelEntity>): Map<Long, ChannelEntity> = withContext(Dispatchers.IO) {
+        val wanted = HashMap<String, Long>()
+        movies.filter { it.type == "movie" && !MovieTwins.isLegendado(it.name) }.forEach { m ->
+            MovieTwins.legendadoCandidates(m.name).forEach { wanted.putIfAbsent(it, m.id) }
+        }
+        if (wanted.isEmpty()) return@withContext emptyMap()
+        val out = HashMap<Long, ChannelEntity>()
+        wanted.keys.toList().chunked(400).forEach { chunk ->
+            dao.byNames(playlistId, "movie", chunk).forEach { l -> wanted[l.name]?.let { out.putIfAbsent(it, l) } }
+        }
+        out
+    }
 
     suspend fun seriesPage(playlistId: String, group: String?, query: String?, page: Int, pageSize: Int = PAGE_SIZE): List<SeriesSummary> =
         withContext(Dispatchers.IO) { dao.seriesPage(playlistId, group, query?.trim()?.takeIf { it.isNotEmpty() }, pageSize, page * pageSize) }
@@ -458,7 +477,7 @@ class CatalogRepository(context: Context) {
     /** Janela da lista ao vivo (mesma ordem da tela), para zapear no player. */
     suspend fun liveWindow(playlistId: String, group: String?, query: String?, offset: Int, limit: Int): List<ChannelEntity> =
         withContext(Dispatchers.IO) {
-            dao.page(playlistId, "live", group, query?.trim()?.takeIf { it.isNotEmpty() }, true, limit, offset.coerceAtLeast(0))
+            dao.page(playlistId, "live", group, query?.trim()?.takeIf { it.isNotEmpty() }, true, limit, offset.coerceAtLeast(0), false)
         }
 
     suspend fun liveEpgKeys(playlistId: String) =
@@ -466,6 +485,14 @@ class CatalogRepository(context: Context) {
 
     suspend fun getCategories(playlistId: String, type: String) =
         withContext(Dispatchers.IO) { dao.getCategories(playlistId, type) }
+
+    /** Categorias de filmes com a contagem já juntando dublado+legendado. */
+    suspend fun getCategoriesMerged(playlistId: String, type: String): List<com.hugo.player.data.db.CategoryEntity> = withContext(Dispatchers.IO) {
+        val cats = dao.getCategories(playlistId, type)
+        if (type != "movie") return@withContext cats
+        val counts = runCatching { dao.mergedGroupCounts(playlistId, type).associate { it.name to it.count } }.getOrNull() ?: return@withContext cats
+        cats.map { c -> counts[c.name]?.let { c.copy(count = it) } ?: c }
+    }
 
     suspend fun count(playlistId: String, type: String) =
         withContext(Dispatchers.IO) { dao.countByType(playlistId, type) }

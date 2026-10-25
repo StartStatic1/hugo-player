@@ -7,6 +7,8 @@ import androidx.room.*
     indices = [
         Index(value = ["playlistId", "type", "group"]),
         Index(value = ["playlistId", "type", "seriesName"]),
+        // achar o gêmeo dublado/legendado ("Nome [L] (Ano)") rápido
+        Index(value = ["playlistId", "type", "name"]),
     ]
 )
 data class ChannelEntity(
@@ -39,6 +41,8 @@ data class CategoryEntity(
 /** Nome + tvg-id dos canais ao vivo (filtro do EPG baixado no aparelho). */
 data class LiveEpgKey(val name: String, val epgId: String?)
 
+data class GroupCount(val name: String, val count: Int)
+
 /** Série agrupada (resultado de GROUP BY seriesName). */
 data class SeriesSummary(
     val seriesName: String,
@@ -60,17 +64,40 @@ interface ChannelDao {
         """SELECT * FROM channels WHERE playlistId = :playlistId AND type = :type
            AND (:group IS NULL OR `group` = :group)
            AND (:query IS NULL OR name LIKE '%' || :query || '%')
+           AND (:dedupe = 0 OR instr(name, ' [L]') = 0 OR NOT EXISTS (
+               SELECT 1 FROM channels d WHERE d.playlistId = channels.playlistId AND d.type = channels.type
+               AND d.name = replace(channels.name, ' [L]', '')
+               AND (:group IS NULL OR d.`group` = :group)
+               AND (:query IS NULL OR d.name LIKE '%' || :query || '%')))
            ORDER BY CASE WHEN :keepOrder THEN id END, name COLLATE NOCASE, id
            LIMIT :limit OFFSET :offset"""
     )
-    suspend fun page(playlistId: String, type: String, group: String?, query: String?, keepOrder: Boolean, limit: Int, offset: Int): List<ChannelEntity>
+    suspend fun page(playlistId: String, type: String, group: String?, query: String?, keepOrder: Boolean, limit: Int, offset: Int, dedupe: Boolean): List<ChannelEntity>
 
     @Query(
         """SELECT COUNT(*) FROM channels WHERE playlistId = :playlistId AND type = :type
            AND (:group IS NULL OR `group` = :group)
-           AND (:query IS NULL OR name LIKE '%' || :query || '%')"""
+           AND (:query IS NULL OR name LIKE '%' || :query || '%')
+           AND (:dedupe = 0 OR instr(name, ' [L]') = 0 OR NOT EXISTS (
+               SELECT 1 FROM channels d WHERE d.playlistId = channels.playlistId AND d.type = channels.type
+               AND d.name = replace(channels.name, ' [L]', '')
+               AND (:group IS NULL OR d.`group` = :group)
+               AND (:query IS NULL OR d.name LIKE '%' || :query || '%')))"""
     )
-    suspend fun countFiltered(playlistId: String, type: String, group: String?, query: String?): Int
+    suspend fun countFiltered(playlistId: String, type: String, group: String?, query: String?, dedupe: Boolean): Int
+
+    /** Versões legendadas cujo nome exato está na lista (para juntar ao card dublado). */
+    @Query("SELECT * FROM channels WHERE playlistId = :playlistId AND type = :type AND name IN (:names)")
+    suspend fun byNames(playlistId: String, type: String, names: List<String>): List<ChannelEntity>
+
+    /** Contagem por categoria já sem o legendado que tem gêmeo dublado na mesma categoria. */
+    @Query(
+        """SELECT `group` AS name, COUNT(*) AS count FROM channels c WHERE c.playlistId = :playlistId AND c.type = :type
+           AND (instr(c.name, ' [L]') = 0 OR NOT EXISTS (SELECT 1 FROM channels d WHERE d.playlistId = c.playlistId AND d.type = c.type
+               AND d.name = replace(c.name, ' [L]', '') AND d.`group` = c.`group`))
+           GROUP BY `group`"""
+    )
+    suspend fun mergedGroupCounts(playlistId: String, type: String): List<GroupCount>
 
     @Query(
         """SELECT COALESCE(seriesName, name) AS seriesName, MAX(logo) AS logo, COUNT(*) AS episodes, COUNT(DISTINCT season) AS seasons
@@ -116,7 +143,7 @@ interface ChannelDao {
     suspend fun deleteCategories(playlistId: String)
 }
 
-@Database(entities = [ChannelEntity::class, CategoryEntity::class], version = 3, exportSchema = false)
+@Database(entities = [ChannelEntity::class, CategoryEntity::class], version = 4, exportSchema = false)
 abstract class HugoDatabase : RoomDatabase() {
     abstract fun channelDao(): ChannelDao
 
@@ -127,11 +154,16 @@ abstract class HugoDatabase : RoomDatabase() {
                 db.execSQL("ALTER TABLE channels ADD COLUMN epgId TEXT")
             }
         }
+        val MIGRATION_3_4 = object : androidx.room.migration.Migration(3, 4) {
+            override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_channels_playlistId_type_name` ON `channels` (`playlistId`, `type`, `name`)")
+            }
+        }
         fun get(context: android.content.Context): HugoDatabase =
             INSTANCE ?: synchronized(this) {
                 INSTANCE ?: Room.databaseBuilder(context.applicationContext, HugoDatabase::class.java, "hugo.db")
                     // 2 -> 3 só acrescenta a coluna do EPG: listas já baixadas continuam (sem reimportar)
-                    .addMigrations(MIGRATION_2_3)
+                    .addMigrations(MIGRATION_2_3, MIGRATION_3_4)
                     .fallbackToDestructiveMigration()
                     .build().also { INSTANCE = it }
             }

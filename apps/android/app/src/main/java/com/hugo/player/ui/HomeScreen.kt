@@ -69,7 +69,7 @@ fun HomeScreen(playlistId: String, playlistName: String, onNavigate: (String) ->
     val liveFocus = remember { FocusRequester() }
 
     LaunchedEffect(playlistId) {
-        counts = Triple(repo.count(playlistId, "live"), repo.count(playlistId, "movie"), repo.seriesCount(playlistId, null, null))
+        counts = Triple(repo.count(playlistId, "live"), repo.mergedMovieCount(playlistId), repo.seriesCount(playlistId, null, null))
         continueItems = WatchHistory.listContinue(context, playlistId)
     }
     LaunchedEffect(Unit) {
