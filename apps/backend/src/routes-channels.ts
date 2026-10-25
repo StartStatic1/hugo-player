@@ -3,6 +3,7 @@ import fs from "fs";
 import { classifyEntry, parseEpisode } from "./content/classify.js";
 import { parseXtreamUrl, buildCatalogFromXtream, fetchSeriesInfo } from "./content/xtream.js";
 import { blockKey, isBlocked, markBlocked } from "./content/blocked-hosts.js";
+import { rememberChannels } from "./content/known-channels.js";
 
 export const channelsRouter = Router();
 
@@ -161,7 +162,7 @@ channelsRouter.get("/", async (req, res) => {
         if (catalog.stats.live + catalog.stats.movies + catalog.stats.series > 0) {
           const channels: any[] = [];
           for (const it of catalog.live.items)
-            channels.push({ name: it.name, url: it.url, logo: it.logo, group: it.group, type: "live" });
+            channels.push({ name: it.name, url: it.url, logo: it.logo, group: it.group, type: "live", epgId: it.epgId ?? undefined });
           for (const it of catalog.movies.items)
             channels.push({ name: it.name, url: it.url, logo: it.poster, group: it.group, type: "movie" });
           for (const it of catalog.series.items)
@@ -223,6 +224,7 @@ channelsRouter.get("/", async (req, res) => {
         }
       }
       playlistCache.set(playlistUrl, data);
+      rememberChannels(playlistUrl, data.channels.filter((c: any) => c.type === "live"));
       let filtered = data.channels;
       if (type && type !== "all") filtered = filtered.filter((c: any) => c.type === type);
       if (group) filtered = filtered.filter((c: any) => c.group === group);
@@ -255,6 +257,7 @@ channelsRouter.get("/", async (req, res) => {
       if (!text || text.length < 10) return res.status(422).json({ error: "empty_playlist" });
       data = parseM3U(text);
       playlistCache.set(playlistUrl, { ...data, timestamp: Date.now() });
+      rememberChannels(playlistUrl, data.channels.filter((c: any) => c.type === "live"));
     }
 
     let filtered = data.channels;
@@ -291,6 +294,7 @@ function parseM3U(content: string) {
     seriesName?: string;
     season?: number;
     episode?: number;
+    epgId?: string;
   }[] = [];
   const catMap = new Map<string, number>();
   let i = 0;
@@ -300,6 +304,7 @@ function parseM3U(content: string) {
       const nameMatch = line.match(/,(.*)$/);
       const groupMatch = line.match(/group-title="([^"]*)"/i);
       const logoMatch = line.match(/tvg-logo="([^"]*)"/i);
+      const tvgIdMatch = line.match(/tvg-id="([^"]*)"/i);
       const name = (nameMatch?.[1] || "").trim();
       const group = (groupMatch?.[1] || "Geral").trim();
       const logo = logoMatch?.[1] || "";
@@ -327,6 +332,7 @@ function parseM3U(content: string) {
           seriesName: ep?.show,
           season: ep?.season,
           episode: ep?.episode,
+          ...(type === "live" && tvgIdMatch?.[1]?.trim() ? { epgId: tvgIdMatch[1].trim() } : {}),
         });
         catMap.set(group, (catMap.get(group) || 0) + 1);
       }

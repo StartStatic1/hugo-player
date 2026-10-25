@@ -1,6 +1,7 @@
 /**
  * Parser XMLTV em streaming (sax) — não carrega o arquivo inteiro na memória.
- * Guarda só os programas dentro de uma janela de tempo (padrão: -3 h .. +36 h).
+ * Guarda só os programas dentro de uma janela de tempo (padrão: -2 h .. +24 h) e,
+ * se informado, só os canais da playlist (keep: tvg-ids e nomes normalizados).
  */
 import sax from "sax";
 import { Readable } from "node:stream";
@@ -59,12 +60,17 @@ export interface ParseOptions {
   pastMs?: number;
   futureMs?: number;
   maxDescLength?: number;
+  /** Só guarda canais cujo id (minúsculo) ou nome normalizado esteja aqui. */
+  keep?: { ids: Set<string>; names: Set<string> } | null;
 }
 
 export function parseXmltv(input: Readable | string, opts: ParseOptions = {}): Promise<EpgData> {
   const now = opts.now ?? Date.now();
-  const from = now - (opts.pastMs ?? 3 * 3600_000);
-  const to = now + (opts.futureMs ?? 36 * 3600_000);
+  const from = now - (opts.pastMs ?? 2 * 3600_000);
+  const to = now + (opts.futureMs ?? 24 * 3600_000);
+  const keep = opts.keep && (opts.keep.ids.size || opts.keep.names.size) ? opts.keep : null;
+  /** ids de canal aceitos (com keep); programas de outros canais são descartados */
+  const kept = new Set<string>();
   const maxDesc = opts.maxDescLength ?? 280;
 
   const data: EpgData = { channels: new Map(), programmes: new Map(), byName: new Map(), loadedAt: Date.now(), programmeCount: 0 };
@@ -90,7 +96,9 @@ export function parseXmltv(input: Readable | string, opts: ParseOptions = {}): P
       case "programme": {
         const start = parseXmltvTime(a.start);
         const stop = parseXmltvTime(a.stop) ?? (start !== null ? start + 3600_000 : null);
-        if (start !== null && stop !== null && stop > from && start < to) {
+        const ch = String(a.channel ?? "");
+        const wanted = !keep || kept.has(ch) || keep.ids.has(ch.toLowerCase());
+        if (wanted && start !== null && stop !== null && stop > from && start < to) {
           curProg = { channel: String(a.channel ?? ""), start, stop, title: "", desc: "" };
         } else {
           curProg = null;
@@ -120,7 +128,10 @@ export function parseXmltv(input: Readable | string, opts: ParseOptions = {}): P
       textBuf = "";
     }
     if (name === "channel" && curChannel) {
-      if (curChannel.id) {
+      const c = curChannel as EpgChannel;
+      const accept = !keep || keep.ids.has(c.id.toLowerCase()) || c.names.some((n) => keep.names.has(epgNameKey(n)));
+      if (accept && keep) kept.add(c.id);
+      if (curChannel.id && accept) {
         data.channels.set(curChannel.id, curChannel);
         for (const n of curChannel.names) {
           const k = epgNameKey(n);

@@ -11,6 +11,8 @@ const seriesInfoCache = new TtlCache<SeriesInfo>(CATALOG_TTL_MS, 300);
 export interface PlaylistRef {
   url: string;
   type?: "m3u" | "xtream" | string;
+  /** EPG próprio da playlist (tem prioridade sobre o automático). */
+  epgUrl?: string;
 }
 
 export function xtreamCredsFor(ref: PlaylistRef): XtreamCredentials | null {

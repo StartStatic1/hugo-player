@@ -21,6 +21,8 @@ export interface StoredPlaylist {
   updatedAt?: string;
   pinHash?: string;
   pinSalt?: string;
+  /** Link opcional do EPG (XMLTV .xml/.xml.gz). Vazio = automático (xmltv.php do Xtream / url-tvg). */
+  epgUrl?: string;
 }
 
 export interface PlaylistDeps {
@@ -56,7 +58,21 @@ const baseFields = {
   password: z.string().trim().min(1).max(200).optional(),
 };
 
-export const createSchema = z.object({ ...baseFields, pin: pinSchema.optional() });
+/** http(s) com host; "" ou null = sem EPG próprio. */
+export const epgUrlSchema = z
+  .union([z.string().trim().max(2000), z.null()])
+  .transform(v => (v ?? "").trim())
+  .refine(v => {
+    if (!v) return true;
+    try {
+      const u = new URL(v);
+      return /^https?:$/.test(u.protocol) && Boolean(u.hostname);
+    } catch {
+      return false;
+    }
+  }, "Link do EPG deve começar com http:// ou https://");
+
+export const createSchema = z.object({ ...baseFields, pin: pinSchema.optional(), epgUrl: epgUrlSchema.optional() });
 
 export const patchSchema = z
   .object({
@@ -69,6 +85,8 @@ export const patchSchema = z
     newPin: pinSchema.optional(),
     /** Remove a proteção por PIN. */
     removePin: z.boolean().optional(),
+    /** Link do EPG; "" ou null remove. */
+    epgUrl: epgUrlSchema.optional(),
   })
   .refine(v => !(v.newPin && v.removePin), { message: "newPin e removePin são exclusivos" });
 
@@ -94,6 +112,7 @@ export function publicView(p: StoredPlaylist, unlocked: boolean) {
     type: p.type,
     protected: isProtected,
     url: isProtected && !unlocked ? null : p.url,
+    epgUrl: isProtected && !unlocked ? null : p.epgUrl || null,
     createdAt: p.createdAt,
     updatedAt: p.updatedAt ?? p.createdAt,
   };
@@ -170,6 +189,7 @@ export function createPlaylistRouter(deps: PlaylistDeps): Router {
       createdAt: now,
       updatedAt: now,
     };
+    if (parsed.data.epgUrl) playlist.epgUrl = parsed.data.epgUrl;
     if (parsed.data.pin) {
       const { salt, hash } = hashPin(parsed.data.pin);
       playlist.pinSalt = salt;
@@ -204,6 +224,10 @@ export function createPlaylistRouter(deps: PlaylistDeps): Router {
       if (v.type) p.type = v.type;
     }
     if (v.name !== undefined) p.name = v.name;
+    if (v.epgUrl !== undefined) {
+      if (v.epgUrl) p.epgUrl = v.epgUrl;
+      else delete p.epgUrl;
+    }
     if (v.removePin) {
       delete p.pinHash;
       delete p.pinSalt;

@@ -53,3 +53,24 @@ test("descompacta .gz automaticamente", async () => {
   const epg = await parseXmltv(await bodyToStream(web), { now: now.getTime() });
   assert.equal(epg.channels.size, 2);
 });
+
+test("keep: guarda só os canais da playlist (por tvg-id ou nome)", async () => {
+  const now = new Date();
+  const byId = await parseXmltv(SAMPLE_XMLTV(now), { now: now.getTime(), keep: { ids: new Set(["news.br"]), names: new Set() } });
+  assert.deepEqual([...byId.programmes.keys()], ["news.br"]);
+  assert.equal(byId.channels.has("sport1"), false);
+  const byName = await parseXmltv(SAMPLE_XMLTV(now), { now: now.getTime(), keep: { ids: new Set(), names: new Set([epgNameKey("Esporte Um FHD")]) } });
+  assert.deepEqual([...byName.programmes.keys()], ["sport1"]);
+  // janela padrão: -2 h .. +24 h ("Jornal da Manhã" terminou há 1 h e fica; +48 h sai)
+  const all = await parseXmltv(SAMPLE_XMLTV(now), { now: now.getTime() });
+  assert.equal(all.programmes.get("news.br")!.length, 3);
+});
+
+test("origem do EPG: link próprio > xmltv.php do Xtream", async () => {
+  const { epgSourceFor } = await import("../routes-epg.js");
+  const xt = { type: "xtream", url: "http://panel.example.test:8080/get.php?username=u1&password=p1&type=m3u_plus" };
+  assert.deepEqual(await epgSourceFor({ ...xt, epgUrl: "https://epg.test/g.xml.gz" }), { url: "https://epg.test/g.xml.gz", kind: "custom" });
+  const auto = await epgSourceFor(xt);
+  assert.equal(auto?.kind, "xtream");
+  assert.equal(auto?.url, "http://panel.example.test:8080/xmltv.php?username=u1&password=p1");
+});

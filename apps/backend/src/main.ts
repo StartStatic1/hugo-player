@@ -386,7 +386,7 @@ const resolvePlaylist: PlaylistResolver = (req) => {
       (x) => x.id === playlistId && x.deviceId.toUpperCase() === device.deviceId.toUpperCase(),
     );
     if (!p) return "unauthorized";
-    return { type: p.type, url: p.url };
+    return { type: p.type, url: p.url, ...(p.epgUrl ? { epgUrl: p.epgUrl } : {}) };
   }
   const url = String(req.query.url || "");
   if (url) return { type: (req.query.type as "m3u" | "xtream") || "m3u", url };

@@ -112,3 +112,37 @@ test("CRUD completo + PIN", async () => {
     api.close();
   }
 });
+
+test("EPG opcional por playlist: salvar, validar, trocar e remover", async () => {
+  const api = await startApi();
+  try {
+    // playlist antiga (sem epgUrl) continua igual
+    const a = await api.call("POST", "/", { name: "Sem EPG", url: "http://a.test/list.m3u" });
+    assert.equal(a.status, 201);
+    assert.equal(a.json.playlist.epgUrl, null);
+    const id = a.json.playlist.id as string;
+
+    const bad = await api.call("POST", "/", { name: "X", url: "http://a.test/l.m3u", epgUrl: "ftp://epg.test/guide.xml" });
+    assert.equal(bad.status, 400);
+    assert.equal((await api.call("POST", "/", { name: "X", url: "http://a.test/l.m3u", epgUrl: "nao e url" })).status, 400);
+
+    const b = await api.call("POST", "/", { name: "Com EPG", url: "http://b.test/l.m3u", epgUrl: " https://epg.test/guide.xml.gz " });
+    assert.equal(b.status, 201);
+    assert.equal(b.json.playlist.epgUrl, "https://epg.test/guide.xml.gz");
+
+    assert.equal((await api.call("PATCH", `/${id}`, { epgUrl: "http://epg.test/g.xml" })).json.playlist.epgUrl, "http://epg.test/g.xml");
+    assert.equal((await api.call("PATCH", `/${id}`, { epgUrl: "javascript:alert(1)" })).status, 400);
+    // nome sem mexer no EPG mantém o link
+    assert.equal((await api.call("PATCH", `/${id}`, { name: "Nova" })).json.playlist.epgUrl, "http://epg.test/g.xml");
+    assert.equal((await api.call("PATCH", `/${id}`, { epgUrl: "" })).json.playlist.epgUrl, null);
+    assert.equal(api.store().find(p => p.id === id)?.epgUrl, undefined);
+    assert.equal((await api.call("PATCH", `/${id}`, { epgUrl: null })).status, 200);
+
+    // protegida não mostra o link sem PIN
+    const c = await api.call("POST", "/", { name: "P", url: "http://c.test/l.m3u", pin: "1234", epgUrl: "http://epg.test/p.xml" });
+    const list = await api.call("GET", "/");
+    assert.equal(list.json.playlists.find((p: any) => p.id === c.json.playlist.id).epgUrl, null);
+  } finally {
+    api.close();
+  }
+});
