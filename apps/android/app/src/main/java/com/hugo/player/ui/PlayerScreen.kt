@@ -19,6 +19,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AspectRatio
+import androidx.compose.material.icons.filled.Bedtime
+import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.Forward10
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
@@ -108,6 +110,10 @@ fun PlayerScreen(request: PlaybackRequest, onBack: () -> Unit) {
     var textOpts by remember { mutableStateOf<List<TrackOption>>(emptyList()) }
     /** "Próximo episódio em N s" (null = sem contagem). */
     var nextCountdown by remember { mutableStateOf<Int?>(null) }
+    var speed by remember { mutableFloatStateOf(1f) }
+    var sleep by remember { mutableStateOf(SleepOption.OFF) }
+    var sleepEndAt by remember { mutableStateOf<Long?>(null) }
+    var nowMs by remember { mutableLongStateOf(System.currentTimeMillis()) }
     val nextFocus = remember { FocusRequester() }
 
     val rootFocus = remember { FocusRequester() }
@@ -168,6 +174,7 @@ fun PlayerScreen(request: PlaybackRequest, onBack: () -> Unit) {
                     // terminou: marca assistido e, se tem próximo, conta 10 s (dá para cancelar)
                     WatchHistory.markWatched(context, progressKeyFor(current))
                     WatchHistory.removeProgress(context, progressKeyFor(current))
+                    if (sleep == SleepOption.END_OF_EPISODE) { onBack(); return }
                     if (queue.isNotEmpty()) { showControls = false; nextCountdown = NEXT_COUNTDOWN_S }
                 }
             }
@@ -220,6 +227,7 @@ fun PlayerScreen(request: PlaybackRequest, onBack: () -> Unit) {
         while (true) {
             positionMs = exoPlayer.currentPosition
             durationMs = exoPlayer.duration
+            nowMs = System.currentTimeMillis()
             delay(500)
         }
     }
@@ -250,6 +258,15 @@ fun PlayerScreen(request: PlaybackRequest, onBack: () -> Unit) {
         queue = queue.drop(1)
         forceHls = false
         current = next
+    }
+
+    LaunchedEffect(exoPlayer, speed) { exoPlayer.setPlaybackSpeed(speed) }
+    // timer de desligar: pausa e sai do player (a TV pode desligar a tela)
+    LaunchedEffect(sleepEndAt) {
+        val end = sleepEndAt ?: return@LaunchedEffect
+        delay((end - System.currentTimeMillis()).coerceAtLeast(0))
+        exoPlayer.pause()
+        onBack()
     }
 
     LaunchedEffect(nextCountdown) {
@@ -455,12 +472,24 @@ fun PlayerScreen(request: PlaybackRequest, onBack: () -> Unit) {
                             resizeIndex = (resizeIndex + 1) % resizeModes.size
                             touch()
                         }
-                        if (audioOpts.size > 1 || textOpts.isNotEmpty()) {
+                        // sempre visível (mostra "só uma faixa" quando não há escolha)
+                        Spacer(Modifier.width(16.dp))
+                        ControlButton(Icons.Default.Subtitles, "Legendas e áudio") {
+                            showTracks = true
+                            touch()
+                        }
+                        if (canSeek) {
                             Spacer(Modifier.width(16.dp))
-                            ControlButton(Icons.Default.Subtitles, "Legendas e áudio") {
-                                showTracks = true
+                            ControlButton(Icons.Default.Speed, "Velocidade ${speedLabel(speed)}", label = speedLabel(speed)) {
+                                speed = nextSpeed(speed)
                                 touch()
                             }
+                        }
+                        Spacer(Modifier.width(16.dp))
+                        ControlButton(Icons.Default.Bedtime, "Desligar: ${sleep.label}", label = if (sleep == SleepOption.OFF) null else if (sleep == SleepOption.END_OF_EPISODE) "fim" else "${sleep.minutes}") {
+                            sleep = SleepOption.cycle(sleep, allowEndOfEpisode = !isLive)
+                            sleepEndAt = if (sleep.minutes > 0) System.currentTimeMillis() + sleep.minutes * 60_000L else null
+                            touch()
                         }
                         if (queue.isNotEmpty()) {
                             Spacer(Modifier.width(16.dp))
@@ -472,7 +501,14 @@ fun PlayerScreen(request: PlaybackRequest, onBack: () -> Unit) {
                     }
                     Spacer(Modifier.height(6.dp))
                     Text(
-                        "Tela: ${resizeModes[resizeIndex].second}" + if (canSeek) "  ·  ◀ ▶ na barra avança/volta 10 s" else "",
+                        "Tela: ${resizeModes[resizeIndex].second}" +
+                            (if (canSeek) "  ·  Velocidade ${speedLabel(speed)}" else "") +
+                            when {
+                                sleep == SleepOption.END_OF_EPISODE -> "  ·  Desliga no fim do episódio"
+                                sleepEndAt != null -> "  ·  Desliga em ${sleepRemainingLabel(sleepEndAt!! - nowMs)}"
+                                else -> ""
+                            } +
+                            (if (canSeek) "  ·  ◀ ▶ na barra avança/volta 10 s" else ""),
                         color = Color(0xFF94A3B8),
                         fontSize = 11.sp,
                         modifier = Modifier.align(Alignment.CenterHorizontally)
@@ -611,6 +647,8 @@ private fun ControlButton(
     contentDescription: String,
     modifier: Modifier = Modifier,
     big: Boolean = false,
+    /** texto pequeno embaixo do ícone (ex.: "1,5x", "30") */
+    label: String? = null,
     onClick: () -> Unit,
 ) {
     val interaction = remember { MutableInteractionSource() }
@@ -624,7 +662,11 @@ private fun ControlButton(
             .clickable(interactionSource = interaction, indication = null, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
-        Icon(icon, contentDescription, tint = Color.White, modifier = Modifier.size(if (big) 32.dp else 24.dp))
+        if (label == null) Icon(icon, contentDescription, tint = Color.White, modifier = Modifier.size(if (big) 32.dp else 24.dp))
+        else Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Icon(icon, contentDescription, tint = Color.White, modifier = Modifier.size(18.dp))
+            Text(label, color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+        }
     }
 }
 

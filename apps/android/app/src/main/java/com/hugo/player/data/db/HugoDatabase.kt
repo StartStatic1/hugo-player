@@ -69,10 +69,11 @@ interface ChannelDao {
                AND d.name = replace(channels.name, ' [L]', '')
                AND (:group IS NULL OR d.`group` = :group)
                AND (:query IS NULL OR d.name LIKE '%' || :query || '%')))
+           AND `group` NOT IN (:hidden)
            ORDER BY CASE WHEN :keepOrder THEN id END, name COLLATE NOCASE, id
            LIMIT :limit OFFSET :offset"""
     )
-    suspend fun page(playlistId: String, type: String, group: String?, query: String?, keepOrder: Boolean, limit: Int, offset: Int, dedupe: Boolean): List<ChannelEntity>
+    suspend fun page(playlistId: String, type: String, group: String?, query: String?, keepOrder: Boolean, limit: Int, offset: Int, dedupe: Boolean, hidden: List<String>): List<ChannelEntity>
 
     @Query(
         """SELECT COUNT(*) FROM channels WHERE playlistId = :playlistId AND type = :type
@@ -82,9 +83,10 @@ interface ChannelDao {
                SELECT 1 FROM channels d WHERE d.playlistId = channels.playlistId AND d.type = channels.type
                AND d.name = replace(channels.name, ' [L]', '')
                AND (:group IS NULL OR d.`group` = :group)
-               AND (:query IS NULL OR d.name LIKE '%' || :query || '%')))"""
+               AND (:query IS NULL OR d.name LIKE '%' || :query || '%')))
+           AND `group` NOT IN (:hidden)"""
     )
-    suspend fun countFiltered(playlistId: String, type: String, group: String?, query: String?, dedupe: Boolean): Int
+    suspend fun countFiltered(playlistId: String, type: String, group: String?, query: String?, dedupe: Boolean, hidden: List<String>): Int
 
     /** Versões legendadas cujo nome exato está na lista (para juntar ao card dublado). */
     @Query("SELECT * FROM channels WHERE playlistId = :playlistId AND type = :type AND name IN (:names)")
@@ -104,16 +106,18 @@ interface ChannelDao {
            FROM channels WHERE playlistId = :playlistId AND type = 'series'
            AND (:group IS NULL OR `group` = :group)
            AND (:query IS NULL OR seriesName LIKE '%' || :query || '%')
+           AND `group` NOT IN (:hidden)
            GROUP BY seriesName ORDER BY seriesName COLLATE NOCASE LIMIT :limit OFFSET :offset"""
     )
-    suspend fun seriesPage(playlistId: String, group: String?, query: String?, limit: Int, offset: Int): List<SeriesSummary>
+    suspend fun seriesPage(playlistId: String, group: String?, query: String?, limit: Int, offset: Int, hidden: List<String>): List<SeriesSummary>
 
     @Query(
         """SELECT COUNT(DISTINCT COALESCE(seriesName, name)) FROM channels WHERE playlistId = :playlistId AND type = 'series'
            AND (:group IS NULL OR `group` = :group)
-           AND (:query IS NULL OR seriesName LIKE '%' || :query || '%')"""
+           AND (:query IS NULL OR seriesName LIKE '%' || :query || '%')
+           AND `group` NOT IN (:hidden)"""
     )
-    suspend fun seriesCount(playlistId: String, group: String?, query: String?): Int
+    suspend fun seriesCount(playlistId: String, group: String?, query: String?, hidden: List<String>): Int
 
     @Query("SELECT * FROM channels WHERE playlistId = :playlistId AND type = 'series' AND seriesName = :seriesName ORDER BY season, episode, name")
     suspend fun episodes(playlistId: String, seriesName: String): List<ChannelEntity>

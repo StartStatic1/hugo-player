@@ -27,6 +27,7 @@ import androidx.compose.ui.unit.sp
 import com.hugo.player.BuildConfig
 import com.hugo.player.data.CrashLog
 import androidx.compose.ui.text.font.FontFamily
+import com.hugo.player.data.AdultLock
 import com.hugo.player.data.AppSettings
 import com.hugo.player.data.DiskCache
 import com.hugo.player.data.HugoApi
@@ -52,6 +53,11 @@ fun SettingsScreen(deviceId: String, deviceKey: String, onBack: () -> Unit) {
     var licensePlan by remember { mutableStateOf<String?>(null) }
     var licenseExpires by remember { mutableStateOf<String?>(null) }
     var crash by remember { mutableStateOf(CrashLog.read(context)) }
+    var lockOn by remember { mutableStateOf(AdultLock.isEnabled(context)) }
+    // fluxo do PIN: "off" (confirmar p/ desligar), "verify" (antes de trocar), "new", "confirm"
+    var pinStep by remember { mutableStateOf<String?>(null) }
+    var newPin by remember { mutableStateOf("") }
+    var enableAfterSet by remember { mutableStateOf(false) }
 
     fun copy(label: String, value: String) {
         val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
@@ -113,6 +119,50 @@ fun SettingsScreen(deviceId: String, deviceKey: String, onBack: () -> Unit) {
                     OutlinedButton(onClick = { CrashLog.clear(context); crash = null; message = "Registro apagado" }, contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)) { Text("Apagar", fontSize = 12.sp) }
                 }
             }
+        }
+
+        Section("Controle dos pais") {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("Bloquear categorias adultas", color = Color.White, fontSize = 13.sp)
+                    Text("Adultos / XXX / +18 em TV, filmes e séries pedem PIN (1 vez por sessão)", color = HugoColors.TextMuted, fontSize = 11.sp)
+                }
+                Switch(
+                    checked = lockOn,
+                    onCheckedChange = { on ->
+                        when {
+                            on && !AdultLock.hasPin(context) -> { enableAfterSet = true; pinStep = "new" }
+                            on -> { AdultLock.setEnabled(context, true); lockOn = true; message = "Bloqueio ligado" }
+                            else -> pinStep = "off"
+                        }
+                    },
+                    colors = SwitchDefaults.colors(checkedTrackColor = HugoColors.Accent),
+                )
+            }
+            Spacer(Modifier.height(6.dp))
+            OutlinedButton(
+                onClick = { enableAfterSet = false; pinStep = if (AdultLock.hasPin(context)) "verify" else "new" },
+                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp),
+            ) { Text(if (AdultLock.hasPin(context)) "Alterar PIN" else "Definir PIN", fontSize = 13.sp) }
+        }
+
+        when (pinStep) {
+            "off" -> PinDialog("PIN atual", "Para desligar o bloqueio", onSubmit = { p ->
+                if (AdultLock.check(context, p)) { AdultLock.setEnabled(context, false); lockOn = false; pinStep = null; message = "Bloqueio desligado"; null } else "PIN errado"
+            }, onDismiss = { pinStep = null })
+            "verify" -> PinDialog("PIN atual", "Para trocar o PIN", onSubmit = { p ->
+                if (AdultLock.check(context, p)) { pinStep = "new"; null } else "PIN errado"
+            }, onDismiss = { pinStep = null })
+            "new" -> PinDialog("Novo PIN", "4 a 6 números", onSubmit = { p ->
+                if (AdultLock.validPinFormat(p)) { newPin = p; pinStep = "confirm"; null } else "Use 4 a 6 números"
+            }, onDismiss = { pinStep = null })
+            "confirm" -> PinDialog("Repita o PIN", null, onSubmit = { p ->
+                if (p == newPin) {
+                    AdultLock.setPin(context, p)
+                    if (enableAfterSet) { AdultLock.setEnabled(context, true); lockOn = true }
+                    pinStep = null; newPin = ""; message = if (lockOn) "PIN salvo · bloqueio ligado" else "PIN salvo"; null
+                } else { pinStep = "new"; "Não confere, digite de novo" }
+            }, onDismiss = { pinStep = null; newPin = "" })
         }
 
         Section("Reprodução") {

@@ -183,18 +183,21 @@ fun TrackPickerDialog(
         },
         text = {
             Column(Modifier.fillMaxWidth()) {
+                Text("ÁUDIO", color = Color(0xFF94A3B8), fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.height(8.dp))
                 if (audio.size > 1) {
-                    Text("ÁUDIO", color = Color(0xFF94A3B8), fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                    Spacer(Modifier.height(8.dp))
                     audio.forEach { opt ->
                         TrackRow(opt.label) { onPickAudio(opt) }
                         Spacer(Modifier.height(6.dp))
                     }
-                    Spacer(Modifier.height(8.dp))
+                } else {
+                    Text("Só uma faixa de áudio" + (audio.firstOrNull()?.let { " (${it.label})" } ?: ""), color = Color(0xFFCBD5E1), fontSize = 13.sp)
                 }
+                Spacer(Modifier.height(14.dp))
+                Text("LEGENDA", color = Color(0xFF94A3B8), fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.height(8.dp))
+                if (text.isEmpty()) Text("Este conteúdo não tem legendas", color = Color(0xFFCBD5E1), fontSize = 13.sp)
                 if (text.isNotEmpty()) {
-                    Text("LEGENDA", color = Color(0xFF94A3B8), fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                    Spacer(Modifier.height(8.dp))
                     TrackRow("Desligada") { onPickText(null) }
                     Spacer(Modifier.height(6.dp))
                     text.forEach { opt ->

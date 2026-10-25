@@ -112,6 +112,9 @@ fun LivePlayerScreen(request: LivePlayRequest, onBack: () -> Unit) {
     var isPlaying by remember { mutableStateOf(false) }
     var bitrate by remember { mutableIntStateOf(0) }
 
+    var sleep by remember { mutableStateOf(SleepOption.OFF) }
+    var sleepEndAt by remember { mutableStateOf<Long?>(null) }
+    var nowMs by remember { mutableLongStateOf(System.currentTimeMillis()) }
     var showBanner by remember { mutableStateOf(true) }
     var bannerTick by remember { mutableIntStateOf(0) }
     var showList by remember { mutableStateOf(false) }
@@ -126,6 +129,13 @@ fun LivePlayerScreen(request: LivePlayRequest, onBack: () -> Unit) {
     val listState = rememberLazyListState()
 
     val exoPlayer = remember { HugoPlayerFactory.create(context, playerUserAgent(context), decoderFallback = true) }
+    // timer de desligar: pausa e sai
+    LaunchedEffect(sleepEndAt) {
+        val end = sleepEndAt ?: return@LaunchedEffect
+        while (System.currentTimeMillis() < end) { nowMs = System.currentTimeMillis(); delay(1_000) }
+        exoPlayer.pause()
+        onBack()
+    }
 
     // lista para zapear (mesma ordem/numeração da tela)
     suspend fun loadWindowAround(number: Int): Boolean {
@@ -406,6 +416,7 @@ fun LivePlayerScreen(request: LivePlayRequest, onBack: () -> Unit) {
                 if (bitrate > 0) TopBadge("%.1f Mbps".format(bitrate / 1_000_000f), Color(0xFF4ADE80))
                 playing?.let { TopBadge("FLUXO $it", Color.White) }
                 if (videoHeight > 0) TopBadge("${videoHeight}p", Color.White)
+                sleepEndAt?.let { TopBadge("Desliga em ${sleepRemainingLabel(it - nowMs)}", Color(0xFFFACC15)) }
             }
         }
 
@@ -484,6 +495,18 @@ fun LivePlayerScreen(request: LivePlayRequest, onBack: () -> Unit) {
                 Spacer(Modifier.height(8.dp))
                 Text("Tela", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold)
                 LiveScreenMode.entries.forEach { m -> PanelOption(m.label, selected = screenMode == m) { screenMode = m; AppSettings.liveScreenMode = m.key } }
+                Spacer(Modifier.height(8.dp))
+                Text("Desligar em", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                SleepOption.entries.filter { it != SleepOption.END_OF_EPISODE }.forEach { o ->
+                    PanelOption(
+                        if (o == sleep && sleepEndAt != null) "${o.label} (faltam ${sleepRemainingLabel(sleepEndAt!! - nowMs)})" else o.label,
+                        selected = sleep == o,
+                    ) {
+                        sleep = o
+                        sleepEndAt = if (o.minutes > 0) System.currentTimeMillis() + o.minutes * 60_000L else null
+                        nowMs = System.currentTimeMillis()
+                    }
+                }
                 Spacer(Modifier.height(8.dp))
                 PanelOption("Recarregar canal", selected = false) { retryCount = 0; if (attempt == 0) reconnect() else attempt = 0; showSources = false }
                 Spacer(Modifier.height(16.dp))

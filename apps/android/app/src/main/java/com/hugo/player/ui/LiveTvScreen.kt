@@ -30,6 +30,7 @@ import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.LiveTv
 import androidx.compose.material.icons.filled.PlayArrow
@@ -74,6 +75,7 @@ import androidx.media3.common.Player
 import androidx.media3.common.VideoSize
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
+import com.hugo.player.data.AdultLock
 import com.hugo.player.data.CatalogRepository
 import com.hugo.player.data.LiveRecents
 import com.hugo.player.data.WatchHistory
@@ -317,6 +319,16 @@ fun LiveTvScreen(playlistId: String, onPlay: (LivePlayRequest) -> Unit, onBack: 
     val vm: LiveTvViewModel = viewModel()
     LaunchedEffect(playlistId) { vm.bind(playlistId); CrashLog.step("TV ao vivo: abriu") }
     val nf = remember { NumberFormat.getIntegerInstance(Locale("pt", "BR")) }
+    var pinFor by remember { mutableStateOf<String?>(null) }
+    var lockTick by remember { mutableIntStateOf(0) }
+    pinFor?.let { group ->
+        PinDialog(
+            title = "Categoria bloqueada",
+            subtitle = "Digite o PIN para abrir \"$group\"",
+            onSubmit = { pin -> if (AdultLock.unlock(context, pin)) { pinFor = null; lockTick++; vm.selectFilter(group); null } else "PIN errado" },
+            onDismiss = { pinFor = null },
+        )
+    }
     val focusManager = LocalFocusManager.current
     val listState = rememberLazyListState()
     val focusTarget = remember { FocusRequester() }
@@ -418,7 +430,10 @@ fun LiveTvScreen(playlistId: String, onPlay: (LivePlayRequest) -> Unit, onBack: 
                 item(key = LiveFilters.REC) { LiveCategoryRow(Icons.Default.History, "Recentes", vm.recCount, vm.filter == LiveFilters.REC && vm.query.isBlank(), { vm.focusFilter(LiveFilters.REC) }, catMod(LiveFilters.REC)) { vm.selectFilter(LiveFilters.REC) } }
                 item(key = LiveFilters.ALL) { LiveCategoryRow(Icons.Default.Apps, "Todos", vm.allCount, vm.filter == LiveFilters.ALL && vm.query.isBlank(), { vm.focusFilter(LiveFilters.ALL) }, catMod(LiveFilters.ALL)) { vm.selectFilter(LiveFilters.ALL) } }
                 itemsIndexed(vm.categories, key = { i, c -> "g:$i:" + c.name }) { _, cat ->
-                    LiveCategoryRow(Icons.Default.Folder, cat.name, cat.count, vm.filter == cat.name && vm.query.isBlank(), { vm.focusFilter(cat.name) }, catMod(cat.name)) { vm.selectFilter(cat.name) }
+                    // adulta bloqueada: não abre só com o foco; OK pede o PIN
+                    val locked = lockTick >= 0 && AdultLock.isAdultCategory(cat.name) && AdultLock.isLocked(context)
+                    if (locked) LiveCategoryRow(Icons.Default.Lock, cat.name, cat.count, false, { }, catMod(cat.name)) { pinFor = cat.name }
+                    else LiveCategoryRow(Icons.Default.Folder, cat.name, cat.count, vm.filter == cat.name && vm.query.isBlank(), { vm.focusFilter(cat.name) }, catMod(cat.name)) { vm.selectFilter(cat.name) }
                 }
             }
 

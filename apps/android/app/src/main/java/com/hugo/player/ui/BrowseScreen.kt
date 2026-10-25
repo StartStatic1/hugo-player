@@ -46,6 +46,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.hugo.player.data.AdultLock
 import com.hugo.player.data.CatalogRepository
 import com.hugo.player.data.WatchHistory
 import com.hugo.player.data.db.CategoryEntity
@@ -200,6 +201,18 @@ fun BrowseScreen(
     val nf = remember { NumberFormat.getIntegerInstance(Locale("pt", "BR")) }
     // filme com as duas versões: pergunta Dublado / Legendado antes de abrir
     var audioChoice by remember { mutableStateOf<BrowseItem?>(null) }
+    // categoria adulta bloqueada: pede o PIN (uma vez por sessão)
+    val context = androidx.compose.ui.platform.LocalContext.current
+    var pinFor by remember { mutableStateOf<String?>(null) }
+    var lockTick by remember { mutableIntStateOf(0) }
+    pinFor?.let { group ->
+        PinDialog(
+            title = "Categoria bloqueada",
+            subtitle = "Digite o PIN para abrir \"$group\"",
+            onSubmit = { pin -> if (AdultLock.unlock(context, pin)) { pinFor = null; lockTick++; vm.selectGroup(group); null } else "PIN errado" },
+            onDismiss = { pinFor = null },
+        )
+    }
     audioChoice?.let { item ->
         AudioVersionDialog(
             title = item.title,
@@ -258,7 +271,12 @@ fun BrowseScreen(
         Row(Modifier.fillMaxSize()) {
             LazyColumn(state = catState, modifier = Modifier.width(190.dp).fillMaxHeight().background(HugoColors.Panel), contentPadding = PaddingValues(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 item(key = "__all") { CategoryRow("Todos", vm.allCount.takeIf { it > 0 }, vm.selectedGroup == null, type.accent) { vm.selectGroup(null) } }
-                items(vm.categories, key = { it.name }) { cat -> CategoryRow(cat.name, cat.count.takeIf { type != BrowseType.SERIES }, vm.selectedGroup == cat.name, type.accent) { vm.selectGroup(cat.name) } }
+                items(vm.categories, key = { it.name }) { cat ->
+                    val locked = lockTick >= 0 && AdultLock.isAdultCategory(cat.name) && AdultLock.isLocked(context)
+                    CategoryRow((if (locked) "🔒 " else "") + cat.name, cat.count.takeIf { type != BrowseType.SERIES }, vm.selectedGroup == cat.name, type.accent) {
+                        if (locked) pinFor = cat.name else vm.selectGroup(cat.name)
+                    }
+                }
             }
 
             Box(Modifier.weight(1f).fillMaxHeight()) {

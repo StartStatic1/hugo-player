@@ -47,6 +47,9 @@ class CatalogRepository(context: Context) {
 
     companion object {
         const val PAGE_SIZE = 100
+        /** valor que nunca é nome de categoria (a lista NOT IN nunca fica vazia) */
+        private const val NO_GROUP = "\u0001__hugo_none__"
+
         @Volatile private var instance: CatalogRepository? = null
         fun init(context: Context) {
             if (instance == null) instance = CatalogRepository(context.applicationContext)
@@ -433,15 +436,23 @@ class CatalogRepository(context: Context) {
     suspend fun page(playlistId: String, type: String, group: String?, query: String?, page: Int, pageSize: Int = PAGE_SIZE): List<ChannelEntity> =
         withContext(Dispatchers.IO) {
             // filmes: o "Nome [L] (Ano)" some quando o dublado igual está na mesma lista (vira opção no card)
-            dao.page(playlistId, type, group, query?.trim()?.takeIf { it.isNotEmpty() }, type == "live", pageSize, page * pageSize, type == "movie")
+            dao.page(playlistId, type, group, query?.trim()?.takeIf { it.isNotEmpty() }, type == "live", pageSize, page * pageSize, type == "movie", hiddenGroups(playlistId, type, group))
         }
 
+    /** Categorias adultas escondidas de "Todos"/busca enquanto o bloqueio por PIN está ativo. */
+    private val appContext = context.applicationContext
+    private suspend fun hiddenGroups(playlistId: String, type: String, group: String?): List<String> {
+        val none = listOf(NO_GROUP)
+        if (group != null || !AdultLock.isLocked(appContext)) return none
+        return none + dao.getCategories(playlistId, type).map { it.name }.filter { AdultLock.isAdultCategory(it) }
+    }
+
     suspend fun countFiltered(playlistId: String, type: String, group: String?, query: String?): Int =
-        withContext(Dispatchers.IO) { dao.countFiltered(playlistId, type, group, query?.trim()?.takeIf { it.isNotEmpty() }, type == "movie") }
+        withContext(Dispatchers.IO) { dao.countFiltered(playlistId, type, group, query?.trim()?.takeIf { it.isNotEmpty() }, type == "movie", hiddenGroups(playlistId, type, group)) }
 
     /** Filmes contando dublado+legendado como um só. */
     suspend fun mergedMovieCount(playlistId: String): Int =
-        withContext(Dispatchers.IO) { dao.countFiltered(playlistId, "movie", null, null, true) }
+        withContext(Dispatchers.IO) { dao.countFiltered(playlistId, "movie", null, null, true, hiddenGroups(playlistId, "movie", null)) }
 
     /** Para cada filme dublado da lista, a versão legendada exata ("Nome [L] (Ano)"), se existir. Chave = id do dublado. */
     suspend fun legendadoTwins(playlistId: String, movies: List<ChannelEntity>): Map<Long, ChannelEntity> = withContext(Dispatchers.IO) {
@@ -458,10 +469,10 @@ class CatalogRepository(context: Context) {
     }
 
     suspend fun seriesPage(playlistId: String, group: String?, query: String?, page: Int, pageSize: Int = PAGE_SIZE): List<SeriesSummary> =
-        withContext(Dispatchers.IO) { dao.seriesPage(playlistId, group, query?.trim()?.takeIf { it.isNotEmpty() }, pageSize, page * pageSize) }
+        withContext(Dispatchers.IO) { dao.seriesPage(playlistId, group, query?.trim()?.takeIf { it.isNotEmpty() }, pageSize, page * pageSize, hiddenGroups(playlistId, "series", group)) }
 
     suspend fun seriesCount(playlistId: String, group: String?, query: String?): Int =
-        withContext(Dispatchers.IO) { dao.seriesCount(playlistId, group, query?.trim()?.takeIf { it.isNotEmpty() }) }
+        withContext(Dispatchers.IO) { dao.seriesCount(playlistId, group, query?.trim()?.takeIf { it.isNotEmpty() }, hiddenGroups(playlistId, "series", group)) }
 
     suspend fun episodes(playlistId: String, seriesName: String): List<ChannelEntity> =
         withContext(Dispatchers.IO) { dao.episodes(playlistId, seriesName) }
@@ -477,7 +488,7 @@ class CatalogRepository(context: Context) {
     /** Janela da lista ao vivo (mesma ordem da tela), para zapear no player. */
     suspend fun liveWindow(playlistId: String, group: String?, query: String?, offset: Int, limit: Int): List<ChannelEntity> =
         withContext(Dispatchers.IO) {
-            dao.page(playlistId, "live", group, query?.trim()?.takeIf { it.isNotEmpty() }, true, limit, offset.coerceAtLeast(0), false)
+            dao.page(playlistId, "live", group, query?.trim()?.takeIf { it.isNotEmpty() }, true, limit, offset.coerceAtLeast(0), false, hiddenGroups(playlistId, "live", group))
         }
 
     suspend fun liveEpgKeys(playlistId: String) =
