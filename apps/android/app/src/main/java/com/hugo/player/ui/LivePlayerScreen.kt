@@ -1,5 +1,6 @@
 package com.hugo.player.ui
 
+import com.hugo.player.ui.components.lazyFocusRestore
 import android.view.KeyEvent as AndroidKeyEvent
 import androidx.activity.compose.BackHandler
 import androidx.annotation.OptIn
@@ -27,7 +28,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -421,7 +421,7 @@ fun LivePlayerScreen(request: LivePlayRequest, onBack: () -> Unit) {
                     .padding(vertical = 10.dp)
             ) {
                 Text(src.title, color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp))
-                LazyColumn(state = listState, modifier = Modifier.fillMaxSize().focusRestorer(), contentPadding = PaddingValues(horizontal = 8.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                LazyColumn(state = listState, modifier = Modifier.fillMaxSize().lazyFocusRestore(listState, listFocus) { index }, contentPadding = PaddingValues(horizontal = 8.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                     itemsIndexed(channels, key = { _, c -> c.id }) { i, c ->
                         val isCurrent = i == index
                         val fav = remember(c.url) { WatchHistory.isFavorite(context, WatchHistory.contentKey(src.playlistId, c.url)) }

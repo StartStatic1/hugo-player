@@ -1,5 +1,7 @@
 package com.hugo.player.ui
 
+import com.hugo.player.ui.components.liveCategoryLazyIndex
+import com.hugo.player.ui.components.lazyFocusRestore
 import android.app.Application
 import android.view.KeyEvent as AndroidKeyEvent
 import android.view.TextureView
@@ -45,7 +47,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.key.KeyEventType
@@ -320,6 +321,8 @@ fun LiveTvScreen(playlistId: String, onPlay: (LivePlayRequest) -> Unit, onBack: 
     val listState = rememberLazyListState()
     val focusTarget = remember { FocusRequester() }
     val previewFocus = remember { FocusRequester() }
+    val catFocus = remember { FocusRequester() }
+    val catState = rememberLazyListState()
     val previewAllowed = remember { livePreviewAllowed(context) }
     val preview = remember { mutableStateOf<ExoPlayer?>(null) }
     var initialFocusDone by remember { mutableStateOf(false) }
@@ -403,15 +406,19 @@ fun LiveTvScreen(playlistId: String, onPlay: (LivePlayRequest) -> Unit, onBack: 
         Row(Modifier.fillMaxSize()) {
             // ---------- 1) categorias ----------
             LazyColumn(
-                modifier = Modifier.width(catWidth).fillMaxHeight().background(HugoColors.Panel).focusRestorer(),
+                state = catState,
+                // volta para a categoria selecionada (sem focusRestorer: crash no Fire TV)
+                modifier = Modifier.width(catWidth).fillMaxHeight().background(HugoColors.Panel)
+                    .lazyFocusRestore(catState, catFocus) { liveCategoryLazyIndex(vm.filter, LiveFilters.FAV, LiveFilters.REC, LiveFilters.ALL, vm.categories.map { it.name }) },
                 contentPadding = PaddingValues(8.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-                item(key = LiveFilters.FAV) { LiveCategoryRow(Icons.Default.Star, "Favoritos", vm.favCount, vm.filter == LiveFilters.FAV && vm.query.isBlank(), { vm.focusFilter(LiveFilters.FAV) }) { vm.selectFilter(LiveFilters.FAV) } }
-                item(key = LiveFilters.REC) { LiveCategoryRow(Icons.Default.History, "Recentes", vm.recCount, vm.filter == LiveFilters.REC && vm.query.isBlank(), { vm.focusFilter(LiveFilters.REC) }) { vm.selectFilter(LiveFilters.REC) } }
-                item(key = LiveFilters.ALL) { LiveCategoryRow(Icons.Default.Apps, "Todos", vm.allCount, vm.filter == LiveFilters.ALL && vm.query.isBlank(), { vm.focusFilter(LiveFilters.ALL) }) { vm.selectFilter(LiveFilters.ALL) } }
+                fun catMod(f: String) = if (vm.filter == f) Modifier.focusRequester(catFocus) else Modifier
+                item(key = LiveFilters.FAV) { LiveCategoryRow(Icons.Default.Star, "Favoritos", vm.favCount, vm.filter == LiveFilters.FAV && vm.query.isBlank(), { vm.focusFilter(LiveFilters.FAV) }, catMod(LiveFilters.FAV)) { vm.selectFilter(LiveFilters.FAV) } }
+                item(key = LiveFilters.REC) { LiveCategoryRow(Icons.Default.History, "Recentes", vm.recCount, vm.filter == LiveFilters.REC && vm.query.isBlank(), { vm.focusFilter(LiveFilters.REC) }, catMod(LiveFilters.REC)) { vm.selectFilter(LiveFilters.REC) } }
+                item(key = LiveFilters.ALL) { LiveCategoryRow(Icons.Default.Apps, "Todos", vm.allCount, vm.filter == LiveFilters.ALL && vm.query.isBlank(), { vm.focusFilter(LiveFilters.ALL) }, catMod(LiveFilters.ALL)) { vm.selectFilter(LiveFilters.ALL) } }
                 itemsIndexed(vm.categories, key = { i, c -> "g:$i:" + c.name }) { _, cat ->
-                    LiveCategoryRow(Icons.Default.Folder, cat.name, cat.count, vm.filter == cat.name && vm.query.isBlank(), { vm.focusFilter(cat.name) }) { vm.selectFilter(cat.name) }
+                    LiveCategoryRow(Icons.Default.Folder, cat.name, cat.count, vm.filter == cat.name && vm.query.isBlank(), { vm.focusFilter(cat.name) }, catMod(cat.name)) { vm.selectFilter(cat.name) }
                 }
             }
 
@@ -432,7 +439,8 @@ fun LiveTvScreen(playlistId: String, onPlay: (LivePlayRequest) -> Unit, onBack: 
                     }
                     else -> LazyColumn(
                         state = listState,
-                        modifier = Modifier.fillMaxSize().focusRestorer().onPreviewKeyEvent { ev ->
+                        // volta para o canal focado (sem focusRestorer: crash no Fire TV)
+                        modifier = Modifier.fillMaxSize().lazyFocusRestore(listState, focusTarget) { vm.focusedIndex }.onPreviewKeyEvent { ev ->
                             // controle: DIREITA da lista vai sempre para a prévia (sem busca de foco "livre" entrando no vídeo)
                             if (showPreview && vm.focused != null && liveDpadRight(ev.key.nativeKeyCode, ev.type == KeyEventType.KeyDown)) {
                                 safeRequestFocus(previewFocus)
@@ -526,7 +534,7 @@ private fun Clock() {
 }
 
 @Composable
-private fun LiveCategoryRow(icon: ImageVector, name: String, count: Int, selected: Boolean, onFocused: () -> Unit, onClick: () -> Unit) {
+private fun LiveCategoryRow(icon: ImageVector, name: String, count: Int, selected: Boolean, onFocused: () -> Unit, modifier: Modifier = Modifier, onClick: () -> Unit) {
     FocusSurface(
         onClick = onClick,
         onFocused = onFocused,
@@ -536,7 +544,7 @@ private fun LiveCategoryRow(icon: ImageVector, name: String, count: Int, selecte
         focusedColor = Color(0xFF4C3A86),
         focusScale = 1.02f,
         shape = RoundedCornerShape(8.dp),
-        modifier = Modifier.fillMaxWidth().height(44.dp),
+        modifier = modifier.fillMaxWidth().height(44.dp),
     ) {
         Row(Modifier.fillMaxSize().padding(horizontal = 10.dp), verticalAlignment = Alignment.CenterVertically) {
             Icon(icon, null, tint = if (selected) Color.White else HugoColors.TextMuted, modifier = Modifier.size(16.dp))
