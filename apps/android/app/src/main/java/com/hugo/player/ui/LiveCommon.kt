@@ -221,3 +221,6 @@ fun headerChipsThatFit(widthDp: Float, textLens: List<Int>, compact: Boolean): I
 /** Tecla DIREITA do controle (só ao apertar, não ao soltar). */
 fun liveDpadRight(keyCode: Int, isDown: Boolean): Boolean =
     isDown && keyCode == android.view.KeyEvent.KEYCODE_DPAD_RIGHT
+
+/** Player ao vivo: ▲▼ trocam de canal só com a barra do canal visível (com ela escondida, o toque só a mostra). */
+fun liveArrowZaps(bannerVisible: Boolean): Boolean = bannerVisible

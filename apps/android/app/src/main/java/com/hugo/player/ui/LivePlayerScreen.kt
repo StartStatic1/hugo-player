@@ -78,7 +78,7 @@ private val liveResizeModes = listOf(
 )
 
 /**
- * Player só da TV ao vivo: CH+/- e setas para zapear, número pelo controle, lista lateral (OK / ←),
+ * Player só da TV ao vivo: CH+/- zapeia sempre; ▲▼ mostram a barra (se escondida) e depois zapeiam; número pelo controle, lista lateral (OK / ←),
  * painel de fontes e tela (→), reconexão automática e parada ao sair do app.
  */
 @OptIn(UnstableApi::class)
@@ -343,8 +343,9 @@ fun LivePlayerScreen(request: LivePlayRequest, onBack: () -> Unit) {
                 }
                 if (showList || showSources || errorMsg != null) return@onPreviewKeyEvent false
                 when (code) {
-                    AndroidKeyEvent.KEYCODE_DPAD_UP -> { zap(-1); true }
-                    AndroidKeyEvent.KEYCODE_DPAD_DOWN -> { zap(+1); true }
+                    // ▲▼: com a barra escondida, o 1º toque só mostra a barra; com ela na tela, troca o canal
+                    AndroidKeyEvent.KEYCODE_DPAD_UP -> { if (liveArrowZaps(showBanner)) zap(-1) else bannerNow(); true }
+                    AndroidKeyEvent.KEYCODE_DPAD_DOWN -> { if (liveArrowZaps(showBanner)) zap(+1) else bannerNow(); true }
                     AndroidKeyEvent.KEYCODE_DPAD_CENTER, AndroidKeyEvent.KEYCODE_ENTER, AndroidKeyEvent.KEYCODE_NUMPAD_ENTER,
                     AndroidKeyEvent.KEYCODE_DPAD_LEFT -> { showList = true; true }
                     AndroidKeyEvent.KEYCODE_DPAD_RIGHT, AndroidKeyEvent.KEYCODE_MENU -> { showSources = true; true }
@@ -538,7 +539,7 @@ private fun InfoBanner(
                 BannerButton("Fonte/tela", onSources)
             }
             Spacer(Modifier.height(4.dp))
-            Text("▲▼ / CH± trocar · OK lista", color = HugoColors.TextDim, fontSize = 10.sp)
+            Text("▲▼ trocar canal · CH± · OK lista · → tela", color = HugoColors.TextDim, fontSize = 10.sp)
         }
     }
 }

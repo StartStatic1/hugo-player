@@ -162,4 +162,10 @@ class LiveTvTest {
         val deep = RuntimeException("x".repeat(50_000))
         assertTrue(com.hugo.player.data.CrashLog.format(deep, "main", "v").length <= 12_000)
     }
+
+    @Test
+    fun arrowsShowBannerFirstThenZap() {
+        assertTrue(!com.hugo.player.ui.liveArrowZaps(bannerVisible = false))
+        assertTrue(com.hugo.player.ui.liveArrowZaps(bannerVisible = true))
+    }
 }
