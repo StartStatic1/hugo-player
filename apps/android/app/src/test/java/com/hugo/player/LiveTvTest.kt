@@ -2,7 +2,13 @@ package com.hugo.player
 
 import com.hugo.player.data.db.ChannelEntity
 import com.hugo.player.data.epg.LiveEpg
+import androidx.media3.common.PlaybackException
+import com.hugo.player.ui.LiveAttempt
+import com.hugo.player.ui.LiveFormat
+import com.hugo.player.ui.LiveFormatMemory
+import com.hugo.player.ui.isLiveFormatFailure
 import com.hugo.player.ui.liveAltVariant
+import com.hugo.player.ui.liveAttempts
 import com.hugo.player.ui.qualityChips
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -51,5 +57,29 @@ class LiveTvTest {
         val chips = qualityChips(c)
         assertTrue(chips.containsAll(listOf("FHD", "H.265", "TS")))
         assertEquals("4K", qualityChips(c, videoHeight = 2160).first())
+    }
+
+    /** Regressão 0.5.20: painel XUI devolve HTML (200) no .m3u8 e só entrega vídeo no .ts. */
+    @Test
+    fun m3u8FallsBackToTsAndRemembersServer() {
+        LiveFormatMemory.clear()
+        val u = "http://panel.example.test/live/u/p/1479281.m3u8"
+        assertEquals(
+            listOf(LiveAttempt(u, true), LiveAttempt("http://panel.example.test/live/u/p/1479281.ts", false)),
+            liveAttempts(u),
+        )
+        // HTML no lugar do manifesto = falha de formato -> tenta a próxima
+        assertTrue(isLiveFormatFailure(PlaybackException.ERROR_CODE_PARSING_MANIFEST_MALFORMED, null))
+        assertTrue(isLiveFormatFailure(PlaybackException.ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED, null))
+        assertTrue(isLiveFormatFailure(PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS, 404))
+        assertTrue(!isLiveFormatFailure(PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED, null))
+        // o .ts funcionou: o próximo canal do mesmo servidor já começa no .ts
+        LiveFormatMemory.remember("http://panel.example.test/live/u/p/1479281.ts")
+        assertEquals("http://panel.example.test/live/u/p/2.ts", liveAttempts("http://panel.example.test/live/u/p/2.m3u8").first().url)
+        // forçado no painel de fonte
+        assertEquals(listOf(LiveAttempt("http://h/live/u/p/3.m3u8", true)), liveAttempts("http://h/live/u/p/3.ts", LiveFormat.HLS))
+        // sem extensão: detecta pelo conteúdo, depois HLS
+        assertEquals(listOf(LiveAttempt("http://h/u/p/4", false), LiveAttempt("http://h/u/p/4", true)), liveAttempts("http://h/u/p/4"))
+        LiveFormatMemory.clear()
     }
 }

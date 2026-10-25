@@ -714,7 +714,10 @@ private fun LivePreview(url: String, holder: MutableState<ExoPlayer?>, onVideoHe
     var foreground by remember { mutableStateOf(lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) }
     var failed by remember { mutableStateOf(false) }
     var loading by remember { mutableStateOf(false) }
-    var tryUrl by remember(url) { mutableStateOf(url) }
+    // mesmas tentativas do player (.m3u8 <-> .ts, lembrando o formato que funcionou no servidor)
+    val attempts = remember(url) { liveAttempts(url) }
+    var attempt by remember(url) { mutableIntStateOf(0) }
+    val cur = attempts.getOrNull(attempt) ?: LiveAttempt(url, false)
 
     DisposableEffect(player) {
         holder.value = player
@@ -723,14 +726,13 @@ private fun LivePreview(url: String, holder: MutableState<ExoPlayer?>, onVideoHe
                 if (error.errorCode == PlaybackException.ERROR_CODE_BEHIND_LIVE_WINDOW) {
                     player.seekToDefaultPosition(); player.prepare(); return
                 }
-                // .ts <-> .m3u8 uma vez antes de desistir
-                val alt = liveAltVariant(tryUrl)
-                if (tryUrl == url && alt != null) { tryUrl = alt; return }
+                val status = (error.cause as? androidx.media3.datasource.HttpDataSource.InvalidResponseCodeException)?.responseCode
+                if (isLiveFormatFailure(error.errorCode, status) && attempt + 1 < attempts.size) { attempt++; return }
                 failed = true; loading = false
             }
             override fun onPlaybackStateChanged(state: Int) {
                 loading = state == Player.STATE_BUFFERING
-                if (state == Player.STATE_READY) failed = false
+                if (state == Player.STATE_READY) { failed = false; LiveFormatMemory.remember(player.currentMediaItem?.localConfiguration?.uri?.toString() ?: "") }
             }
             override fun onVideoSizeChanged(videoSize: VideoSize) { onVideoHeight(videoSize.height) }
         }
@@ -752,14 +754,14 @@ private fun LivePreview(url: String, holder: MutableState<ExoPlayer?>, onVideoHe
         lifecycleOwner.lifecycle.addObserver(obs)
         onDispose { lifecycleOwner.lifecycle.removeObserver(obs) }
     }
-    LaunchedEffect(tryUrl, foreground) {
+    LaunchedEffect(cur, foreground) {
         player.stop()
         player.clearMediaItems()
         failed = false
         if (!foreground) return@LaunchedEffect
-        delay(if (tryUrl == url) 700 else 200)
+        delay(if (attempt == 0) 700 else 200)
         loading = true
-        player.setMediaItem(HugoPlayerFactory.mediaItem(tryUrl, forceHls = StreamTypes.detect(tryUrl) == StreamTypes.Kind.HLS))
+        player.setMediaItem(HugoPlayerFactory.mediaItem(cur.url, forceHls = cur.forceHls))
         player.prepare()
         player.playWhenReady = true
     }

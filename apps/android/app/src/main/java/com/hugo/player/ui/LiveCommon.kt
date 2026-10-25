@@ -91,3 +91,60 @@ fun liveAltVariant(url: String): String? {
 }
 
 fun formatHm(ms: Long): String = SimpleDateFormat("HH:mm", Locale("pt", "BR")).format(Date(ms))
+
+/** Formato escolhido no painel de fonte do player ao vivo. */
+enum class LiveFormat(val label: String) { AUTO("Automático"), TS("Forçar TS (.ts)"), HLS("Forçar HLS (.m3u8)") }
+
+/** Uma tentativa de abrir o canal: URL + se força HLS (MIME m3u8). */
+data class LiveAttempt(val url: String, val forceHls: Boolean)
+
+/**
+ * Lembra por servidor qual extensão funcionou (ex.: painel XUI que devolve página HTML no .m3u8
+ * e só entrega vídeo no .ts). Assim o próximo canal do mesmo servidor já abre no formato certo.
+ */
+object LiveFormatMemory {
+    private val preferred = java.util.concurrent.ConcurrentHashMap<String, String>()
+    private fun host(url: String): String? = runCatching { java.net.URI(url).let { "${it.host}:${it.port}" } }.getOrNull()
+    private fun ext(url: String): String? = when (StreamTypes.detect(url)) {
+        StreamTypes.Kind.HLS -> "m3u8"; StreamTypes.Kind.TS -> "ts"; else -> null
+    }
+    fun preferredExt(url: String): String? = host(url)?.let { preferred[it] }
+    fun remember(url: String) { val h = host(url) ?: return; val e = ext(url) ?: return; preferred[h] = e }
+    fun clear() = preferred.clear()
+}
+
+/**
+ * Ordem de tentativas para um canal ao vivo. No automático: o formato que já funcionou neste
+ * servidor primeiro, depois o outro (.m3u8 <-> .ts); sem extensão: detecta pelo conteúdo, depois HLS.
+ */
+fun liveAttempts(base: String, format: LiveFormat = LiveFormat.AUTO): List<LiveAttempt> {
+    val kind = StreamTypes.detect(base)
+    val alt = liveAltVariant(base)
+    val ts = if (kind == StreamTypes.Kind.TS) base else if (kind == StreamTypes.Kind.HLS) alt else null
+    val hls = if (kind == StreamTypes.Kind.HLS) base else if (kind == StreamTypes.Kind.TS) alt else null
+    return when (format) {
+        LiveFormat.TS -> listOf(LiveAttempt(ts ?: base, false))
+        LiveFormat.HLS -> listOf(LiveAttempt(hls ?: base, true))
+        LiveFormat.AUTO -> when {
+            ts != null && hls != null -> {
+                val tsFirst = when (LiveFormatMemory.preferredExt(base)) { "ts" -> true; "m3u8" -> false; else -> kind == StreamTypes.Kind.TS }
+                if (tsFirst) listOf(LiveAttempt(ts, false), LiveAttempt(hls, true)) else listOf(LiveAttempt(hls, true), LiveAttempt(ts, false))
+            }
+            else -> listOf(LiveAttempt(base, false), LiveAttempt(base, true))
+        }
+    }
+}
+
+/**
+ * Falha de "formato" (vale tentar a outra variante): conteúdo não reconhecido / manifesto inválido
+ * (painel devolvendo HTML), content-type errado ou HTTP 4xx do canal.
+ */
+fun isLiveFormatFailure(errorCode: Int, httpStatus: Int?): Boolean = when (errorCode) {
+    androidx.media3.common.PlaybackException.ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED,
+    androidx.media3.common.PlaybackException.ERROR_CODE_PARSING_CONTAINER_MALFORMED,
+    androidx.media3.common.PlaybackException.ERROR_CODE_PARSING_MANIFEST_MALFORMED,
+    androidx.media3.common.PlaybackException.ERROR_CODE_PARSING_MANIFEST_UNSUPPORTED,
+    androidx.media3.common.PlaybackException.ERROR_CODE_IO_INVALID_HTTP_CONTENT_TYPE -> true
+    androidx.media3.common.PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS -> httpStatus != null && httpStatus in 400..499
+    else -> false
+}

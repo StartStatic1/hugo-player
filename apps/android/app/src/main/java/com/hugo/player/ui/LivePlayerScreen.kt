@@ -22,6 +22,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
@@ -63,11 +64,10 @@ import kotlinx.coroutines.launch
 
 private const val WINDOW = 5000
 private const val MAX_LIVE_RETRIES = 6
-private const val BANNER_MS = 4_000L
+private const val BANNER_MS = 3_000L
 private const val STALL_BUFFERING_MS = 15_000L
 private const val STALL_FROZEN_MS = 12_000L
 
-private enum class LiveFormat(val label: String) { AUTO("Automático"), TS("Forçar TS (.ts)"), HLS("Forçar HLS (.m3u8)") }
 
 @OptIn(UnstableApi::class)
 private val liveResizeModes = listOf(
@@ -75,16 +75,6 @@ private val liveResizeModes = listOf(
     AspectRatioFrameLayout.RESIZE_MODE_FILL to "Esticar",
     AspectRatioFrameLayout.RESIZE_MODE_ZOOM to "Zoom",
 )
-
-/** URL do canal no formato escolhido (Xtream aceita .ts e .m3u8 no mesmo caminho). */
-private fun urlFor(base: String, f: LiveFormat): String {
-    val kind = StreamTypes.detect(base)
-    return when (f) {
-        LiveFormat.AUTO -> base
-        LiveFormat.TS -> if (kind == StreamTypes.Kind.HLS) liveAltVariant(base) ?: base else base
-        LiveFormat.HLS -> if (kind == StreamTypes.Kind.TS) liveAltVariant(base) ?: base else base
-    }
-}
 
 /**
  * Player só da TV ao vivo: CH+/- e setas para zapear, número pelo controle, lista lateral (OK / ←),
@@ -107,9 +97,11 @@ fun LivePlayerScreen(request: LivePlayRequest, onBack: () -> Unit) {
     var previous by remember { mutableStateOf<Pair<Int, ChannelEntity>?>(null) }
 
     var format by remember { mutableStateOf(LiveFormat.AUTO) }
-    var playUrl by remember { mutableStateOf(urlFor(current.url, format)) }
-    var triedAlt by remember { mutableStateOf(false) }
-    var forceHls by remember { mutableStateOf(false) }
+    // tentativas do canal atual (.m3u8 <-> .ts etc.); attempt = qual está tocando
+    var attempts by remember { mutableStateOf(liveAttempts(current.url, format)) }
+    var attempt by remember { mutableIntStateOf(0) }
+    val playUrl = attempts.getOrNull(attempt)?.url ?: current.url
+    val forceHls = attempts.getOrNull(attempt)?.forceHls ?: false
     var resizeIndex by remember { mutableIntStateOf(0) }
     var loading by remember { mutableStateOf(true) }
     var bufferingSince by remember { mutableLongStateOf(0L) }
@@ -188,9 +180,8 @@ fun LivePlayerScreen(request: LivePlayRequest, onBack: () -> Unit) {
 
     // troca de canal / formato -> URL a tocar
     LaunchedEffect(current.url, format) {
-        playUrl = urlFor(current.url, format)
-        triedAlt = false
-        forceHls = false
+        attempts = liveAttempts(current.url, format)
+        attempt = 0
         retryCount = 0
         videoHeight = 0
         epg = LiveEpg.cached(src.playlistId, current)
@@ -224,13 +215,9 @@ fun LivePlayerScreen(request: LivePlayRequest, onBack: () -> Unit) {
                 if (error.errorCode == PlaybackException.ERROR_CODE_BEHIND_LIVE_WINDOW) {
                     exoPlayer.seekToDefaultPosition(); exoPlayer.prepare(); return
                 }
-                val parsing = error.errorCode == PlaybackException.ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED ||
-                    error.errorCode == PlaybackException.ERROR_CODE_PARSING_CONTAINER_MALFORMED
-                if (parsing && !forceHls && StreamTypes.detect(playUrl) != StreamTypes.Kind.HLS) { forceHls = true; return }
-                val status = httpStatus(error)
-                // canal que não abre em .ts tenta .m3u8 (e vice-versa) uma vez, no modo automático
-                if (format == LiveFormat.AUTO && !triedAlt && (parsing || status == 404 || status == 403 || status == 400 || status == 406)) {
-                    liveAltVariant(playUrl)?.let { triedAlt = true; forceHls = false; playUrl = it; return }
+                // painel que devolve HTML no .m3u8 (ou vídeo no lugar de playlist): tenta a próxima variante
+                if (isLiveFormatFailure(error.errorCode, httpStatus(error)) && attempt + 1 < attempts.size) {
+                    attempt++; retryCount = 0; return
                 }
                 if (isRetryable(error) && retryCount < MAX_LIVE_RETRIES) { retryCount++; reconnectTick++; return }
                 errorMsg = friendlyError(error)
@@ -239,7 +226,7 @@ fun LivePlayerScreen(request: LivePlayRequest, onBack: () -> Unit) {
             override fun onPlaybackStateChanged(state: Int) {
                 loading = state == Player.STATE_BUFFERING || (state == Player.STATE_IDLE && errorMsg == null && exoPlayer.playWhenReady)
                 if (state == Player.STATE_BUFFERING) bufferingSince = System.currentTimeMillis()
-                if (state == Player.STATE_READY) { errorMsg = null; retryCount = 0 }
+                if (state == Player.STATE_READY) { errorMsg = null; retryCount = 0; LiveFormatMemory.remember(playUrl) }
                 // ao vivo não "acaba": se acabar, reconecta
                 if (state == Player.STATE_ENDED) reconnectTick++
             }
@@ -353,7 +340,10 @@ fun LivePlayerScreen(request: LivePlayRequest, onBack: () -> Unit) {
                 }
             }
             .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {
-                if (showList || showSources) { showList = false; showSources = false } else showList = true
+                // toque no vídeo: fecha painel aberto, senão mostra/esconde a barra do canal (some em 3s).
+                // A lista de canais abre pelo botão "Canais" da barra (ou OK/← no controle).
+                if (showList || showSources) { showList = false; showSources = false }
+                else if (showBanner) showBanner = false else bannerNow()
             }
     ) {
         AndroidView(
@@ -382,11 +372,14 @@ fun LivePlayerScreen(request: LivePlayRequest, onBack: () -> Unit) {
         }
 
         errorMsg?.let { msg ->
-            LiveError(msg, onRetry = { retryCount = 0; triedAlt = false; reconnect() }, onNext = { zap(+1) }, modifier = Modifier.align(Alignment.Center))
+            LiveError(msg, onRetry = { retryCount = 0; attempts = liveAttempts(current.url, format); if (attempt == 0) reconnect() else attempt = 0 }, onNext = { zap(+1) }, modifier = Modifier.align(Alignment.Center))
         }
 
         if (showBanner && !showList && !showSources) {
-            InfoBanner(offset + index + 1, current, epg, videoHeight, src.title, Modifier.align(Alignment.BottomCenter))
+            InfoBanner(
+                offset + index + 1, current, epg, videoHeight, src.title, Modifier.align(Alignment.BottomCenter),
+                onChannels = { showList = true }, onSources = { showSources = true },
+            )
         }
 
         if (digits.isNotEmpty()) {
@@ -463,7 +456,7 @@ fun LivePlayerScreen(request: LivePlayRequest, onBack: () -> Unit) {
                 Text("Tela", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold)
                 liveResizeModes.forEachIndexed { i, (_, label) -> PanelOption(label, selected = resizeIndex == i) { resizeIndex = i } }
                 Spacer(Modifier.height(8.dp))
-                PanelOption("Recarregar canal", selected = false) { retryCount = 0; triedAlt = false; reconnect(); showSources = false }
+                PanelOption("Recarregar canal", selected = false) { retryCount = 0; if (attempt == 0) reconnect() else attempt = 0; showSources = false }
             }
         }
     }
@@ -481,7 +474,10 @@ private fun PanelOption(label: String, selected: Boolean, modifier: Modifier = M
 }
 
 @Composable
-private fun InfoBanner(number: Int, c: ChannelEntity, epg: EpgNowNext?, videoHeight: Int, listTitle: String, modifier: Modifier) {
+private fun InfoBanner(
+    number: Int, c: ChannelEntity, epg: EpgNowNext?, videoHeight: Int, listTitle: String, modifier: Modifier,
+    onChannels: () -> Unit, onSources: () -> Unit,
+) {
     Row(
         modifier.padding(24.dp).fillMaxWidth().background(Color(0xFF12141C), RoundedCornerShape(14.dp))
             .border(1.dp, Color(0xFF2A3148), RoundedCornerShape(14.dp)).padding(14.dp),
@@ -510,10 +506,24 @@ private fun InfoBanner(number: Int, c: ChannelEntity, epg: EpgNowNext?, videoHei
         }
         Spacer(Modifier.width(12.dp))
         Column(horizontalAlignment = Alignment.End) {
-            Text("▲▼ / CH± trocar", color = HugoColors.TextDim, fontSize = 10.sp)
-            Text("OK lista · → fonte/tela", color = HugoColors.TextDim, fontSize = 10.sp)
+            // botões para toque (no controle o foco fica no player: setas/OK seguem como antes)
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                BannerButton("Canais", onChannels)
+                BannerButton("Fonte/tela", onSources)
+            }
+            Spacer(Modifier.height(4.dp))
+            Text("▲▼ / CH± trocar · OK lista", color = HugoColors.TextDim, fontSize = 10.sp)
         }
     }
+}
+
+@Composable
+private fun BannerButton(label: String, onClick: () -> Unit) {
+    Text(
+        label, color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
+        modifier = Modifier.clip(RoundedCornerShape(8.dp)).background(HugoColors.CardAlt)
+            .clickable(onClick = onClick).padding(horizontal = 12.dp, vertical = 7.dp),
+    )
 }
 
 @Composable
