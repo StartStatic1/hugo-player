@@ -552,15 +552,20 @@ private fun PreviewPanel(
 ) {
     val c = vm.focused
     var videoHeight by remember { mutableIntStateOf(0) }
-    val pad = if (compact) 8.dp else 12.dp
+    var playing by remember { mutableStateOf<String?>(null) }
     // topo FIXO (prévia + cartão do canal); só a programação embaixo rola
-    Column(modifier.background(HugoColors.Panel).padding(pad)) {
+    BoxWithConstraints(modifier.background(HugoColors.Panel)) {
+    val layout = previewLayout(maxWidth.value, maxHeight.value)
+    val short = layout.short
+    val pad = if (compact || short) 8.dp else 12.dp
+    Column(Modifier.fillMaxSize().padding(pad)) {
         Box(
-            Modifier.fillMaxWidth().aspectRatio(16f / 9f).clip(RoundedCornerShape(12.dp)).background(Color.Black),
+            Modifier.align(Alignment.CenterHorizontally).width(layout.videoWidth.dp).height(layout.videoHeight.dp)
+                .clip(RoundedCornerShape(12.dp)).background(Color.Black),
             contentAlignment = Alignment.Center,
         ) {
             if (previewAllowed && c != null) {
-                LivePreview(c.url, playerHolder, onVideoHeight = { videoHeight = it })
+                LivePreview(c.url, playerHolder, onVideoHeight = { videoHeight = it }, onPlaying = { playing = it })
                 Row(
                     Modifier.align(Alignment.BottomStart).padding(8.dp).background(Color(0xFF000000), RoundedCornerShape(6.dp)).padding(horizontal = 6.dp, vertical = 2.dp),
                     verticalAlignment = Alignment.CenterVertically,
@@ -575,26 +580,31 @@ private fun PreviewPanel(
                 Icon(Icons.Default.LiveTv, null, tint = HugoColors.TextDim, modifier = Modifier.size(48.dp))
             }
         }
-        LaunchedEffect(c?.url) { videoHeight = 0 }
+        LaunchedEffect(c?.url) { videoHeight = 0; playing = null }
         Spacer(Modifier.height(pad))
         if (c == null) {
             Text("Escolha um canal", color = HugoColors.TextMuted)
             return@Column
         }
         // cartão do canal
-        Column(Modifier.fillMaxWidth().background(HugoColors.Card, RoundedCornerShape(12.dp)).padding(if (compact) 8.dp else 10.dp)) {
+        val chips = qualityChips(c, videoHeight, playing)
+        Column(Modifier.fillMaxWidth().background(HugoColors.Card, RoundedCornerShape(12.dp)).padding(if (compact || short) 8.dp else 10.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("${vm.focusedIndex + 1}", color = HugoColors.Accent, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                Text("${vm.focusedIndex + 1}", color = HugoColors.Accent, fontSize = if (short) 13.sp else 15.sp, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.width(8.dp))
-                Text(c.name, color = Color.White, fontSize = if (compact) 14.sp else 16.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                Text(c.name, color = Color.White, fontSize = if (compact || short) 13.sp else 16.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                // tela baixa: selos na mesma linha do nome
+                if (short) chips.take(2).forEach { Spacer(Modifier.width(4.dp)); Chip(it) }
             }
-            Spacer(Modifier.height(5.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                qualityChips(c, videoHeight).forEach { Chip(it) }
-                if (c.group.isNotBlank() && !compact) Chip(c.group, muted = true)
+            if (!short) {
+                Spacer(Modifier.height(5.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    chips.forEach { Chip(it) }
+                    if (c.group.isNotBlank() && !compact) Chip(c.group, muted = true)
+                }
             }
-            Spacer(Modifier.height(if (compact) 6.dp else 8.dp))
-            WatchButtons(vm, c, onWatch)
+            Spacer(Modifier.height(if (compact || short) 6.dp else 8.dp))
+            WatchButtons(vm, c, onWatch, height = if (short) 34.dp else 44.dp)
         }
         Spacer(Modifier.height(pad))
 
@@ -614,10 +624,11 @@ private fun PreviewPanel(
             ) {
                 // chave por posição: EPG de painel às vezes repete o mesmo horário (chave duplicada derrubava o app)
                 itemsIndexed(programs, key = { i, p -> "$i:${p.start}" }) { _, p ->
-                    EpgCard(p, live = p.isLive(now), compact = compact)
+                    EpgCard(p, live = p.isLive(now), compact = compact || short)
                 }
             }
         }
+    }
     }
 }
 
@@ -658,24 +669,24 @@ private fun EpgCard(p: EpgProgram, live: Boolean, compact: Boolean) {
 }
 
 @Composable
-private fun WatchButtons(vm: LiveTvViewModel, c: ChannelEntity, onWatch: () -> Unit) {
+private fun WatchButtons(vm: LiveTvViewModel, c: ChannelEntity, onWatch: () -> Unit, height: androidx.compose.ui.unit.Dp = 44.dp) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Button(
                 onClick = onWatch,
                 colors = ButtonDefaults.buttonColors(containerColor = HugoColors.Accent),
                 shape = RoundedCornerShape(10.dp),
-                modifier = Modifier.weight(1f).height(44.dp),
+                modifier = Modifier.weight(1f).height(height),
             ) {
                 Icon(Icons.Default.PlayArrow, null)
                 Spacer(Modifier.width(6.dp))
-                Text("OK assistir", fontWeight = FontWeight.Bold)
+                Text("OK assistir", fontWeight = FontWeight.Bold, fontSize = if (height < 40.dp) 13.sp else 14.sp)
             }
             Spacer(Modifier.width(8.dp))
             val fav = vm.favorites[c.url] == true
             OutlinedButton(
                 onClick = { vm.toggleFavorite(c) },
                 shape = RoundedCornerShape(10.dp),
-                modifier = Modifier.height(44.dp),
+                modifier = Modifier.height(height),
             ) {
                 Icon(if (fav) Icons.Default.Star else Icons.Default.StarBorder, if (fav) "Remover dos favoritos" else "Favoritar", tint = if (fav) Color(0xFFFACC15) else Color.White)
             }
@@ -696,7 +707,7 @@ private fun Chip(text: String, muted: Boolean = false) {
  */
 @OptIn(UnstableApi::class)
 @Composable
-private fun LivePreview(url: String, holder: MutableState<ExoPlayer?>, onVideoHeight: (Int) -> Unit) {
+private fun LivePreview(url: String, holder: MutableState<ExoPlayer?>, onVideoHeight: (Int) -> Unit, onPlaying: (String?) -> Unit) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val player = remember {
@@ -715,29 +726,37 @@ private fun LivePreview(url: String, holder: MutableState<ExoPlayer?>, onVideoHe
     var attempt by remember(url) { mutableIntStateOf(0) }
     val cur = attempts.getOrNull(attempt) ?: LiveAttempt(url, false)
 
+    val playingCb by rememberUpdatedState(onPlaying)
+    val heightCb by rememberUpdatedState(onVideoHeight)
     DisposableEffect(player) {
         holder.value = player
+        onDispose {
+            if (holder.value === player) holder.value = null
+            player.release()
+        }
+    }
+    // ouvinte refeito a cada canal: antes ficava preso às tentativas do 1º canal e o fallback não rodava nos outros
+    DisposableEffect(player, attempts) {
         val listener = object : Player.Listener {
             override fun onPlayerError(error: PlaybackException) {
                 if (error.errorCode == PlaybackException.ERROR_CODE_BEHIND_LIVE_WINDOW) {
                     player.seekToDefaultPosition(); player.prepare(); return
                 }
-                val status = (error.cause as? androidx.media3.datasource.HttpDataSource.InvalidResponseCodeException)?.responseCode
-                if (isLiveFormatFailure(error.errorCode, status) && attempt + 1 < attempts.size) { attempt++; return }
+                // qualquer erro: tenta a outra variante (.ts <-> .m3u8) antes de mostrar "indisponível"
+                if (attempt + 1 < attempts.size) { attempt++; return }
                 failed = true; loading = false
             }
             override fun onPlaybackStateChanged(state: Int) {
                 loading = state == Player.STATE_BUFFERING
-                if (state == Player.STATE_READY) { failed = false; LiveFormatMemory.remember(player.currentMediaItem?.localConfiguration?.uri?.toString() ?: "") }
+                if (state == Player.STATE_READY) {
+                    failed = false
+                    attempts.getOrNull(attempt)?.let { a -> LiveFormatMemory.remember(a.url); playingCb(playingFormat(a.url, a.forceHls)) }
+                }
             }
-            override fun onVideoSizeChanged(videoSize: VideoSize) { onVideoHeight(videoSize.height) }
+            override fun onVideoSizeChanged(videoSize: VideoSize) { heightCb(videoSize.height) }
         }
         player.addListener(listener)
-        onDispose {
-            player.removeListener(listener)
-            if (holder.value === player) holder.value = null
-            player.release()
-        }
+        onDispose { player.removeListener(listener) }
     }
     DisposableEffect(lifecycleOwner) {
         val obs = LifecycleEventObserver { _, e ->
@@ -751,6 +770,7 @@ private fun LivePreview(url: String, holder: MutableState<ExoPlayer?>, onVideoHe
         onDispose { lifecycleOwner.lifecycle.removeObserver(obs) }
     }
     LaunchedEffect(cur, foreground) {
+        playingCb(null)
         player.stop()
         player.clearMediaItems()
         failed = false
