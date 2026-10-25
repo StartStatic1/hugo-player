@@ -114,12 +114,8 @@ fun AppNavigation() {
         }
         composable("live/{playlistId}") { backStack ->
             val playlistId = backStack.arguments?.getString("playlistId") ?: ""
-            // TV / tela larga: 3 colunas + player ao vivo próprio; celular segue com a grade de sempre
-            if (remember { useLiveTvLayout(context) }) {
-                LiveTvScreen(playlistId, onPlay = { req -> LiveSession.current = req; nav.navigate("livePlay") }, onBack = { nav.popBackStack() })
-            } else {
-                BrowseScreen(playlistId, BrowseType.LIVE, onPlay = { url, title -> nav.openPlayer(PlaybackRequest(url = url, title = title, subtitle = "TV ao Vivo", isLive = true, playlistId = playlistId)) }, onOpenSeries = {}, onOpenMovie = {}, onBack = { nav.popBackStack() })
-            }
+            // TV ao vivo sempre no formato novo (o layout se ajusta à largura: TV, tablet ou celular deitado)
+            LiveTvScreen(playlistId, onPlay = { req -> LiveSession.current = req; nav.navigate("livePlay") }, onBack = { nav.popBackStack() })
         }
         composable("movies/{playlistId}") { backStack ->
             val playlistId = backStack.arguments?.getString("playlistId") ?: ""

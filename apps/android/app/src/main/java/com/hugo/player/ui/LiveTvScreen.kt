@@ -8,6 +8,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -345,10 +347,18 @@ fun LiveTvScreen(playlistId: String, onPlay: (LivePlayRequest) -> Unit, onBack: 
         onPlay(vm.playRequest(c, index))
     }
 
-    Column(Modifier.fillMaxSize().background(HugoColors.Background)) {
+    BoxWithConstraints(Modifier.fillMaxSize().background(HugoColors.Background)) {
+    // Tamanhos por largura: TV/tablet = 3 colunas cheias; celular deitado = 3 colunas compactas;
+    // tela estreita (< 600dp) = categorias + canais (sem prévia).
+    val w = maxWidth
+    val shortScreen = maxHeight < 480.dp
+    val showPreview = w >= 600.dp
+    val catWidth = when { w >= 1000.dp -> 210.dp; w >= 840.dp -> 190.dp; w >= 600.dp -> 160.dp; else -> 130.dp }
+    val previewWidth = when { w >= 1000.dp -> 360.dp; w >= 840.dp -> 300.dp; else -> 250.dp }
+    Column(Modifier.fillMaxSize()) {
         // ---------- topo ----------
         Row(
-            Modifier.fillMaxWidth().background(HugoColors.Panel).padding(horizontal = 16.dp, vertical = 8.dp),
+            Modifier.fillMaxWidth().background(HugoColors.Panel).padding(horizontal = if (shortScreen) 10.dp else 16.dp, vertical = if (shortScreen) 4.dp else 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             HugoIconButton(Icons.AutoMirrored.Filled.ArrowBack, "Voltar", onClick = onBack)
@@ -380,14 +390,13 @@ fun LiveTvScreen(playlistId: String, onPlay: (LivePlayRequest) -> Unit, onBack: 
                 ),
                 modifier = Modifier.weight(1f).heightIn(min = 48.dp),
             )
-            Spacer(Modifier.width(16.dp))
-            Clock()
+            if (w >= 700.dp) { Spacer(Modifier.width(16.dp)); Clock() }
         }
 
         Row(Modifier.fillMaxSize()) {
             // ---------- 1) categorias ----------
             LazyColumn(
-                modifier = Modifier.width(210.dp).fillMaxHeight().background(HugoColors.Panel).focusRestorer(),
+                modifier = Modifier.width(catWidth).fillMaxHeight().background(HugoColors.Panel).focusRestorer(),
                 contentPadding = PaddingValues(8.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
@@ -426,13 +435,14 @@ fun LiveTvScreen(playlistId: String, onPlay: (LivePlayRequest) -> Unit, onBack: 
                                 number = index + 1,
                                 channel = c,
                                 now = vm.cachedEpg(c)?.now,
+                                compact = shortScreen,
                                 isFavorite = vm.favorites[c.url] == true,
                                 selected = vm.focused?.url == c.url,
                                 modifier = mod,
                                 onFocused = { vm.setFocus(c, index) },
                                 onClick = {
                                     // toque (tablet): 1º toque mostra a prévia, 2º assiste; no controle o foco já selecionou
-                                    if (vm.focused?.url == c.url) play(c, index) else vm.setFocus(c, index)
+                                    if (!showPreview || vm.focused?.url == c.url) play(c, index) else vm.setFocus(c, index)
                                 },
                                 onToggleFavorite = { vm.toggleFavorite(c) },
                             )
@@ -442,14 +452,16 @@ fun LiveTvScreen(playlistId: String, onPlay: (LivePlayRequest) -> Unit, onBack: 
             }
 
             // ---------- 3) prévia + EPG ----------
-            PreviewPanel(
+            if (showPreview) PreviewPanel(
                 vm = vm,
                 previewAllowed = previewAllowed,
                 playerHolder = preview,
                 onWatch = { vm.focused?.let { play(it, vm.focusedIndex) } },
-                modifier = Modifier.width(360.dp).fillMaxHeight(),
+                compact = shortScreen || w < 840.dp,
+                modifier = Modifier.width(previewWidth).fillMaxHeight(),
             )
         }
+    }
     }
 }
 
@@ -490,6 +502,7 @@ private fun LiveChannelRow(
     isFavorite: Boolean,
     selected: Boolean,
     modifier: Modifier,
+    compact: Boolean = false,
     onFocused: () -> Unit,
     onClick: () -> Unit,
     onToggleFavorite: () -> Unit,
@@ -502,7 +515,7 @@ private fun LiveChannelRow(
         focusedColor = Color(0xFF2A2350),
         focusScale = 1.0f,
         shape = RoundedCornerShape(10.dp),
-        modifier = modifier.fillMaxWidth().height(62.dp).onPreviewKeyEvent { ev ->
+        modifier = modifier.fillMaxWidth().height(if (compact) 54.dp else 62.dp).onPreviewKeyEvent { ev ->
             val code = ev.key.nativeKeyCode
             // segurar OK ou apertar MENU / ★ = favoritar
             val longOk = (code == AndroidKeyEvent.KEYCODE_DPAD_CENTER || code == AndroidKeyEvent.KEYCODE_ENTER) &&
@@ -525,7 +538,7 @@ private fun LiveChannelRow(
                 fontWeight = FontWeight.SemiBold, textAlign = TextAlign.End, modifier = Modifier.width(44.dp),
             )
             Spacer(Modifier.width(10.dp))
-            ChannelLogo(channel.logo, channel.name, size = 44.dp)
+            ChannelLogo(channel.logo, channel.name, size = if (compact) 38.dp else 44.dp)
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text(channel.name, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -552,10 +565,14 @@ private fun PreviewPanel(
     playerHolder: MutableState<ExoPlayer?>,
     onWatch: () -> Unit,
     modifier: Modifier,
+    compact: Boolean = false,
 ) {
     val c = vm.focused
     var videoHeight by remember { mutableIntStateOf(0) }
-    Column(modifier.background(HugoColors.Panel).padding(14.dp)) {
+    // compacto (celular deitado): rolável e com o botão logo abaixo do nome
+    val col = if (compact) modifier.background(HugoColors.Panel).verticalScroll(rememberScrollState()).padding(10.dp)
+    else modifier.background(HugoColors.Panel).padding(14.dp)
+    Column(col) {
         Box(
             Modifier.fillMaxWidth().aspectRatio(16f / 9f).clip(RoundedCornerShape(12.dp)).background(Color.Black),
             contentAlignment = Alignment.Center,
@@ -577,7 +594,7 @@ private fun PreviewPanel(
             }
         }
         LaunchedEffect(c?.url) { videoHeight = 0 }
-        Spacer(Modifier.height(12.dp))
+        Spacer(Modifier.height(if (compact) 8.dp else 12.dp))
         if (c == null) {
             Text("Escolha um canal", color = HugoColors.TextMuted)
             return@Column
@@ -587,8 +604,9 @@ private fun PreviewPanel(
                 "${vm.focusedIndex + 1}", color = HugoColors.Accent, fontSize = 15.sp, fontWeight = FontWeight.Bold,
             )
             Spacer(Modifier.width(8.dp))
-            Text(c.name, color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+            Text(c.name, color = Color.White, fontSize = if (compact) 15.sp else 17.sp, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
         }
+        if (compact) { Spacer(Modifier.height(6.dp)); WatchButtons(vm, c, onWatch) }
         Spacer(Modifier.height(6.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             qualityChips(c, videoHeight).forEach { Chip(it) }
@@ -598,7 +616,7 @@ private fun PreviewPanel(
 
         val nn = vm.cachedEpg(c)
         val guide = vm.guide.filter { it.stop > System.currentTimeMillis() }
-        Column(Modifier.weight(1f)) {
+        Column(if (compact) Modifier else Modifier.weight(1f)) {
             if (nn?.now == null && nn?.next == null && guide.isEmpty()) {
                 Text("Sem programação (EPG) para este canal.", color = HugoColors.TextDim, fontSize = 12.sp)
             } else {
@@ -612,7 +630,7 @@ private fun PreviewPanel(
                     Spacer(Modifier.height(10.dp))
                 }
                 next?.let { EpgLine("A SEGUIR", it, highlight = false); Spacer(Modifier.height(8.dp)) }
-                val later = guide.filter { g -> g.start > (next?.start ?: now?.start ?: 0L) }.take(4)
+                val later = guide.filter { g -> g.start > (next?.start ?: now?.start ?: 0L) }.take(if (compact) 2 else 4)
                 if (later.isNotEmpty()) {
                     HorizontalDivider(color = Color(0xFF232842))
                     Spacer(Modifier.height(6.dp))
@@ -625,6 +643,12 @@ private fun PreviewPanel(
                 }
             }
         }
+        if (!compact) WatchButtons(vm, c, onWatch)
+    }
+}
+
+@Composable
+private fun WatchButtons(vm: LiveTvViewModel, c: ChannelEntity, onWatch: () -> Unit) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Button(
                 onClick = onWatch,
@@ -646,7 +670,6 @@ private fun PreviewPanel(
                 Icon(if (fav) Icons.Default.Star else Icons.Default.StarBorder, if (fav) "Remover dos favoritos" else "Favoritar", tint = if (fav) Color(0xFFFACC15) else Color.White)
             }
         }
-    }
 }
 
 @Composable

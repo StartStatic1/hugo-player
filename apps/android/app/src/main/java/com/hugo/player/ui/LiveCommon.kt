@@ -2,8 +2,6 @@ package com.hugo.player.ui
 
 import android.app.ActivityManager
 import android.content.Context
-import android.content.res.Configuration
-import com.hugo.player.data.DeviceIdentity
 import com.hugo.player.data.db.ChannelEntity
 import com.hugo.player.player.StreamTypes
 import java.text.SimpleDateFormat
@@ -40,13 +38,6 @@ object LiveFilters {
     const val REC = "__rec"
     const val ALL = "__all"
     fun group(filter: String): String? = if (filter == FAV || filter == REC || filter == ALL) null else filter
-}
-
-/** 3 colunas só em TV ou tela larga (tablet); celular continua com a grade antiga. */
-fun useLiveTvLayout(context: Context): Boolean {
-    if (DeviceIdentity.isTv(context)) return true
-    val c: Configuration = context.resources.configuration
-    return c.smallestScreenWidthDp >= 600 && c.screenWidthDp >= 960
 }
 
 /** Prévia ao vivo só em aparelhos com memória suficiente (Fire TV Lite / 1 GB fica sem). */
