@@ -447,6 +447,20 @@ class CatalogRepository(context: Context) {
     suspend fun episodes(playlistId: String, seriesName: String): List<ChannelEntity> =
         withContext(Dispatchers.IO) { dao.episodes(playlistId, seriesName) }
 
+    /** Canais ao vivo pelas URLs, na mesma ordem pedida (favoritos / recentes). */
+    suspend fun liveByUrls(playlistId: String, urls: List<String>): List<ChannelEntity> = withContext(Dispatchers.IO) {
+        if (urls.isEmpty()) return@withContext emptyList()
+        val found = HashMap<String, ChannelEntity>()
+        urls.distinct().chunked(500).forEach { chunk -> dao.liveByUrls(playlistId, chunk).forEach { found.putIfAbsent(it.url, it) } }
+        urls.mapNotNull { found[it] }
+    }
+
+    /** Janela da lista ao vivo (mesma ordem da tela), para zapear no player. */
+    suspend fun liveWindow(playlistId: String, group: String?, query: String?, offset: Int, limit: Int): List<ChannelEntity> =
+        withContext(Dispatchers.IO) {
+            dao.page(playlistId, "live", group, query?.trim()?.takeIf { it.isNotEmpty() }, true, limit, offset.coerceAtLeast(0))
+        }
+
     suspend fun liveEpgKeys(playlistId: String) =
         withContext(Dispatchers.IO) { dao.liveEpgKeys(playlistId) }
 

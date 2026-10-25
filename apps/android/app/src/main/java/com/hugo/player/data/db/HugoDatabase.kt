@@ -94,6 +94,9 @@ interface ChannelDao {
     @Query("SELECT COUNT(*) FROM channels WHERE playlistId = :playlistId AND type = :type")
     suspend fun countByType(playlistId: String, type: String): Int
 
+    @Query("SELECT * FROM channels WHERE playlistId = :playlistId AND type = 'live' AND url IN (:urls)")
+    suspend fun liveByUrls(playlistId: String, urls: List<String>): List<ChannelEntity>
+
     @Query("SELECT name, epgId FROM channels WHERE playlistId = :playlistId AND type = 'live'")
     suspend fun liveEpgKeys(playlistId: String): List<LiveEpgKey>
 

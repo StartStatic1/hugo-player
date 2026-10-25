@@ -578,7 +578,7 @@ private fun ErrorPanel(
     }
 }
 
-private fun isRetryable(e: PlaybackException): Boolean = when (e.errorCode) {
+internal fun isRetryable(e: PlaybackException): Boolean = when (e.errorCode) {
     PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED,
     PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT,
     PlaybackException.ERROR_CODE_IO_INVALID_HTTP_CONTENT_TYPE,
@@ -590,10 +590,10 @@ private fun isRetryable(e: PlaybackException): Boolean = when (e.errorCode) {
 }
 
 @OptIn(UnstableApi::class)
-private fun httpStatus(e: PlaybackException): Int? =
+internal fun httpStatus(e: PlaybackException): Int? =
     (e.cause as? HttpDataSource.InvalidResponseCodeException)?.responseCode
 
-private fun friendlyError(e: PlaybackException): String = when (e.errorCode) {
+internal fun friendlyError(e: PlaybackException): String = when (e.errorCode) {
     PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS -> when (val code = httpStatus(e)) {
         401, 403 -> "Acesso negado pelo servidor (HTTP $code). Verifique se sua lista está ativa."
         404 -> "Canal ou arquivo não encontrado no servidor (HTTP 404)."
