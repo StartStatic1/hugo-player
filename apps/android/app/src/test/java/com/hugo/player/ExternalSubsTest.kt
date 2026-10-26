@@ -26,3 +26,28 @@ class ExternalSubsTest {
         assertNull(ExternalSubs.queryFor(PlaybackRequest(url = "u", title = "Globo", isLive = true)))
     }
 }
+
+class DualAudioSubtitleTest {
+    @Test fun portugueseDetection() {
+        org.junit.Assert.assertTrue(com.hugo.player.ui.isPortuguese("pt-BR"))
+        org.junit.Assert.assertTrue(com.hugo.player.ui.isPortuguese("por"))
+        org.junit.Assert.assertFalse(com.hugo.player.ui.isPortuguese("en"))
+        org.junit.Assert.assertFalse(com.hugo.player.ui.isPortuguese(null))
+    }
+
+    @Test fun autoOnlyForLegendadoOrForeignAudio() {
+        org.junit.Assert.assertTrue(com.hugo.player.ui.wantsAutoSubtitle("Filme [L] (2010)", null))
+        org.junit.Assert.assertTrue(com.hugo.player.ui.wantsAutoSubtitle("Filme (2010)", "eng"))
+        org.junit.Assert.assertFalse(com.hugo.player.ui.wantsAutoSubtitle("Filme (2010)", "pt-BR"))
+        org.junit.Assert.assertFalse(com.hugo.player.ui.wantsAutoSubtitle("Filme (2010)", null))
+    }
+
+    @Test fun findsEmbeddedPortugueseSubtitle() {
+        val t = listOf(
+            com.hugo.player.ui.TrackOption(2, 0, "Inglês", "en"),
+            com.hugo.player.ui.TrackOption(3, 0, "Português", "pt-BR"),
+        )
+        assertEquals(3, com.hugo.player.ui.portugueseTextTrack(t)?.groupIndex)
+        assertNull(com.hugo.player.ui.portugueseTextTrack(t.take(1)))
+    }
+}

@@ -75,3 +75,25 @@ test("TMDB: acha o filme pelo nome em português + ano; série pelo nome exato; 
   assert.equal(pickTmdbId([{ id: 5, name: "Dark Matter" }], "Dark", undefined, "tv"), undefined);
   assert.equal(buildSearchQuery({ title: "Dark", season: 1, episode: 1, tmdbId: 70523 }), "episode_number=1&languages=pt-br,pt-pt&parent_tmdb_id=70523&season_number=1&type=episode");
 });
+
+test("login recusado: tenta 1 vez e não repete a cada download (evita bloquear a conta)", async () => {
+  let logins = 0;
+  const fakeFetch = (async (url: string) => {
+    const u = String(url);
+    const json = (status: number, body: any) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
+    if (u.endsWith("/login")) { logins++; return json(401, { message: "invalid" }); }
+    if (u.endsWith("/download")) return json(200, { link: "https://dl.test/x.srt", remaining: 3 });
+    return new Response("1\n00:00:01,000 --> 00:00:02,000\nOi\n", { status: 200 });
+  }) as typeof fetch;
+  const app = express();
+  app.use("/subtitles", createSubtitlesRouter({ apiKey: "k", username: "u", password: "p", cacheDir: mkdtempSync(path.join(tmpdir(), "subs-")), authenticate: () => true, fetchImpl: fakeFetch }));
+  const server = app.listen(0);
+  await new Promise((r) => server.once("listening", r));
+  const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}/subtitles`;
+  try {
+    for (const id of [11, 12, 13]) assert.equal((await fetch(`${base}/file/${id}`, { headers: { "x-device-id": "a", "x-device-key": "b" } })).status, 200);
+    assert.equal(logins, 1);
+  } finally {
+    server.close();
+  }
+});

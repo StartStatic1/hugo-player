@@ -31,7 +31,7 @@ import androidx.media3.common.Player
 import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.common.Tracks
 
-data class TrackOption(val groupIndex: Int, val trackIndex: Int, val label: String)
+data class TrackOption(val groupIndex: Int, val trackIndex: Int, val label: String, val language: String? = null)
 
 private fun langName(code: String?): String? {
     if (code.isNullOrBlank()) return null
@@ -95,11 +95,11 @@ fun collectTrackOptions(tracks: Tracks): Pair<List<TrackOption>, List<TrackOptio
             val f = g.getTrackFormat(ti)
             when (g.type) {
                 C.TRACK_TYPE_AUDIO -> {
-                    aud.add(TrackOption(gi, ti, formatLabel(f, ti, "Áudio")))
+                    aud.add(TrackOption(gi, ti, formatLabel(f, ti, "Áudio"), f.language?.lowercase()))
                 }
                 C.TRACK_TYPE_TEXT -> {
                     if (!isUsefulTextTrack(f)) continue
-                    txt.add(TrackOption(gi, ti, formatLabel(f, ti, "Legenda")))
+                    txt.add(TrackOption(gi, ti, formatLabel(f, ti, "Legenda"), f.language?.lowercase()))
                 }
             }
         }
@@ -120,9 +120,17 @@ fun selectedAudioLanguage(tracks: Tracks): String? {
 fun wantsAutoSubtitle(title: String, audioLanguage: String?): Boolean {
     val legendado = Regex("""\[\s*L\s*]|\bLEG\b|legendad[oa]""", RegexOption.IGNORE_CASE).containsMatchIn(title)
     if (legendado) return true
-    val lang = audioLanguage?.substringBefore('-')?.substringBefore('_') ?: return false
-    return lang !in setOf("pt", "por", "pob")
+    val lang = audioLanguage ?: return false
+    return !isPortuguese(lang)
 }
+
+/** pt, pt-BR, por, pob… */
+fun isPortuguese(language: String?): Boolean =
+    language?.lowercase()?.substringBefore('-')?.substringBefore('_') in setOf("pt", "por", "pob")
+
+/** Faixa de legenda em português que já vem no arquivo (para ligar ao trocar o áudio). */
+fun portugueseTextTrack(text: List<TrackOption>): TrackOption? =
+    text.firstOrNull { isPortuguese(it.language) } ?: text.firstOrNull { it.label.startsWith("Português") }
 
 /** Só mostra o botão se houver algo útil (2+ áudios ou legenda de verdade). */
 fun hasUsefulTrackMenu(audio: List<TrackOption>, text: List<TrackOption>): Boolean =
@@ -138,6 +146,10 @@ fun applyAudioTrack(player: Player, groupIndex: Int, trackIndex: Int) {
         .clearOverridesOfType(C.TRACK_TYPE_AUDIO)
         .setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, false)
         .setOverrideForType(TrackSelectionOverride(group.mediaTrackGroup, trackIndex))
+        .apply {
+            // idioma preferido também: se o vídeo for recarregado (ex.: legenda da internet), o áudio escolhido continua
+            group.getTrackFormat(trackIndex).language?.takeIf { it.isNotBlank() && it != "und" }?.let { setPreferredAudioLanguage(it) }
+        }
         .build()
 }
 

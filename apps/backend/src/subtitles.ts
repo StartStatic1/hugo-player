@@ -122,6 +122,8 @@ export function createSubtitlesRouter(deps: SubtitlesDeps): Router {
   const inflight = new Map<number, Promise<string>>();
   let token: { value: string; base: string; at: number } | null = null;
   let quotaUntil = 0;
+  /** login recusado: não tenta de novo por 1 h (a OpenSubtitles bloqueia a conta depois de ~10 erros) */
+  let loginBlockedUntil = 0;
 
   function auth(req: Request, res: Response, next: NextFunction) {
     if (!deps.authenticate(req.header("x-device-id"), req.header("x-device-key"))) return res.status(401).json({ error: "invalid_credentials" });
@@ -135,12 +137,17 @@ export function createSubtitlesRouter(deps: SubtitlesDeps): Router {
   async function login(): Promise<{ value: string; base: string } | null> {
     if (!deps.username || !deps.password) return null;
     if (token && Date.now() - token.at < 23 * 3600_000) return token;
+    if (Date.now() < loginBlockedUntil) return null;
     const res = await f(`${API}/login`, {
       method: "POST",
       headers: headers({ "Content-Type": "application/json" }),
       body: JSON.stringify({ username: deps.username, password: deps.password }),
     });
-    if (!res.ok) { console.warn("opensubtitles login failed:", res.status); return null; }
+    if (!res.ok) {
+      loginBlockedUntil = Date.now() + 3600_000;
+      console.warn("opensubtitles login failed:", res.status, "- sem nova tentativa por 1 h (usa downloads anônimos)");
+      return null;
+    }
     const j = (await res.json()) as any;
     const base = j?.base_url ? `https://${String(j.base_url).replace(/^https?:\/\//, "")}/api/v1` : API;
     token = { value: String(j.token), base, at: Date.now() };

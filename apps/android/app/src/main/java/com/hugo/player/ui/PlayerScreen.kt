@@ -120,6 +120,8 @@ fun PlayerScreen(request: PlaybackRequest, onBack: () -> Unit) {
     var subStatus by remember { mutableStateOf<String?>(null) }
     var autoSubTried by remember { mutableStateOf(false) }
     var readyOnce by remember { mutableStateOf(false) }
+    /** legenda ligada sozinha porque o usuário trocou para áudio estrangeiro (desliga ao voltar ao português) */
+    var subByAudioSwitch by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     /** "Próximo episódio em N s" (null = sem contagem). */
     var nextCountdown by remember { mutableStateOf<Int?>(null) }
@@ -144,7 +146,7 @@ fun PlayerScreen(request: PlaybackRequest, onBack: () -> Unit) {
         errorMsg = null
         errorDetail = null
         loading = true
-        extOptions = emptyList(); extApplied = null; subStatus = null; autoSubTried = false; readyOnce = false
+        extOptions = emptyList(); extApplied = null; subStatus = null; autoSubTried = false; readyOnce = false; subByAudioSwitch = false
         exoPlayer.setMediaItem(HugoPlayerFactory.mediaItem(current.url, forceHls))
         exoPlayer.prepare()
         val resumeAt = if (current.isLive != true) WatchHistory.getProgress(context, progressKeyFor(current)) else 0L
@@ -300,8 +302,10 @@ fun PlayerScreen(request: PlaybackRequest, onBack: () -> Unit) {
             val item = HugoPlayerFactory.mediaItem(req.url, forceHls).buildUpon().setSubtitleConfigurations(listOf(sub)).build()
             val pos = exoPlayer.currentPosition
             val play = exoPlayer.playWhenReady
+            val keepAudioByLanguage = exoPlayer.trackSelectionParameters.preferredAudioLanguages.isNotEmpty()
             exoPlayer.trackSelectionParameters = exoPlayer.trackSelectionParameters.buildUpon()
                 .clearOverridesOfType(C.TRACK_TYPE_TEXT)
+                .apply { if (keepAudioByLanguage) clearOverridesOfType(C.TRACK_TYPE_AUDIO) }
                 .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
                 .setPreferredTextLanguage("pt")
                 .build()
@@ -343,6 +347,32 @@ fun PlayerScreen(request: PlaybackRequest, onBack: () -> Unit) {
         val hasPt = textOpts.any { it.label.startsWith("Português") }
         val audioLang = selectedAudioLanguage(exoPlayer.currentTracks)
         if (!hasPt && !ExternalSubs.autoOff(context) && wantsAutoSubtitle(current.title, audioLang)) searchSubs(silent = true)
+    }
+
+    /**
+     * Filme dual áudio: trocou para áudio que não é português → liga legenda em português
+     * (a do arquivo, se tiver; senão busca na internet em segundo plano). Voltou ao português → desliga
+     * a que foi ligada sozinha. Nada disso acontece se o usuário escolheu "Desligada".
+     */
+    fun onAudioPicked(opt: TrackOption) {
+        applyAudioTrack(exoPlayer, opt.groupIndex, opt.trackIndex)
+        if (isLive || current.isLive == true) return
+        if (isPortuguese(opt.language)) {
+            if (subByAudioSwitch) { applyTextTrack(exoPlayer, null, null); subByAudioSwitch = false }
+            return
+        }
+        if (opt.language.isNullOrBlank() || ExternalSubs.autoOff(context)) return
+        val embedded = portugueseTextTrack(textOpts)
+        when {
+            embedded != null -> { applyTextTrack(exoPlayer, embedded.groupIndex, embedded.trackIndex); subByAudioSwitch = true }
+            extApplied != null -> {
+                exoPlayer.trackSelectionParameters = exoPlayer.trackSelectionParameters.buildUpon()
+                    .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false).setPreferredTextLanguage("pt").build()
+                subByAudioSwitch = true
+            }
+            extOptions.isNotEmpty() -> { applyExternal(extOptions.first(), silent = true); subByAudioSwitch = true }
+            else -> { searchSubs(silent = true); subByAudioSwitch = true }
+        }
     }
 
     LaunchedEffect(exoPlayer, speed) { exoPlayer.setPlaybackSpeed(speed) }
@@ -617,11 +647,12 @@ fun PlayerScreen(request: PlaybackRequest, onBack: () -> Unit) {
             TrackPickerDialog(
                 audio = audioOpts,
                 text = textOpts,
-                onPickAudio = { opt -> applyAudioTrack(exoPlayer, opt.groupIndex, opt.trackIndex); showTracks = false; touch() },
+                onPickAudio = { opt -> onAudioPicked(opt); showTracks = false; touch() },
                 onPickText = { opt ->
                     if (opt == null) applyTextTrack(exoPlayer, null, null)
                     else applyTextTrack(exoPlayer, opt.groupIndex, opt.trackIndex)
                     ExternalSubs.setAutoOff(context, opt == null)
+                    subByAudioSwitch = false
                     showTracks = false
                     touch()
                 },
