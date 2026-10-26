@@ -51,7 +51,13 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import android.net.Uri
 import androidx.media3.common.C
+import androidx.media3.common.MediaItem
+import androidx.media3.common.MimeTypes
+import com.hugo.player.data.ApiException
+import com.hugo.player.data.ExternalSubs
+import kotlinx.coroutines.launch
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.Tracks
@@ -108,6 +114,13 @@ fun PlayerScreen(request: PlaybackRequest, onBack: () -> Unit) {
     var showTracks by remember { mutableStateOf(false) }
     var audioOpts by remember { mutableStateOf<List<TrackOption>>(emptyList()) }
     var textOpts by remember { mutableStateOf<List<TrackOption>>(emptyList()) }
+    // legenda da internet (OpenSubtitles pelo servidor do Hugo)
+    var extOptions by remember { mutableStateOf<List<ExternalSubs.Option>>(emptyList()) }
+    var extApplied by remember { mutableStateOf<Long?>(null) }
+    var subStatus by remember { mutableStateOf<String?>(null) }
+    var autoSubTried by remember { mutableStateOf(false) }
+    var readyOnce by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
     /** "Próximo episódio em N s" (null = sem contagem). */
     var nextCountdown by remember { mutableStateOf<Int?>(null) }
     var speed by remember { mutableFloatStateOf(1f) }
@@ -131,6 +144,7 @@ fun PlayerScreen(request: PlaybackRequest, onBack: () -> Unit) {
         errorMsg = null
         errorDetail = null
         loading = true
+        extOptions = emptyList(); extApplied = null; subStatus = null; autoSubTried = false; readyOnce = false
         exoPlayer.setMediaItem(HugoPlayerFactory.mediaItem(current.url, forceHls))
         exoPlayer.prepare()
         val resumeAt = if (current.isLive != true) WatchHistory.getProgress(context, progressKeyFor(current)) else 0L
@@ -168,6 +182,7 @@ fun PlayerScreen(request: PlaybackRequest, onBack: () -> Unit) {
                 if (state == Player.STATE_READY) {
                     errorMsg = null
                     retryCount = 0
+                    readyOnce = true
                     isLive = exoPlayer.isCurrentMediaItemLive || (current.isLive ?: false)
                 }
                 if (state == Player.STATE_ENDED && current.isLive != true) {
@@ -258,6 +273,76 @@ fun PlayerScreen(request: PlaybackRequest, onBack: () -> Unit) {
         queue = queue.drop(1)
         forceHls = false
         current = next
+    }
+
+    /** Baixa o .srt e coloca como faixa de legenda (recarrega no mesmo ponto). */
+    fun applyExternal(opt: ExternalSubs.Option, silent: Boolean) {
+        val req = current
+        scope.launch {
+            if (!silent) subStatus = "Baixando legenda…"
+            val file = try {
+                ExternalSubs.file(context, opt)
+            } catch (e: ApiException) {
+                if (!silent) subStatus = if (e.apiError == "subtitle_quota" || e.status == 429) "Limite diário de legendas atingido. Tente mais tarde." else "Não foi possível baixar a legenda."
+                return@launch
+            } catch (e: Exception) {
+                if (!silent) subStatus = "Sem conexão para baixar a legenda."
+                return@launch
+            }
+            if (req != current) return@launch
+            val sub = MediaItem.SubtitleConfiguration.Builder(Uri.fromFile(file))
+                .setMimeType(MimeTypes.APPLICATION_SUBRIP)
+                .setLanguage("pt")
+                .setLabel(opt.label)
+                .setSelectionFlags(C.SELECTION_FLAG_DEFAULT)
+                .setId("ext-${opt.fileId}")
+                .build()
+            val item = HugoPlayerFactory.mediaItem(req.url, forceHls).buildUpon().setSubtitleConfigurations(listOf(sub)).build()
+            val pos = exoPlayer.currentPosition
+            val play = exoPlayer.playWhenReady
+            exoPlayer.trackSelectionParameters = exoPlayer.trackSelectionParameters.buildUpon()
+                .clearOverridesOfType(C.TRACK_TYPE_TEXT)
+                .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
+                .setPreferredTextLanguage("pt")
+                .build()
+            exoPlayer.setMediaItem(item, pos)
+            exoPlayer.prepare()
+            exoPlayer.playWhenReady = play
+            extApplied = opt.fileId
+            subStatus = null
+            if (!silent) ExternalSubs.setAutoOff(context, false)
+        }
+    }
+
+    /** Busca legenda em português. silent = automática (não mostra nada se não achar). */
+    fun searchSubs(silent: Boolean) {
+        val q = ExternalSubs.queryFor(current)
+        if (q == null) { if (!silent) subStatus = "Busca de legenda indisponível para este conteúdo."; return }
+        scope.launch {
+            if (!silent) subStatus = "Buscando legenda…"
+            when (val r = ExternalSubs.search(context, q)) {
+                is ExternalSubs.Result.Found -> {
+                    extOptions = r.options.take(4)
+                    if (silent) applyExternal(r.options.first(), silent = true)
+                    else subStatus = "Escolha uma legenda acima."
+                }
+                ExternalSubs.Result.None -> if (!silent) subStatus = "Nenhuma legenda em português encontrada."
+                ExternalSubs.Result.Quota -> if (!silent) subStatus = "Limite diário de legendas atingido. Tente mais tarde."
+                ExternalSubs.Result.NotConfigured -> if (!silent) subStatus = "Legenda automática ainda não foi ativada no servidor."
+                is ExternalSubs.Result.Error -> if (!silent) subStatus = "Não foi possível buscar a legenda (${r.message})."
+            }
+        }
+    }
+
+    // automática: filme/episódio sem legenda em português, versão legendada ou áudio estrangeiro,
+    // e o usuário não desligou a legenda. Em segundo plano; se não achar, fica desligada em silêncio.
+    LaunchedEffect(readyOnce) {
+        if (!readyOnce || autoSubTried || isLive || current.isLive == true) return@LaunchedEffect
+        delay(2_500)
+        autoSubTried = true
+        val hasPt = textOpts.any { it.label.startsWith("Português") }
+        val audioLang = selectedAudioLanguage(exoPlayer.currentTracks)
+        if (!hasPt && !ExternalSubs.autoOff(context) && wantsAutoSubtitle(current.title, audioLang)) searchSubs(silent = true)
     }
 
     LaunchedEffect(exoPlayer, speed) { exoPlayer.setPlaybackSpeed(speed) }
@@ -536,10 +621,18 @@ fun PlayerScreen(request: PlaybackRequest, onBack: () -> Unit) {
                 onPickText = { opt ->
                     if (opt == null) applyTextTrack(exoPlayer, null, null)
                     else applyTextTrack(exoPlayer, opt.groupIndex, opt.trackIndex)
+                    ExternalSubs.setAutoOff(context, opt == null)
                     showTracks = false
                     touch()
                 },
-                onDismiss = { showTracks = false },
+                onDismiss = { showTracks = false; subStatus = null },
+                external = extOptions.filter { it.fileId != extApplied }.map { o ->
+                    ExternalRow(o.label + (o.release.takeIf { it.isNotBlank() }?.let { " · ${it.take(28)}" } ?: "")) {
+                        applyExternal(o, silent = false); showTracks = false; touch()
+                    }
+                },
+                onSearch = if (!isLive && current.isLive != true) ({ searchSubs(silent = false) }) else null,
+                searchStatus = subStatus,
             )
         }
     }

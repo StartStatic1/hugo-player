@@ -19,6 +19,12 @@ export function setChannelsAccess(a: ChannelsAccess | null) {
   access = a;
 }
 
+/** Versão mínima obrigatória (config do admin) somada à resposta de /channels/version. */
+let versionConfig: () => { minVersionCode: number } = () => ({ minVersionCode: 0 });
+export function setVersionConfig(fn: () => { minVersionCode: number }) {
+  versionConfig = fn;
+}
+
 /**
  * Resolve o link da playlist sem credenciais na URL:
  *  - ?playlistId=... + x-device-id/x-device-key  -> link guardado no servidor (novo)
@@ -107,7 +113,7 @@ channelsRouter.get("/version", async (_req, res) => {
     if (r.ok) {
       const data = await r.json();
       if (data && typeof data.versionCode === "number") {
-        return res.json(data);
+        return res.json({ ...data, ...versionConfig() });
       }
     }
   } catch (e: any) {
@@ -117,7 +123,7 @@ channelsRouter.get("/version", async (_req, res) => {
     const file = "/root/hugo-player/apps/backend/update.json";
     if (fs.existsSync(file)) {
       const data = JSON.parse(fs.readFileSync(file, "utf8"));
-      return res.json(data);
+      return res.json({ ...data, ...versionConfig() });
     }
   } catch (e: any) {
     console.error("update.json local error:", e.message);

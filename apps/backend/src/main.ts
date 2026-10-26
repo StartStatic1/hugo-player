@@ -10,13 +10,15 @@ import path from "node:path";
 import { tmdbRouter } from "./routes-tmdb.js";
 import { recoveryRouter } from "./routes-recovery.js";
 import { createTransferRouter, type TransferRecord } from "./routes-transfer.js";
-import { channelsRouter, setChannelsAccess } from "./routes-channels.js";
+import { channelsRouter, setChannelsAccess, setVersionConfig } from "./routes-channels.js";
 import { isRegisteredUrl } from "./playlist-access.js";
 import { createPlaylistRouter, type StoredPlaylist } from "./routes-playlists.js";
 import { createEpgRouter } from "./routes-epg.js";
 import { createAdminRouter } from "./routes-admin.js";
 import type { PlaylistResolver } from "./routes-catalog.js";
-import { backfillExisting, decideTrial, newDeviceTrial, type TrialFlag, type TrialLedger } from "./trial-ledger.js";
+import { clientVersionCode, normalizeConfig, updateRequired, type AppConfig } from "./app-config.js";
+import { createSubtitlesRouter } from "./subtitles.js";
+import { backfillExisting, decideTrial, newDeviceTrial, pendingOldAppTrial, resolvePendingTrial, type TrialFlag, type TrialLedger } from "./trial-ledger.js";
 import { PAID_PLANS, PLAN_LABELS, PLAN_PRICES, planExpiry, type PaidPlan } from "./plans.js";
 
 const PORT = Number(process.env.PORT ?? 8080);
@@ -59,6 +61,8 @@ interface Device {
   trialFlag?: TrialFlag;
   /** teste recusado: este aparelho já usou o teste com outro Device ID */
   trialDenied?: { reason: "trial_already_used"; firstDeviceId: string; at: string };
+  /** aparelho novo em app antigo: teste espera o app atualizado mandar o ANDROID_ID */
+  trialPending?: "update_required";
 }
 
 interface Db {
@@ -68,6 +72,8 @@ interface Db {
   transfers?: TransferRecord[];
   /** hash do ANDROID_ID → primeiro aparelho que usou o teste grátis */
   trialLedger?: TrialLedger;
+  /** versão mínima obrigatória etc. (admin) */
+  config?: AppConfig;
 }
 
 type PaymentPlan = PaidPlan;
@@ -96,6 +102,7 @@ async function loadDb(): Promise<void> {
     db.playlists ??= [];
     db.orders ??= [];
     db.trialLedger ??= {};
+    db.config = normalizeConfig(db.config, process.env.MIN_VERSION_CODE);
   } catch {
     await fs.mkdir(path.dirname(DATA_FILE), { recursive: true });
     await persist();
@@ -180,7 +187,22 @@ setChannelsAccess({
   authenticate: (id, key) => authDevice(id, key)?.deviceId ?? null,
   playlists: () => db.playlists,
 });
+setVersionConfig(() => ({ minVersionCode: minVersionCode() }));
 app.use("/channels", channelsRouter);
+app.use(
+  "/subtitles",
+  requireCurrentApp,
+  createSubtitlesRouter({
+    apiKey: process.env.OPENSUBTITLES_API_KEY || undefined,
+    username: process.env.OPENSUBTITLES_USERNAME || undefined,
+    password: process.env.OPENSUBTITLES_PASSWORD || undefined,
+    cacheDir: path.join(path.dirname(DATA_FILE), "subs-cache"),
+    authenticate: (id, key) => {
+      const d = authDevice(id, key);
+      return Boolean(d && hasActiveLicense(d));
+    },
+  }),
+);
 app.use("/admin", createAdminRouter({
   devices: () => db.devices,
   persist,
@@ -198,6 +220,11 @@ app.use("/admin", createAdminRouter({
   deleteDevice: (deviceId) => {
     const key = Object.keys(db.devices).find((k) => db.devices[k].deviceId.toUpperCase() === deviceId.toUpperCase());
     if (key) delete db.devices[key];
+  },
+  getConfig: () => db.config ?? normalizeConfig(undefined),
+  setMinVersionCode: (min) => {
+    db.config = { ...(db.config ?? normalizeConfig(undefined)), minVersionCode: min, updatedAt: new Date().toISOString() };
+    return db.config;
   },
 }));
 
@@ -220,8 +247,10 @@ app.post("/devices/register", async (req, res) => {
       existing.lastSeenAt = now.toISOString();
       existing.platform = platform;
       if (appVersion) existing.appVersion = appVersion;
-      // app atualizado: só anota o ANDROID_ID (a licença não muda)
-      backfillExisting(existing, parsed.data.androidId, db.trialLedger ??= {}, now);
+      // app atualizado: decide o teste pendente (se havia) ou só anota o ANDROID_ID (a licença não muda)
+      if (!resolvePendingTrial(existing, parsed.data.androidId, db.trialLedger ??= {}, now, TRIAL_DAYS)) {
+        backfillExisting(existing, parsed.data.androidId, db.trialLedger, now);
+      }
       db.devices[storeKey] = existing;
       await persist();
       return res.json({ registered: true, created: false, ...trialInfo(existing) });
@@ -232,7 +261,11 @@ app.post("/devices/register", async (req, res) => {
   }
   const { salt, hash } = hashKey(deviceKey);
   const decision = decideTrial(parsed.data.androidId, db.trialLedger ??= {});
-  const trial = newDeviceTrial(decision, storeKey, now, TRIAL_DAYS, db.trialLedger);
+  // app antigo (sem ANDROID_ID) com atualização obrigatória ligada: teste só depois de atualizar
+  const oldAppPending = decision.kind === "unverified" && decision.flag === "old_app" && minVersionCode() > 0;
+  const trial = oldAppPending
+    ? { ...pendingOldAppTrial(now), androidIdHash: undefined, trialFlag: undefined, trialDenied: undefined }
+    : newDeviceTrial(decision, storeKey, now, TRIAL_DAYS, db.trialLedger);
   const device: Device = {
     deviceId: storeKey,
     keyHash: hash,
@@ -243,6 +276,7 @@ app.post("/devices/register", async (req, res) => {
     ...(trial.androidIdHash ? { androidIdHash: trial.androidIdHash } : {}),
     ...(trial.trialFlag ? { trialFlag: trial.trialFlag } : {}),
     ...(trial.trialDenied ? { trialDenied: trial.trialDenied } : {}),
+    ...(oldAppPending ? { trialPending: "update_required" as const } : {}),
     createdAt: now.toISOString(),
     lastSeenAt: now.toISOString(),
   };
@@ -252,11 +286,26 @@ app.post("/devices/register", async (req, res) => {
 });
 
 /** "denied" = este aparelho já usou o teste grátis (só enquanto não houver plano pago). */
-function trialInfo(device: Device): { trial: "granted" | "denied" | "none"; reason?: string } {
+function trialInfo(device: Device): { trial: "granted" | "denied" | "pending" | "none"; reason?: string } {
   if (device.license.type === "premium") return { trial: "none" };
+  if (device.trialPending && !hasActiveLicense(device)) return { trial: "pending", reason: device.trialPending };
   // recusado só enquanto não houver licença ativa (pago, transferida ou teste dado pelo admin)
   if (device.trialDenied && !hasActiveLicense(device)) return { trial: "denied", reason: device.trialDenied.reason };
   return { trial: device.license.type === "trial" ? "granted" : "none" };
+}
+
+function minVersionCode(): number {
+  return db.config?.minVersionCode ?? 0;
+}
+
+/** App abaixo da versão mínima (inclusive apps antigos sem cabeçalho de versão) → 426, precisa atualizar. */
+function requireCurrentApp(req: Request, res: Response, next: NextFunction) {
+  const min = minVersionCode();
+  const v = clientVersionCode(req.header("x-hugo-version-code"), req.header("user-agent"));
+  if (updateRequired(v, min)) {
+    return res.status(426).json({ error: "update_required", minVersionCode: min, message: "Atualize o Hugo Player para continuar." });
+  }
+  next();
 }
 
 function requireDevice(req: Request, res: Response, next: NextFunction) {
@@ -429,6 +478,7 @@ app.use(
 
 app.use(
   "/playlists",
+  requireCurrentApp,
   createPlaylistRouter({
     playlists: () => db.playlists,
     setPlaylists: (next) => {

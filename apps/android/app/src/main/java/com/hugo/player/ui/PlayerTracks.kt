@@ -11,6 +11,8 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
@@ -105,6 +107,23 @@ fun collectTrackOptions(tracks: Tracks): Pair<List<TrackOption>, List<TrackOptio
     return aud to txt
 }
 
+/** Idioma do áudio que está tocando (null = arquivo não informa). */
+fun selectedAudioLanguage(tracks: Tracks): String? {
+    for (g in tracks.groups) {
+        if (g.type != C.TRACK_TYPE_AUDIO || !g.isSelected) continue
+        for (i in 0 until g.length) if (g.isTrackSelected(i)) return g.getTrackFormat(i).language?.lowercase()?.takeIf { it.isNotBlank() && it != "und" }
+    }
+    return null
+}
+
+/** Legenda automática só onde ela ajuda: versão legendada ([L]/LEG) ou áudio que sabidamente não é português. */
+fun wantsAutoSubtitle(title: String, audioLanguage: String?): Boolean {
+    val legendado = Regex("""\[\s*L\s*]|\bLEG\b|legendad[oa]""", RegexOption.IGNORE_CASE).containsMatchIn(title)
+    if (legendado) return true
+    val lang = audioLanguage?.substringBefore('-')?.substringBefore('_') ?: return false
+    return lang !in setOf("pt", "por", "pob")
+}
+
 /** Só mostra o botão se houver algo útil (2+ áudios ou legenda de verdade). */
 fun hasUsefulTrackMenu(audio: List<TrackOption>, text: List<TrackOption>): Boolean =
     audio.size > 1 || text.isNotEmpty()
@@ -166,6 +185,9 @@ private fun TrackRow(label: String, onClick: () -> Unit) {
     )
 }
 
+/** Legenda da internet ainda não aplicada (aparece embaixo das faixas do arquivo). */
+data class ExternalRow(val label: String, val onClick: () -> Unit)
+
 @Composable
 fun TrackPickerDialog(
     audio: List<TrackOption>,
@@ -173,6 +195,10 @@ fun TrackPickerDialog(
     onPickAudio: (TrackOption) -> Unit,
     onPickText: (TrackOption?) -> Unit,
     onDismiss: () -> Unit,
+    external: List<ExternalRow> = emptyList(),
+    /** null = sem busca (ex.: ao vivo) */
+    onSearch: (() -> Unit)? = null,
+    searchStatus: String? = null,
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -182,7 +208,7 @@ fun TrackPickerDialog(
             Text("Áudio e legendas", fontWeight = FontWeight.Bold, fontSize = 20.sp)
         },
         text = {
-            Column(Modifier.fillMaxWidth()) {
+            Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
                 Text("ÁUDIO", color = Color(0xFF94A3B8), fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                 Spacer(Modifier.height(8.dp))
                 if (audio.size > 1) {
@@ -196,15 +222,27 @@ fun TrackPickerDialog(
                 Spacer(Modifier.height(14.dp))
                 Text("LEGENDA", color = Color(0xFF94A3B8), fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                 Spacer(Modifier.height(8.dp))
-                if (text.isEmpty()) Text("Este conteúdo não tem legendas", color = Color(0xFFCBD5E1), fontSize = 13.sp)
-                if (text.isNotEmpty()) {
+                if (text.isEmpty() && external.isEmpty()) {
+                    Text("Este conteúdo não tem legendas", color = Color(0xFFCBD5E1), fontSize = 13.sp)
+                    Spacer(Modifier.height(6.dp))
+                }
+                if (text.isNotEmpty() || external.isNotEmpty()) {
                     TrackRow("Desligada") { onPickText(null) }
                     Spacer(Modifier.height(6.dp))
                     text.forEach { opt ->
                         TrackRow(opt.label) { onPickText(opt) }
                         Spacer(Modifier.height(6.dp))
                     }
+                    external.forEach { row ->
+                        TrackRow(row.label, row.onClick)
+                        Spacer(Modifier.height(6.dp))
+                    }
                 }
+                if (onSearch != null) {
+                    TrackRow(if (external.isEmpty()) "Buscar legenda na internet" else "Buscar outra legenda", onSearch)
+                    Spacer(Modifier.height(4.dp))
+                }
+                searchStatus?.let { Text(it, color = Color(0xFFFBBF24), fontSize = 12.sp) }
             }
         },
         confirmButton = {

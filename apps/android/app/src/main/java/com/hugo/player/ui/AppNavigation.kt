@@ -73,7 +73,11 @@ fun NavHostController.openMovie(movie: ChannelEntity) {
 
 @Composable
 fun AppNavigation() {
-    UpdateCheckerHost()
+    UpdateGate { AppNavigationContent() }
+}
+
+@Composable
+private fun AppNavigationContent() {
     val context = LocalContext.current
     val nav = rememberNavController()
     val identity = remember { DeviceIdentity.get(context) }

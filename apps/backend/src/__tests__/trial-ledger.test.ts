@@ -57,3 +57,25 @@ test("aparelho pago não muda; testes antigos continuam valendo e entram no regi
   // aparelho pago com o mesmo ANDROID_ID de quem já usou teste: continua pago
   assert.equal(paid.license.type, "premium");
 });
+
+test("app antigo com atualização obrigatória: teste pendente até mandar o ANDROID_ID", async () => {
+  const { pendingOldAppTrial, resolvePendingTrial } = await import("../trial-ledger.js");
+  const ledger: TrialLedger = {};
+  // 1º aparelho: app antigo → pendente, sem acesso
+  const p = pendingOldAppTrial(now);
+  const dev: TrialDevice & { trialPending?: string } = { deviceId: "02:FF:00:00:00:06", ...p };
+  assert.equal(dev.license.type, "expired");
+  // atualizou e mandou ANDROID_ID novo → ganha o teste
+  assert.equal(resolvePendingTrial(dev, SSAID, ledger, now, 7), true);
+  assert.equal(dev.license.type, "trial");
+  assert.equal(dev.trialPending, undefined);
+  // outro aparelho pendente com o MESMO ANDROID_ID → recusado
+  const dev2: TrialDevice & { trialPending?: string } = { deviceId: "02:FF:00:00:00:07", ...pendingOldAppTrial(now) };
+  resolvePendingTrial(dev2, SSAID, ledger, now, 7);
+  assert.equal(dev2.license.type, "expired");
+  assert.equal(dev2.trialDenied?.reason, "trial_already_used");
+  // sem o campo (ainda app antigo) → continua pendente
+  const dev3: TrialDevice & { trialPending?: string } = { deviceId: "02:FF:00:00:00:08", ...pendingOldAppTrial(now) };
+  assert.equal(resolvePendingTrial(dev3, undefined, ledger, now, 7), false);
+  assert.equal(dev3.trialPending, "update_required");
+});

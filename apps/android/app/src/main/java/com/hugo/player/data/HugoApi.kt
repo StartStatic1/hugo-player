@@ -73,6 +73,7 @@ object HugoApi {
             conn.connectTimeout = 15_000
             conn.readTimeout = readTimeoutMs
             conn.setRequestProperty("Accept", "application/json")
+            conn.setRequestProperty("x-hugo-version-code", BuildConfig.VERSION_CODE.toString())
             // HttpURLConnection descompacta gzip automaticamente
             if (deviceId != null) conn.setRequestProperty("x-device-id", deviceId)
             if (deviceKey != null) conn.setRequestProperty("x-device-key", deviceKey)
@@ -82,6 +83,7 @@ object HugoApi {
                 conn.outputStream.use { it.write(body.toByteArray()) }
             }
             val code = conn.responseCode
+            if (code == 426) AppUpdate.requestRecheck()
             if (code !in 200..299) {
                 val err = conn.errorStream?.bufferedReader()?.use { it.readText() }.orEmpty()
                 val apiErr = Regex("\"error\"\\s*:\\s*\"([^\"]+)\"").find(err)?.groupValues?.get(1)
@@ -94,6 +96,7 @@ object HugoApi {
     }
 
     private fun friendlyApiError(code: Int, apiErr: String?): String = when {
+        code == 426 || apiErr == "update_required" -> "Atualize o Hugo Player para continuar."
         code == 401 -> "Dispositivo não autorizado. Ative novamente no site."
         apiErr == "invalid_pin" -> "PIN incorreto."
         apiErr == "pin_required" -> "Esta playlist exige PIN."

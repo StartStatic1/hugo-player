@@ -36,6 +36,8 @@ export interface AdminDeps {
   adminToken: string;
   playlistCount: (deviceId: string) => number;
   deleteDevice: (deviceId: string) => void;
+  getConfig: () => { minVersionCode: number; updatedAt?: string };
+  setMinVersionCode: (min: number) => { minVersionCode: number; updatedAt?: string };
   resetDeviceKey: (deviceId: string) => string | null;
 }
 
@@ -90,6 +92,16 @@ export function createAdminRouter(deps: AdminDeps): Router {
         hasAndroidId: Boolean(d.androidIdHash),
       }));
     res.json({ devices });
+  });
+
+  // versão mínima obrigatória do app (versionCode). 0 = desligado.
+  r.get("/config", (_req, res) => res.json(deps.getConfig()));
+  r.post("/config", async (req, res) => {
+    const parsed = z.object({ minVersionCode: z.number().int().min(0).max(100000) }).safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: "validation_error" });
+    const cfg = deps.setMinVersionCode(parsed.data.minVersionCode);
+    await deps.persist();
+    res.json({ ok: true, ...cfg });
   });
 
   r.post("/devices/:id/activate", async (req, res) => {

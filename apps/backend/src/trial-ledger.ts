@@ -98,3 +98,30 @@ export function backfillExisting(device: TrialDevice, raw: unknown, ledger: Tria
   if (device.trialFlag) delete device.trialFlag;
   return true;
 }
+
+/**
+ * Aparelho novo vindo de app antigo (sem ANDROID_ID) enquanto a atualização é obrigatória:
+ * o teste fica "pendente" (sem acesso) até o app atualizado mandar o ANDROID_ID.
+ */
+export function pendingOldAppTrial(now: Date): { license: LicenseLike; trialPending: "update_required" } {
+  return { license: { type: "expired", plan: "trial", expiresAt: now.toISOString() }, trialPending: "update_required" };
+}
+
+/** O app atualizado mandou o ANDROID_ID: decide agora o teste que estava pendente. */
+export function resolvePendingTrial(
+  device: TrialDevice & { trialPending?: string },
+  raw: unknown,
+  ledger: TrialLedger,
+  now: Date,
+  trialDays: number,
+): boolean {
+  if (!device.trialPending || raw === undefined) return false;
+  if (device.license.type === "premium") { delete device.trialPending; return true; }
+  const r = newDeviceTrial(decideTrial(raw, ledger), device.deviceId, now, trialDays, ledger);
+  device.license = { ...device.license, ...r.license };
+  if (r.androidIdHash) device.androidIdHash = r.androidIdHash;
+  if (r.trialFlag) device.trialFlag = r.trialFlag; else delete device.trialFlag;
+  if (r.trialDenied) device.trialDenied = r.trialDenied;
+  delete device.trialPending;
+  return true;
+}
