@@ -25,6 +25,7 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Sync
+import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -42,11 +43,16 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.hugo.player.data.AppSettings
 import com.hugo.player.data.CatalogRepository
 import com.hugo.player.data.ApiException
+import com.hugo.player.data.AppUpdate
+import com.hugo.player.data.ApkInstall
+import com.hugo.player.data.isUpdateRequired
+import com.hugo.player.ui.components.FocusSurface
 import com.hugo.player.data.DeviceIdentity
 import com.hugo.player.data.PlaylistRepository
 import com.hugo.player.data.RecentPlaylists
@@ -97,6 +103,8 @@ fun PlaylistScreen(
 
     var playlists by remember { mutableStateOf<List<RemotePlaylist>?>(null) }
     var listError by remember { mutableStateOf<String?>(null) }
+    /** servidor recusou por versão antiga (426): as playlists existem, só não aparecem até atualizar */
+    var updateBlocked by remember { mutableStateOf(false) }
     val summaries = remember { mutableStateMapOf<String, PlaylistRepository.LocalSummary>() }
     val loads = remember { mutableStateMapOf<String, CardLoad>() }
     var openingId by remember { mutableStateOf<String?>(null) }
@@ -116,9 +124,14 @@ fun PlaylistScreen(
             if (migrated > 0) toast = "$migrated playlist(s) copiadas do ID antigo"
             val list = PlaylistRepository.list(identity.deviceId, identity.deviceKey)
             playlists = list
+            updateBlocked = false
             if (DeviceIdentity.isTrialDenied(context)) DeviceIdentity.clearTrialDenied(context)
             list.forEach { summaries[it.id] = PlaylistRepository.localSummary(context, it.id) }
         } catch (e: Exception) {
+            if (isUpdateRequired(e)) {
+                updateBlocked = true
+                return
+            }
             listError = if (DeviceIdentity.isTrialDenied(context) && (e as? ApiException)?.status == 401)
                 "Este aparelho já usou o teste grátis. Para continuar, ative um plano no site hugo.streamflixvip.online com o Device ID e a Key deste aparelho (em Configurações)."
             else e.message ?: "Não foi possível carregar as playlists."
@@ -221,6 +234,11 @@ fun PlaylistScreen(
             HugoIconButton(Icons.Default.Settings, "Configurações", onClick = onSettings)
         }
         Spacer(Modifier.height(18.dp))
+
+        if (updateBlocked) {
+            UpdateRequiredPanel(onRetry = { scope.launch { reload() } })
+            return@Column
+        }
 
         listError?.let {
             Row(
@@ -638,4 +656,91 @@ fun PinDialog(title: String, message: String, onDismiss: () -> Unit, onConfirm: 
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancelar", color = HugoColors.TextMuted) } }
     )
+}
+
+/**
+ * App abaixo da versão mínima (o servidor respondeu 426): NÃO é "sem playlists".
+ * As playlists continuam salvas; só aparecem depois de atualizar. Mesmo instalador da tela de atualização.
+ */
+@Composable
+private fun UpdateRequiredPanel(onRetry: () -> Unit) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var downloading by remember { mutableStateOf(false) }
+    var progress by remember { mutableStateOf<Int?>(null) }
+    var error by remember { mutableStateOf<String?>(null) }
+    val installError by ApkInstall.lastError.collectAsState()
+    LaunchedEffect(installError) { if (installError != null) error = installError }
+    val updateFocus = remember { FocusRequester() }
+    LaunchedEffect(Unit) { kotlinx.coroutines.delay(100); runCatching { updateFocus.requestFocus() } }
+
+    Box(Modifier.fillMaxSize().verticalScroll(rememberScrollState()), contentAlignment = Alignment.TopCenter) {
+        Column(
+            Modifier.widthIn(max = 600.dp).fillMaxWidth().padding(top = 12.dp)
+                .background(HugoColors.Card, RoundedCornerShape(18.dp))
+                .border(1.dp, Color(0xFF1F2638), RoundedCornerShape(18.dp))
+                .padding(28.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Icon(Icons.Default.SystemUpdate, null, tint = HugoColors.Accent, modifier = Modifier.size(44.dp))
+            Spacer(Modifier.height(12.dp))
+            Text("Atualize para ver suas playlists", color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+            Spacer(Modifier.height(10.dp))
+            Text(
+                "Suas playlists estão salvas e nada foi apagado. Esta versão do app ficou antiga: " +
+                    "é só atualizar o Hugo Player para voltar a vê-las.",
+                color = HugoColors.TextMuted, fontSize = 15.sp, lineHeight = 21.sp, textAlign = TextAlign.Center,
+            )
+            Spacer(Modifier.height(22.dp))
+            FocusSurface(
+                onClick = {
+                    if (downloading) return@FocusSurface
+                    downloading = true; error = null; progress = 0
+                    scope.launch {
+                        val url = AppUpdate.latestApkUrl(context)
+                        val err = AppUpdate.downloadAndInstall(context, url) { progress = it }
+                        downloading = false; progress = null
+                        if (err != null) error = err
+                    }
+                },
+                modifier = Modifier.fillMaxWidth().height(56.dp).focusRequester(updateFocus),
+                color = HugoColors.Accent,
+                focusedColor = HugoColors.Accent,
+                focusBorderWidth = 3.dp,
+                focusBorderColor = Color.White,
+                focusScale = 1.03f,
+                shape = RoundedCornerShape(14.dp),
+            ) { _ ->
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text(
+                        when {
+                            downloading && (progress ?: 0) > 0 -> "Baixando… ${progress}%"
+                            downloading -> "Baixando…"
+                            error != null -> "Tentar de novo"
+                            else -> "Atualizar agora"
+                        },
+                        color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.SemiBold,
+                    )
+                }
+            }
+            if (downloading && (progress ?: 0) > 0) {
+                Spacer(Modifier.height(10.dp))
+                LinearProgressIndicator(progress = { (progress ?: 0) / 100f }, modifier = Modifier.fillMaxWidth(), color = HugoColors.Accent)
+            }
+            error?.let {
+                Spacer(Modifier.height(10.dp))
+                Text(it, color = Color(0xFFF87171), fontSize = 13.sp, textAlign = TextAlign.Center)
+            }
+            Spacer(Modifier.height(12.dp))
+            FocusSurface(
+                onClick = onRetry,
+                modifier = Modifier.fillMaxWidth().height(48.dp),
+                shape = RoundedCornerShape(12.dp),
+            ) { _ ->
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text("Já atualizei — carregar playlists", color = Color.White, fontSize = 15.sp)
+                }
+            }
+        }
+    }
 }

@@ -10,6 +10,10 @@ import java.net.URLEncoder
 /** apiError: código bruto do backend (ex.: "upstream_403"), quando houver. */
 class ApiException(val status: Int, message: String, val apiError: String? = null) : Exception(message)
 
+/** O servidor recusou porque o app está abaixo da versão mínima (HTTP 426) — não é erro de rede nem falta de dados. */
+fun isUpdateRequired(e: Throwable?): Boolean =
+    e is ApiException && (e.status == 426 || e.apiError == "update_required")
+
 /** Cliente HTTP mínimo para o backend do Hugo Player. */
 object HugoApi {
     val baseUrl: String = BuildConfig.API_BASE_URL.trimEnd('/')

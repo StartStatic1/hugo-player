@@ -80,6 +80,18 @@ object AppUpdate {
         )
     }
 
+    /** Link do APK mais novo: pergunta ao servidor; sem resposta usa o último salvo (ou o latest.apk do servidor). */
+    suspend fun latestApkUrl(context: Context): String = withContext(Dispatchers.IO) {
+        val p = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val fallback = "${HugoApi.baseUrl}/channels/latest.apk"
+        val json = fetchVersionJson()
+        if (json != null) {
+            val url = json.optString("apkUrl", "").ifBlank { fallback }
+            p.edit().putString("apkUrl", url).apply()
+            url
+        } else p.getString("apkUrl", null)?.takeIf { it.isNotBlank() } ?: fallback
+    }
+
     private fun fetchVersionJson(): JSONObject? = try {
         val conn = (URL("${HugoApi.baseUrl}/channels/version").openConnection() as HttpURLConnection).apply {
             connectTimeout = 8_000
