@@ -18,6 +18,7 @@ import { createAdminRouter } from "./routes-admin.js";
 import type { PlaylistResolver } from "./routes-catalog.js";
 import { clientVersionCode, normalizeConfig, updateRequired, type AppConfig } from "./app-config.js";
 import { createSubtitlesRouter } from "./subtitles.js";
+import { searchTmdb } from "./tmdb.js";
 import { backfillExisting, decideTrial, newDeviceTrial, pendingOldAppTrial, resolvePendingTrial, type TrialFlag, type TrialLedger } from "./trial-ledger.js";
 import { PAID_PLANS, PLAN_LABELS, PLAN_PRICES, planExpiry, type PaidPlan } from "./plans.js";
 
@@ -197,6 +198,7 @@ app.use(
     username: process.env.OPENSUBTITLES_USERNAME || undefined,
     password: process.env.OPENSUBTITLES_PASSWORD || undefined,
     cacheDir: path.join(path.dirname(DATA_FILE), "subs-cache"),
+    tmdbSearch: async (kind, query) => ((await searchTmdb(kind, query)) as any)?.results ?? [],
     authenticate: (id, key) => {
       const d = authDevice(id, key);
       return Boolean(d && hasActiveLicense(d));

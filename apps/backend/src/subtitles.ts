@@ -36,6 +36,7 @@ export function buildSearchQuery(q: SearchInput): string {
   const title = q.title.toLowerCase().replace(/\s+/g, " ").trim();
   const isEpisode = q.season !== undefined && q.episode !== undefined;
   if (q.tmdbId && !isEpisode) p.tmdb_id = String(q.tmdbId);
+  else if (q.tmdbId && isEpisode) p.parent_tmdb_id = String(q.tmdbId);
   else p.query = title;
   if (isEpisode) {
     p.type = "episode";
@@ -79,7 +80,30 @@ export function cleanSrt(text: string): string | null {
   return t;
 }
 
+const norm = (s: string) => s.normalize("NFD").replace(/\p{M}+/gu, "").toLowerCase().replace(/&/g, " e ").replace(/[^a-z0-9]+/g, " ").trim();
+
+/**
+ * Escolhe o TMDB certo para o título da lista (nomes em português buscam mal na OpenSubtitles;
+ * pelo id do TMDB acha o filme certo). Na dúvida devolve undefined (usa a busca por texto).
+ */
+export function pickTmdbId(results: any[], title: string, year: number | undefined, kind: "movie" | "tv"): number | undefined {
+  const want = norm(title);
+  const yearOf = (r: any) => Number(String((kind === "movie" ? r.release_date : r.first_air_date) ?? "").slice(0, 4)) || undefined;
+  const names = (r: any) => [r.title, r.original_title, r.name, r.original_name].filter(Boolean).map((n: string) => norm(n));
+  const cands = (results ?? []).filter((r) => r && r.id);
+  if (year) {
+    const sameYear = cands.filter((r) => { const y = yearOf(r); return y !== undefined && Math.abs(y - year) <= 1; });
+    const exact = sameYear.find((r) => names(r).includes(want));
+    if (exact) return exact.id;
+    const close = sameYear.find((r) => names(r).some((n) => n.includes(want) || want.includes(n)));
+    return close?.id;
+  }
+  return cands.find((r) => names(r).includes(want))?.id;
+}
+
 export interface SubtitlesDeps {
+  /** busca no TMDB (pt-BR) → resultados; opcional */
+  tmdbSearch?: (kind: "movie" | "tv", query: string) => Promise<any[]>;
   apiKey?: string;
   username?: string;
   password?: string;
@@ -127,7 +151,15 @@ export function createSubtitlesRouter(deps: SubtitlesDeps): Router {
     const title = String(req.query.title ?? "").trim().slice(0, 120);
     if (!title) return res.status(400).json({ error: "missing_title" });
     const num = (v: unknown) => (v !== undefined && /^\d{1,7}$/.test(String(v)) ? Number(v) : undefined);
-    const qs = buildSearchQuery({ title, year: num(req.query.year), season: num(req.query.season), episode: num(req.query.episode), tmdbId: num(req.query.tmdbId) });
+    const season = num(req.query.season);
+    const episode = num(req.query.episode);
+    const year = num(req.query.year);
+    let tmdbId = num(req.query.tmdbId);
+    if (!tmdbId && deps.tmdbSearch) {
+      const kind = season !== undefined && episode !== undefined ? "tv" : "movie";
+      tmdbId = await deps.tmdbSearch(kind, title).then((r) => pickTmdbId(r, title, kind === "movie" ? year : undefined, kind)).catch(() => undefined);
+    }
+    const qs = buildSearchQuery({ title, year, season, episode, tmdbId });
     const hit = searchCache.get(qs);
     if (hit && Date.now() - hit.at < 24 * 3600_000) return res.json({ items: hit.items, cached: true });
     try {

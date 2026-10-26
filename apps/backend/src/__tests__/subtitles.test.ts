@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import type { AddressInfo } from "node:net";
 import express from "express";
-import { buildSearchQuery, cleanSrt, createSubtitlesRouter, rankResults } from "../subtitles.js";
+import { buildSearchQuery, cleanSrt, createSubtitlesRouter, pickTmdbId, rankResults } from "../subtitles.js";
 
 test("busca: parâmetros em ordem alfabética e minúsculas (OpenSubtitles exige)", () => {
   assert.equal(buildSearchQuery({ title: "Inception", year: 2010 }), "languages=pt-br,pt-pt&query=inception&type=movie&year=2010");
@@ -62,4 +62,16 @@ test("rota: exige aparelho ativo, baixa 1x e guarda em cache; cota esgotada vira
   } finally {
     server.close();
   }
+});
+
+test("TMDB: acha o filme pelo nome em português + ano; série pelo nome exato; na dúvida nada", () => {
+  const movies = [
+    { id: 1, title: "A Origem do Mal", original_title: "X", release_date: "2018-01-01" },
+    { id: 27205, title: "A Origem", original_title: "Inception", release_date: "2010-07-15" },
+  ];
+  assert.equal(pickTmdbId(movies, "A Origem", 2010, "movie"), 27205);
+  assert.equal(pickTmdbId(movies, "A Origem", 1990, "movie"), undefined);
+  assert.equal(pickTmdbId([{ id: 70523, name: "Dark", original_name: "Dark", first_air_date: "2017-12-01" }], "Dark", undefined, "tv"), 70523);
+  assert.equal(pickTmdbId([{ id: 5, name: "Dark Matter" }], "Dark", undefined, "tv"), undefined);
+  assert.equal(buildSearchQuery({ title: "Dark", season: 1, episode: 1, tmdbId: 70523 }), "episode_number=1&languages=pt-br,pt-pt&parent_tmdb_id=70523&season_number=1&type=episode");
 });
