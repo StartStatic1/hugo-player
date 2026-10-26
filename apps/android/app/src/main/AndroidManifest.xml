@@ -28,6 +28,11 @@
             </intent-filter>
         </activity>
     
+        <!-- resposta do instalador do sistema (atualização do app) -->
+        <receiver
+            android:name=".data.InstallStatusReceiver"
+            android:exported="false" />
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"

@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <paths>
     <external-files-path name="updates" path="updates/" />
+    <!-- APK da atualização baixado no armazenamento interno do app -->
+    <files-path name="updates_internal" path="updates/" />
 </paths>

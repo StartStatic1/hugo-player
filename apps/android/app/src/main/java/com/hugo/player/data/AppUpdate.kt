@@ -157,8 +157,9 @@ object AppUpdate {
                     return@withContext "Permita instalar apps deste app e tente de novo."
                 }
 
-                val dir = context.getExternalFilesDir("updates") ?: context.filesDir
-                val file = File(dir, "update.apk")
+                // armazenamento interno do app (sempre existe; o FileProvider tem files-path/updates)
+                val dir = File(context.filesDir, "updates").apply { mkdirs() }
+                val file = File(dir, "hugo-update.apk")
                 if (file.exists()) file.delete()
                 file.parentFile?.mkdirs()
 
@@ -198,22 +199,8 @@ object AppUpdate {
                     return@withContext "APK inválido ou incompleto."
                 }
 
-                val uri = FileProvider.getUriForFile(
-                    context,
-                    "${context.packageName}.fileprovider",
-                    file,
-                )
-                withContext(Dispatchers.Main) {
-                    val intent = Intent(Intent.ACTION_VIEW).apply {
-                        setDataAndType(uri, "application/vnd.android.package-archive")
-                        addFlags(
-                            Intent.FLAG_GRANT_READ_URI_PERMISSION or
-                                Intent.FLAG_ACTIVITY_NEW_TASK,
-                        )
-                    }
-                    context.startActivity(intent)
-                }
-                null
+                val err = withContext(Dispatchers.Main) { ApkInstall.install(context, file) }
+                err
             } catch (e: java.net.UnknownHostException) {
                 "Sem conexão com a internet. Conecte o aparelho e tente de novo."
             } catch (e: java.net.SocketTimeoutException) {

@@ -26,9 +26,11 @@ export function updateRequired(clientCode: number | null, min: number): boolean 
  * Apps antigos do Hugo usam HttpURLConnection (User-Agent "Dalvik/…") e não mandam nada:
  * tratamos como versão 0 (antiga). Navegador (site) e outros clientes → null (não bloqueia).
  */
-export function clientVersionCode(header: string | undefined, userAgent: string | undefined): number | null {
+export function clientVersionCode(header: string | undefined, userAgent: string | undefined, origin?: string | undefined): number | null {
   const h = (header ?? "").trim();
   if (/^\d{1,6}$/.test(h)) return Number(h);
+  // site/portal e admin (navegador manda Origin/Referer; o app nunca manda): nunca bloqueia
+  if ((origin ?? "").trim()) return null;
   if (/^Dalvik\//.test(userAgent ?? "")) return 0;
   return null;
 }

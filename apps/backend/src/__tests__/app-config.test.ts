@@ -23,3 +23,10 @@ test("config: valor salvo > env > 0, sempre dentro do limite", () => {
   assert.equal(normalizeConfig({ minVersionCode: -5 }).minVersionCode, 0);
   assert.equal(normalizeConfig(null).minVersionCode, 0);
 });
+
+test("portal/admin no navegador nunca é bloqueado, nem em WebView Android", () => {
+  assert.equal(clientVersionCode(undefined, "Mozilla/5.0 (Linux; Android 12; wv) AppleWebKit", "https://hugo.streamflixvip.online"), null);
+  assert.equal(clientVersionCode(undefined, "Dalvik/2.1.0 (Linux; U; Android 12)", "https://hugo.streamflixvip.online/"), null);
+  assert.equal(updateRequired(clientVersionCode(undefined, "Mozilla/5.0", undefined), 46), false);
+  assert.equal(updateRequired(clientVersionCode(undefined, "Dalvik/2.1.0", undefined), 46), true); // app antigo de verdade
+});

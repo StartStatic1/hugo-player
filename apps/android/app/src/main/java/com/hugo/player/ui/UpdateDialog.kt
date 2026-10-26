@@ -61,6 +61,8 @@ private fun ForcedUpdateScreen(info: UpdateInfo, onRetryCheck: () -> Unit) {
     var downloading by remember { mutableStateOf(false) }
     var progress by remember { mutableStateOf<Int?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
+    val installError by com.hugo.player.data.ApkInstall.lastError.collectAsState()
+    LaunchedEffect(installError) { if (installError != null) error = installError }
     val buttonFocus = remember { FocusRequester() }
     BackHandler { /* bloqueado: não sai sem atualizar */ }
     LaunchedEffect(Unit) { kotlinx.coroutines.delay(100); runCatching { buttonFocus.requestFocus() } }
@@ -139,6 +141,8 @@ private fun OptionalUpdateDialog(current: UpdateInfo, onDismiss: () -> Unit) {
     val context = LocalContext.current
     var downloading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
+    val installError by com.hugo.player.data.ApkInstall.lastError.collectAsState()
+    LaunchedEffect(installError) { if (installError != null) error = installError }
     val scope = rememberCoroutineScope()
     AlertDialog(
         onDismissRequest = { if (!downloading) onDismiss() },
@@ -156,7 +160,7 @@ private fun OptionalUpdateDialog(current: UpdateInfo, onDismiss: () -> Unit) {
                 scope.launch {
                     val err = AppUpdate.downloadAndInstall(context, current.apkUrl)
                     downloading = false
-                    if (err != null) error = err else onDismiss()
+                    if (err != null) error = err
                 }
             }) { Text(if (downloading) "Baixando..." else "Baixar e instalar") }
         },

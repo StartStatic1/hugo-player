@@ -303,7 +303,7 @@ function minVersionCode(): number {
 /** App abaixo da versão mínima (inclusive apps antigos sem cabeçalho de versão) → 426, precisa atualizar. */
 function requireCurrentApp(req: Request, res: Response, next: NextFunction) {
   const min = minVersionCode();
-  const v = clientVersionCode(req.header("x-hugo-version-code"), req.header("user-agent"));
+  const v = clientVersionCode(req.header("x-hugo-version-code"), req.header("user-agent"), req.header("origin") || req.header("referer"));
   if (updateRequired(v, min)) {
     return res.status(426).json({ error: "update_required", minVersionCode: min, message: "Atualize o Hugo Player para continuar." });
   }
