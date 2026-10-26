@@ -16,6 +16,7 @@ import { createPlaylistRouter, type StoredPlaylist } from "./routes-playlists.js
 import { createEpgRouter } from "./routes-epg.js";
 import { createAdminRouter } from "./routes-admin.js";
 import type { PlaylistResolver } from "./routes-catalog.js";
+import { PAID_PLANS, PLAN_LABELS, PLAN_PRICES, planExpiry, type PaidPlan } from "./plans.js";
 
 const PORT = Number(process.env.PORT ?? 8080);
 const DATA_FILE = path.resolve(process.env.DATA_FILE ?? "./data/db.json");
@@ -26,7 +27,7 @@ const PUBLIC_WEB_URL = (process.env.PUBLIC_WEB_URL ?? "https://hugo.streamflixvi
 const PUBLIC_API_URL = (process.env.PUBLIC_API_URL ?? "https://api-hugo.streamflixvip.online").replace(/\/+$/, "");
 
 type LicenseType = "trial" | "premium" | "expired";
-type LicensePlan = "trial" | "annual" | "lifetime";
+type LicensePlan = "trial" | PaidPlan;
 
 interface Device {
   deviceId: string;
@@ -60,7 +61,7 @@ interface Db {
   transfers?: TransferRecord[];
 }
 
-type PaymentPlan = "annual" | "lifetime";
+type PaymentPlan = PaidPlan;
 type PaymentStatus = "pending" | "paid" | "canceled" | "refunded" | "failed";
 
 interface PaymentOrder {
@@ -238,8 +239,8 @@ function requireDevice(req: Request, res: Response, next: NextFunction) {
   next();
 }
 
-const paymentPlanSchema = z.object({ plan: z.enum(["annual", "lifetime"]) });
-const paymentPrices: Record<PaymentPlan, number> = { annual: 2500, lifetime: 6000 };
+const paymentPlanSchema = z.object({ plan: z.enum(PAID_PLANS) });
+const paymentPrices: Record<PaymentPlan, number> = PLAN_PRICES;
 
 async function confirmInfinitePayPayment(order: PaymentOrder, body: Record<string, any>): Promise<boolean> {
   const transactionNsu = String(body.transaction_nsu ?? "").trim();
@@ -260,9 +261,8 @@ async function settleOrder(order: PaymentOrder, body: Record<string, any>): Prom
   if (!device) throw new Error("device_not_found");
   const now = new Date();
   const currentExpiry = device.license.expiresAt ? new Date(device.license.expiresAt) : null;
-  const expiresAt = order.plan === "lifetime"
-    ? null
-    : new Date(Math.max(now.getTime(), currentExpiry?.getTime() ?? 0) + 365 * 86400000).toISOString();
+  // renovação soma a partir do vencimento atual (se ainda válido); semestral 180 dias, anual 365, vitalício sem vencimento
+  const expiresAt = planExpiry(order.plan, Math.max(now.getTime(), currentExpiry?.getTime() ?? 0));
   device.license = {
     type: "premium",
     plan: order.plan,
@@ -300,7 +300,7 @@ app.post("/payments/checkout", requireDevice, async (req, res) => {
       body: JSON.stringify({
         handle: INFINITEPAY_HANDLE,
         order_nsu: order.orderNsu,
-        items: [{ quantity: 1, price: order.amount, description: order.plan === "annual" ? "Hugo Player Premium Anual" : "Hugo Player Premium Vitalício" }],
+        items: [{ quantity: 1, price: order.amount, description: PLAN_LABELS[order.plan] }],
         redirect_url: `${PUBLIC_WEB_URL}/?payment=complete&order_nsu=${encodeURIComponent(order.orderNsu)}`,
         webhook_url: `${PUBLIC_API_URL}/payments/infinitepay/webhook`,
         options: { single_payment: true, payment_methods_enabled: ["credit_card", "pix"] },

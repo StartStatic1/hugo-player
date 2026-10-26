@@ -237,6 +237,7 @@ private fun LicenseBadge(type: String?, plan: String?, expires: String?) {
         "trial" -> ("Teste" + (expires?.let { " · $it" } ?: "")) to Color(0xFFFBBF24)
         "premium" -> when (plan) {
             "lifetime" -> "Premium Vitalício" to Color(0xFF34D399)
+            "semiannual" -> ("Premium 6 meses" + (expires?.let { " · $it" } ?: "")) to Color(0xFF34D399)
             else -> ("Premium Anual" + (expires?.let { " · $it" } ?: "")) to Color(0xFF34D399)
         }
         "expired" -> "Expirada" to Color(0xFFF87171)

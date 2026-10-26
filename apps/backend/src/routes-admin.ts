@@ -1,8 +1,9 @@
 import { Router, type Request, type Response, type NextFunction } from "express";
 import { z } from "zod";
+import { PAID_PLANS, planExpiry, type PaidPlan } from "./plans.js";
 
 type LicenseType = "trial" | "premium" | "expired";
-type LicensePlan = "trial" | "annual" | "lifetime";
+type LicensePlan = "trial" | PaidPlan;
 
 export interface AdminDevice {
   deviceId: string;
@@ -36,14 +37,12 @@ export interface AdminDeps {
 }
 
 const planSchema = z.object({
-  plan: z.enum(["annual", "lifetime"]),
+  plan: z.enum(PAID_PLANS),
   transactionNsu: z.string().trim().max(200).optional(),
 });
 
-function activeLicense(plan: LicensePlan): { type: LicenseType; plan: LicensePlan; expiresAt: string | null } {
-  if (plan === "lifetime") return { type: "premium", plan, expiresAt: null };
-  const expiresAt = new Date(Date.now() + 365 * 86400000).toISOString();
-  return { type: "premium", plan, expiresAt };
+function activeLicense(plan: PaidPlan): { type: LicenseType; plan: LicensePlan; expiresAt: string | null } {
+  return { type: "premium", plan, expiresAt: planExpiry(plan, Date.now()) };
 }
 
 export function createAdminRouter(deps: AdminDeps): Router {

@@ -88,6 +88,11 @@ button:disabled { opacity: .55; cursor: not-allowed; }
 .legal-card { padding: 18px; background: #ffffff04; border: 1px solid var(--border); border-radius: 14px; }
 .legal-card h3 { margin: 0 0 7px; font-size: 14px; }
 .legal-card p { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.55; }
+.plans { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; }
+.plans .plan { display: flex; flex-direction: column; gap: 6px; }
+.plans .plan .btn { margin-top: auto; }
+/* preço por mês (para tirar: apague esta linha e os <p class="permonth">) */
+.legal-card p.permonth { color: var(--text, #fff); opacity: .8; font-size: 11.5px; margin-top: -4px; }
 .legal-note { margin-top: 16px; padding: 14px 16px; border-radius: 12px; background: #fbbf2410; border: 1px solid #fbbf2433; color: #fde68a; font-size: 12px; line-height: 1.5; }
 .dash-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; margin-bottom: 22px; flex-wrap: wrap; }
 .grid { display: grid; grid-template-columns: 380px 1fr; gap: 22px; align-items: start; }
@@ -174,9 +179,11 @@ button:disabled { opacity: .55; cursor: not-allowed; }
     <section class="card" id="plansCard">
       <h2>Ative o Hugo Player</h2>
       <p class="desc">Escolha seu plano. O acesso é liberado automaticamente depois da confirmação do pagamento.</p>
-      <div class="row">
-        <div class="legal-card"><h3>Premium Anual · R$ 25,00</h3><p>Licença válida por 12 meses e vinculada a este dispositivo.</p><button class="btn" type="button" onclick="startPayment('annual')">Comprar anual</button></div>
-        <div class="legal-card"><h3>Premium Vitalício · R$ 60,00</h3><p>Licença sem data de vencimento, vinculada a este dispositivo.</p><button class="btn" type="button" onclick="startPayment('lifetime')">Comprar vitalício</button></div>
+      <div class="plans">
+        <div class="legal-card plan"><h3>Teste · Grátis</h3><p>7 dias para experimentar, liberado automaticamente no primeiro uso do app.</p></div>
+        <div class="legal-card plan"><h3>Premium 6 meses · R$ 29,90</h3><p class="permonth">equivale a R$ 4,98/mês</p><p>Licença válida por 6 meses e vinculada a este dispositivo.</p><button class="btn" type="button" onclick="startPayment('semiannual')">Comprar 6 meses</button></div>
+        <div class="legal-card plan"><h3>Premium 1 ano · R$ 44,90</h3><p class="permonth">equivale a R$ 3,74/mês</p><p>Licença válida por 12 meses e vinculada a este dispositivo.</p><button class="btn" type="button" onclick="startPayment('annual')">Comprar 1 ano</button></div>
+        <div class="legal-card plan"><h3>Premium Vitalício · R$ 119,90</h3><p>Licença sem data de vencimento, vinculada a este dispositivo.</p><button class="btn" type="button" onclick="startPayment('lifetime')">Comprar vitalício</button></div>
       </div>
       <div class="status" id="paymentStatus"></div>
     </section>
@@ -351,7 +358,7 @@ async function enterDashboard() {
   var lic = status.license || { type: "trial", active: false };
   licenseActive = lic.active !== false && lic.type !== "expired";
   var label = lic.type === "premium"
-    ? (lic.plan === "lifetime" ? "Premium Vitalício" : "Premium Anual")
+    ? ({ lifetime: "Premium Vitalício", semiannual: "Premium 6 meses" }[lic.plan] || "Premium Anual")
     : lic.paymentProvider === "transferred" ? "Transferida para outro aparelho"
     : ({ trial: "Teste", expired: "Trial expirado" }[lic.type] || lic.type);
   var until = lic.expiresAt ? " até " + new Date(lic.expiresAt).toLocaleDateString("pt-BR") : "";

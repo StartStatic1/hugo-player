@@ -14,6 +14,7 @@ data class LicenseStatus(
 ) {
     fun label(): String = when {
         type == "premium" && plan == "lifetime" -> "Premium Vitalício"
+        type == "premium" && plan == "semiannual" -> "Premium 6 meses"
         type == "premium" -> "Premium Anual"
         type == "expired" -> "Licença expirada"
         else -> "Teste"

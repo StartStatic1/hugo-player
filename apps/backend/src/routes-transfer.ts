@@ -13,7 +13,7 @@ import type { StoredPlaylist } from "./routes-playlists.js";
  */
 export interface TransferLicense {
   type: "trial" | "premium" | "expired";
-  plan?: "trial" | "annual" | "lifetime";
+  plan?: "trial" | "semiannual" | "annual" | "lifetime";
   expiresAt: string | null;
   paymentProvider?: string;
   transactionNsu?: string;
