@@ -164,8 +164,13 @@ class BrowseViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private suspend fun fetch(p: Int): List<BrowseItem> = when (type) {
-        BrowseType.SERIES -> repo.seriesPage(playlistId, selectedGroup, query, p).map {
-            BrowseItem(key = "s:" + it.seriesName, title = it.seriesName, image = it.logo, subtitle = null, url = null, seriesName = it.seriesName)
+        BrowseType.SERIES -> {
+            val list = repo.seriesPage(playlistId, selectedGroup, query, p)
+            // dublada + legendada viram um card só (a escolha fica na tela da série)
+            val twins = runCatching { repo.seriesTwinsForDubs(playlistId, list.map { it.seriesName }) }.getOrDefault(emptyMap())
+            list.map {
+                BrowseItem(key = "s:" + it.seriesName, title = it.seriesName, image = it.logo, subtitle = if (twins.containsKey(it.seriesName)) "Dublado · Legendado" else null, url = null, seriesName = it.seriesName)
+            }
         }
         BrowseType.MOVIES -> {
             val list = repo.page(playlistId, type.dbType, selectedGroup, query, p)

@@ -82,9 +82,20 @@ fun SeriesDetailScreen(
     var isWide by remember { mutableStateOf(true) }
     val listState = rememberLazyListState()
 
+    // versões dublada/legendada (mesma série) — a escolha fica guardada por série
+    var twin by remember { mutableStateOf<com.hugo.player.data.db.SeriesTwinEntity?>(null) }
+    var activeName by rememberSaveable(seriesName) { mutableStateOf<String?>(null) }
     LaunchedEffect(playlistId, seriesName) {
-        info = TmdbClient.searchTv(seriesName)
-        val local = withContext(Dispatchers.IO) { repo.episodes(playlistId, seriesName) }
+        val t = runCatching { repo.seriesTwinOf(playlistId, seriesName) }.getOrNull()
+        twin = t
+        if (activeName == null) activeName = t?.let { SeriesVersionPrefs.choice(context, playlistId, it) } ?: seriesName
+    }
+    LaunchedEffect(seriesName) { info = TmdbClient.searchTv(seriesName) }
+
+    LaunchedEffect(playlistId, activeName) {
+        val name = activeName ?: return@LaunchedEffect
+        episodes = null; meta = emptyMap(); errorMsg = null
+        val local = withContext(Dispatchers.IO) { repo.episodes(playlistId, name) }
         val marker = local.firstOrNull()?.url
         if (marker != null && marker.startsWith("xtream://series/")) {
             val seriesId = marker.removePrefix("xtream://series/")
@@ -113,7 +124,7 @@ fun SeriesDetailScreen(
                         val plot = e.optString("plot").takeIf { it.isNotBlank() && it != "null" }
                         val dur = e.optInt("durationSecs", 0).takeIf { it > 0 }
                         if (plot != null || dur != null) metaOut[e.getString("url")] = EpisodeMeta(plot, dur)
-                        list.add(ChannelEntity(name = e.optString("name", seriesName), url = e.getString("url"), logo = e.optString("logo").takeIf { it.isNotEmpty() }, group = "", type = "series", playlistId = playlistId, seriesName = seriesName, season = e.optInt("season", 1), episode = e.optInt("episode", i + 1)))
+                        list.add(ChannelEntity(name = e.optString("name", name), url = e.getString("url"), logo = e.optString("logo").takeIf { it.isNotEmpty() }, group = "", type = "series", playlistId = playlistId, seriesName = name, season = e.optInt("season", 1), episode = e.optInt("episode", i + 1)))
                     }
                 }
                 meta = metaOut
@@ -129,7 +140,11 @@ fun SeriesDetailScreen(
     LaunchedEffect(bySeason) { if (selectedSeason == null || selectedSeason !in bySeason.keys) selectedSeason = bySeason.keys.firstOrNull() }
     LaunchedEffect(selectedSeason) { if (selectedSeason != null) listState.scrollToItem(0) }
     // TV/tela larga: começa no 1º episódio; celular em pé não (o topo sumiria)
-    LaunchedEffect(episodes != null) { if (episodes != null) { kotlinx.coroutines.delay(100); if (isWide) runCatching { firstEpisodeFocus.requestFocus() } } }
+    var initialFocusDone by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(episodes != null) {
+        // só na 1ª carga (trocar Dublado/Legendado não tira o foco do botão)
+        if (episodes != null && !initialFocusDone) { initialFocusDone = true; kotlinx.coroutines.delay(100); if (isWide) runCatching { firstEpisodeFocus.requestFocus() } }
+    }
 
     val poster = info?.poster ?: episodes?.firstOrNull { !it.logo.isNullOrBlank() }?.logo
     val seasonEps = selectedSeason?.let { bySeason[it] }.orEmpty()
@@ -145,12 +160,14 @@ fun SeriesDetailScreen(
     val watched = remember(resumeTick) { WatchHistory.watchedKeys(context) }
     val partial = remember(resumeTick) { WatchHistory.progressFractions(context) }
 
+    val shownName = activeName ?: seriesName
+
     fun play(ep: ChannelEntity) {
         val ordered = bySeason.values.flatten()
         val idx = ordered.indexOf(ep)
         // playlistId + pôster também nos próximos episódios (senão somem do "Continuar assistindo")
-        val queue = ordered.drop(idx + 1).take(50).map { PlaybackRequest(url = it.url, title = seriesName, subtitle = epLabel(it), isLive = false, playlistId = playlistId, logo = poster) }
-        onPlay(PlaybackRequest(url = ep.url, title = seriesName, subtitle = epLabel(ep), isLive = false, queue = queue, playlistId = playlistId, logo = poster))
+        val queue = ordered.drop(idx + 1).take(50).map { PlaybackRequest(url = it.url, title = shownName, subtitle = epLabel(it), isLive = false, playlistId = playlistId, logo = poster) }
+        onPlay(PlaybackRequest(url = ep.url, title = shownName, subtitle = epLabel(ep), isLive = false, queue = queue, playlistId = playlistId, logo = poster))
     }
 
     // foco: última linha de episódio focada (restauração manual, sem focusRestorer)
@@ -205,12 +222,12 @@ fun SeriesDetailScreen(
     fun Info(posterWidth: androidx.compose.ui.unit.Dp) {
         Row {
             Box(Modifier.width(posterWidth).aspectRatio(2f / 3f).clip(RoundedCornerShape(12.dp)).background(HugoColors.Card), contentAlignment = Alignment.Center) {
-                if (poster != null) SubcomposeAsyncImage(model = poster, contentDescription = seriesName, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
-                else Text(seriesName, color = HugoColors.TextDim, fontSize = 12.sp, modifier = Modifier.padding(8.dp))
+                if (poster != null) SubcomposeAsyncImage(model = poster, contentDescription = shownName, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+                else Text(shownName, color = HugoColors.TextDim, fontSize = 12.sp, modifier = Modifier.padding(8.dp))
             }
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
-                Text(seriesName, color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold, maxLines = 3, overflow = TextOverflow.Ellipsis)
+                Text(shownName, color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold, maxLines = 3, overflow = TextOverflow.Ellipsis)
                 info?.genres?.let { Text(it, color = HugoColors.Accent, fontSize = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 2.dp)) }
                 Text(if (episodes == null) "Carregando..." else "${bySeason.size} temporada(s) · ${episodes!!.size} episódio(s)", color = HugoColors.TextMuted, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
             }
@@ -229,6 +246,33 @@ fun SeriesDetailScreen(
         errorMsg?.let { Text(it, color = Color(0xFFFCA5A5), fontSize = 12.sp, modifier = Modifier.padding(top = 6.dp)) }
         Spacer(Modifier.height(8.dp))
         Actions()
+    }
+
+    @Composable
+    fun Versions(leftToActions: Boolean) {
+        val t = twin ?: return
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(bottom = 4.dp)) {
+            listOf("Dublado" to t.dubName, "Legendado" to t.legName).forEach { (label, name) ->
+                val selected = activeName == name
+                FocusSurface(
+                    onClick = {
+                        if (!selected) {
+                            SeriesVersionPrefs.save(context, playlistId, t, name)
+                            selectedSeason = null; lastEp = 0
+                            activeName = name
+                        }
+                    },
+                    selected = selected, selectedColor = SeriesAccent, color = HugoColors.CardAlt,
+                    focusedColor = SeriesAccent.copy(alpha = 0.55f), focusBorderWidth = 3.dp, focusScale = 1.04f,
+                    shape = RoundedCornerShape(50),
+                    modifier = Modifier.height(34.dp).then(if (leftToActions) Modifier.focusProperties { left = playFocus } else Modifier),
+                ) { _ ->
+                    Row(Modifier.fillMaxHeight().padding(horizontal = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text(label, color = Color.White, fontSize = 13.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium)
+                    }
+                }
+            }
+        }
     }
 
     @Composable
@@ -311,6 +355,7 @@ fun SeriesDetailScreen(
                             episodes == null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = SeriesAccent) }
                             episodes!!.isEmpty() -> Text("Nenhum episódio encontrado.", color = HugoColors.TextMuted, modifier = Modifier.padding(top = 12.dp))
                             else -> {
+                                Versions(leftToActions = true)
                                 Seasons()
                                 Spacer(Modifier.height(6.dp))
                                 LazyColumn(
@@ -344,7 +389,7 @@ fun SeriesDetailScreen(
                         when {
                             episodes == null -> Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = SeriesAccent) }
                             episodes!!.isEmpty() -> Text("Nenhum episódio encontrado.", color = HugoColors.TextMuted)
-                            else -> Seasons()
+                            else -> Column { Versions(leftToActions = false); Seasons() }
                         }
                     }
                     itemsIndexed(seasonEps, key = { i, it -> "${it.id}-$i" }) { index, ep -> EpisodeRow(index, ep, leftToActions = false) }
@@ -360,4 +405,15 @@ private fun epLabel(ep: ChannelEntity): String {
     val code = if (e != null) "T%d · E%02d".format(s, e) else "Temporada $s"
     val t = episodeTitle(ep)
     return if (t.isNotBlank()) "$code · $t" else code
+}
+
+/** Última versão (dublada/legendada) escolhida em cada série; sem escolha = a versão aberta (card junto = dublada). */
+object SeriesVersionPrefs {
+    private fun prefs(c: android.content.Context) = c.applicationContext.getSharedPreferences("hugo_series_ver", android.content.Context.MODE_PRIVATE)
+    private fun key(playlistId: String, t: com.hugo.player.data.db.SeriesTwinEntity) = "$playlistId|${t.dubName}"
+    fun choice(c: android.content.Context, playlistId: String, t: com.hugo.player.data.db.SeriesTwinEntity): String? =
+        when (prefs(c).getString(key(playlistId, t), null)) { "leg" -> t.legName; "dub" -> t.dubName; else -> null }
+    fun save(c: android.content.Context, playlistId: String, t: com.hugo.player.data.db.SeriesTwinEntity, name: String) {
+        prefs(c).edit().putString(key(playlistId, t), if (name == t.legName) "leg" else "dub").apply()
+    }
 }

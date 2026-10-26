@@ -1,5 +1,6 @@
 package com.hugo.player.data
 
+import com.hugo.player.data.db.SeriesTwinEntity
 import android.content.Context
 import com.hugo.player.data.db.CategoryEntity
 import com.hugo.player.data.db.ChannelEntity
@@ -7,6 +8,7 @@ import com.hugo.player.data.db.HugoDatabase
 import com.hugo.player.data.db.SeriesSummary
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.sync.withLock
 import android.util.JsonReader
 import android.util.JsonToken
 import java.net.URL
@@ -133,11 +135,11 @@ class CatalogRepository(context: Context) {
             if (code in 200..299) {
                 onProgress("Lendo lista do servidor...")
                 onFraction(0.05f)
-                dao.deleteChannels(playlistId)
+                dao.deleteChannels(playlistId); invalidateSeriesTwins(playlistId)
                 dao.deleteCategories(playlistId)
                 val total = parseServerJson(conn.inputStream, playlistId, onProgress, onFraction)
                 onFraction(1f)
-                onProgress("Pronto! $total itens")
+                invalidateSeriesTwins(playlistId); onProgress("Pronto! $total itens")
                 return@withContext
             }
 
@@ -172,7 +174,7 @@ class CatalogRepository(context: Context) {
         onProgress("Provedor bloqueou o servidor. Baixando no aparelho...")
         val total = importM3uFullyLocal(playlistId, playlistUrl, onProgress, onFraction)
         onFraction(1f)
-        onProgress("Pronto! $total itens")
+        invalidateSeriesTwins(playlistId); onProgress("Pronto! $total itens")
     }
 
     private suspend fun parseServerJson(
@@ -340,7 +342,7 @@ class CatalogRepository(context: Context) {
         onProgress: (String) -> Unit,
         onFraction: (Float?) -> Unit,
     ): Int {
-        dao.deleteChannels(playlistId)
+        dao.deleteChannels(playlistId); invalidateSeriesTwins(playlistId)
         dao.deleteCategories(playlistId)
         val batch = ArrayList<ChannelEntity>(500)
         val catCount = LinkedHashMap<String, Int>()
@@ -428,7 +430,7 @@ class CatalogRepository(context: Context) {
     }
 
     suspend fun deletePlaylist(playlistId: String) = withContext(Dispatchers.IO) {
-        dao.deleteChannels(playlistId)
+        dao.deleteChannels(playlistId); invalidateSeriesTwins(playlistId)
         dao.deleteCategories(playlistId)
     }
 
@@ -473,11 +475,41 @@ class CatalogRepository(context: Context) {
         out
     }
 
+    // pares dublada/legendada calculados 1x por playlist (refeito após sincronizar)
+    private val twinsReady = java.util.concurrent.ConcurrentHashMap<String, Boolean>()
+    private val twinsMutex = kotlinx.coroutines.sync.Mutex()
+
+    suspend fun ensureSeriesTwins(playlistId: String) = withContext(Dispatchers.IO) {
+        if (twinsReady[playlistId] == true) return@withContext
+        twinsMutex.withLock {
+            if (twinsReady[playlistId] == true) return@withLock
+            runCatching {
+                val pairs = SeriesTwins.pairs(dao.seriesNames(playlistId))
+                dao.deleteSeriesTwins(playlistId)
+                if (pairs.isNotEmpty()) pairs.entries.chunked(500).forEach { ch -> dao.insertSeriesTwins(ch.map { SeriesTwinEntity(playlistId, it.key, it.value) }) }
+            }
+            twinsReady[playlistId] = true
+        }
+    }
+
+    fun invalidateSeriesTwins(playlistId: String) { twinsReady.remove(playlistId) }
+
+    /** Versão dublada/legendada da mesma série (null = só existe uma). */
+    suspend fun seriesTwinOf(playlistId: String, name: String): SeriesTwinEntity? {
+        ensureSeriesTwins(playlistId)
+        return withContext(Dispatchers.IO) { dao.seriesTwinOf(playlistId, name) }
+    }
+
+    /** dublada -> legendada para os nomes da página. */
+    suspend fun seriesTwinsForDubs(playlistId: String, names: List<String>): Map<String, String> = withContext(Dispatchers.IO) {
+        if (names.isEmpty()) emptyMap() else dao.seriesTwinsForDubs(playlistId, names.take(900)).associate { it.dubName to it.legName }
+    }
+
     suspend fun seriesPage(playlistId: String, group: String?, query: String?, page: Int, pageSize: Int = PAGE_SIZE): List<SeriesSummary> =
-        withContext(Dispatchers.IO) { dao.seriesPage(playlistId, group, query?.trim()?.takeIf { it.isNotEmpty() }, pageSize, page * pageSize, hiddenGroups(playlistId, "series", group)) }
+        withContext(Dispatchers.IO) { ensureSeriesTwins(playlistId); dao.seriesPage(playlistId, group, query?.trim()?.takeIf { it.isNotEmpty() }, pageSize, page * pageSize, hiddenGroups(playlistId, "series", group)) }
 
     suspend fun seriesCount(playlistId: String, group: String?, query: String?): Int =
-        withContext(Dispatchers.IO) { dao.seriesCount(playlistId, group, query?.trim()?.takeIf { it.isNotEmpty() }, hiddenGroups(playlistId, "series", group)) }
+        withContext(Dispatchers.IO) { ensureSeriesTwins(playlistId); dao.seriesCount(playlistId, group, query?.trim()?.takeIf { it.isNotEmpty() }, hiddenGroups(playlistId, "series", group)) }
 
     suspend fun episodes(playlistId: String, seriesName: String): List<ChannelEntity> =
         withContext(Dispatchers.IO) { dao.episodes(playlistId, seriesName) }
