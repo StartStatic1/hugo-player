@@ -121,6 +121,11 @@ object PlaylistRepository {
         prefs(context).edit().putLong("sync_$playlistId", System.currentTimeMillis()).apply()
     }
 
+    /** Esquece quando cada playlist foi baixada (usado pelo "Limpar" das Configurações). */
+    fun clearAllSync(context: Context) {
+        prefs(context).edit().clear().apply()
+    }
+
     fun clearSync(context: Context, playlistId: String) {
         prefs(context).edit().remove("sync_$playlistId").apply()
     }

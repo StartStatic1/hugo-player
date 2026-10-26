@@ -59,6 +59,18 @@ class CatalogRepository(context: Context) {
         fun get(context: Context): CatalogRepository =
             instance ?: CatalogRepository(context.applicationContext).also { instance = it }
         fun clearAll() {}
+
+        /** Tamanho real da lista guardada no aparelho (banco hugo.db + arquivos auxiliares do SQLite). */
+        fun storageBytes(context: Context): Long {
+            val base = context.applicationContext.getDatabasePath(HugoDatabase.FILE_NAME)
+            return listOf("", "-wal", "-shm", "-journal").sumOf { java.io.File(base.path + it).takeIf { f -> f.exists() }?.length() ?: 0L }
+        }
+    }
+
+    /** "Limpar" das Configurações: apaga a lista guardada (canais, filmes, séries); baixa de novo ao abrir a playlist. */
+    suspend fun clearLocalCatalog() = withContext(Dispatchers.IO) {
+        db.clearAllTables()
+        twinsReady.clear()
     }
 
     private val maxClientM3uBytes = 150L * 1024 * 1024

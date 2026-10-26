@@ -182,6 +182,7 @@ abstract class HugoDatabase : RoomDatabase() {
     abstract fun channelDao(): ChannelDao
 
     companion object {
+        const val FILE_NAME = "hugo.db"
         @Volatile private var INSTANCE: HugoDatabase? = null
         val MIGRATION_2_3 = object : androidx.room.migration.Migration(2, 3) {
             override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
@@ -200,7 +201,7 @@ abstract class HugoDatabase : RoomDatabase() {
         }
         fun get(context: android.content.Context): HugoDatabase =
             INSTANCE ?: synchronized(this) {
-                INSTANCE ?: Room.databaseBuilder(context.applicationContext, HugoDatabase::class.java, "hugo.db")
+                INSTANCE ?: Room.databaseBuilder(context.applicationContext, HugoDatabase::class.java, FILE_NAME)
                     // 2 -> 3 só acrescenta a coluna do EPG: listas já baixadas continuam (sem reimportar)
                     .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
                     .fallbackToDestructiveMigration()

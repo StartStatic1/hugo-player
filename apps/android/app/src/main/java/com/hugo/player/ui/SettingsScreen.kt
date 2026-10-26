@@ -30,6 +30,8 @@ import androidx.compose.ui.text.font.FontFamily
 import com.hugo.player.data.AdultLock
 import com.hugo.player.data.AppSettings
 import com.hugo.player.data.DiskCache
+import com.hugo.player.data.CatalogRepository
+import com.hugo.player.data.PlaylistRepository
 import com.hugo.player.data.HugoApi
 import com.hugo.player.data.WatchHistory
 import com.hugo.player.player.StreamTypes
@@ -37,6 +39,7 @@ import com.hugo.player.ui.components.FocusSurface
 import com.hugo.player.ui.components.HugoColors
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.launch
 import org.json.JSONObject
 
 private const val SITE_URL = "https://hugo.streamflixvip.online"
@@ -44,6 +47,7 @@ private const val SITE_URL = "https://hugo.streamflixvip.online"
 @Composable
 fun SettingsScreen(deviceId: String, deviceKey: String, onBack: () -> Unit) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     var catalogTtl by remember { mutableIntStateOf(AppSettings.catalogTtlHours) }
     var autoOpen by remember { mutableStateOf(AppSettings.autoOpenLastPlaylist) }
     var liveFormat by remember { mutableStateOf(AppSettings.liveFormat) }
@@ -67,8 +71,7 @@ fun SettingsScreen(deviceId: String, deviceKey: String, onBack: () -> Unit) {
     }
 
     LaunchedEffect(Unit) {
-        DiskCache.init(context)
-        cacheSize = DiskCache.sizeBytes()
+        cacheSize = withContext(Dispatchers.IO) { CatalogRepository.storageBytes(context) }
         licenseType = null
         try {
             val text = withContext(Dispatchers.IO) { HugoApi.get("/devices/status", deviceId, deviceKey) }
@@ -197,12 +200,20 @@ fun SettingsScreen(deviceId: String, deviceKey: String, onBack: () -> Unit) {
             Text("Validade da lista no aparelho", color = HugoColors.TextMuted, fontSize = 11.sp)
             Spacer(Modifier.height(6.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                listOf(6, 12, 24, 48).forEach { h -> Chip("${h}h", catalogTtl == h) { catalogTtl = h; AppSettings.catalogTtlHours = h; message = "Cache: ${h}h" } }
+                AppSettings.CATALOG_TTL_OPTIONS.forEach { h -> Chip(if (h == AppSettings.DEFAULT_CATALOG_TTL_HOURS) "${h}h (padrão)" else "${h}h", catalogTtl == h) { catalogTtl = h; AppSettings.catalogTtlHours = h; message = "Cache: ${h}h" } }
             }
             Spacer(Modifier.height(8.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("${"%.1f".format(cacheSize / 1_048_576.0)} MB", color = Color.White, fontSize = 13.sp, modifier = Modifier.weight(1f))
-                OutlinedButton(onClick = { DiskCache.clear(); cacheSize = 0L; message = "Cache limpo" }, contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)) { Text("Limpar", fontSize = 12.sp) }
+                OutlinedButton(onClick = {
+                    scope.launch {
+                        runCatching { CatalogRepository.get(context).clearLocalCatalog() }
+                        PlaylistRepository.clearAllSync(context)
+                        DiskCache.init(context); DiskCache.clear()
+                        cacheSize = withContext(Dispatchers.IO) { CatalogRepository.storageBytes(context) }
+                        message = "Lista do aparelho apagada. Ela será baixada de novo ao abrir a playlist."
+                    }
+                }, contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)) { Text("Limpar", fontSize = 12.sp) }
             }
             Spacer(Modifier.height(6.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {

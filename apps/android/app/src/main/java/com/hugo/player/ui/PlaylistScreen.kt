@@ -167,10 +167,11 @@ fun PlaylistScreen(
         when (action) {
             is PendingAction.Refresh -> sync(pl, url, navigateAfter = false)
             is PendingAction.RefreshAndOpen -> sync(pl, url, navigateAfter = true)
-            is PendingAction.Open -> {
-                val s = summaries[pl.id]
-                val ttlMs = AppSettings.catalogTtlHours * 3_600_000L
-                val fresh = s != null && s.total > 0 && s.syncedAt != null && System.currentTimeMillis() - s.syncedAt < ttlMs
+            is PendingAction.Open -> scope.launch {
+                // o resumo local pode ainda não ter sido lido (ex.: abrir pela Home logo ao entrar):
+                // lê do banco do aparelho antes de decidir, para não baixar de novo uma lista que já está guardada
+                val s = summaries[pl.id] ?: runCatching { PlaylistRepository.localSummary(context, pl.id) }.getOrNull()?.also { summaries[pl.id] = it }
+                val fresh = s != null && AppSettings.isCatalogFresh(s.total, s.syncedAt, System.currentTimeMillis(), AppSettings.catalogTtlHours)
                 if (fresh) enterPlaylist(context, pl, url, onOpen) else sync(pl, url, navigateAfter = true)
             }
         }
