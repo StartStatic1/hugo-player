@@ -360,6 +360,7 @@ async function enterDashboard() {
   var label = lic.type === "premium"
     ? ({ lifetime: "Premium Vitalício", semiannual: "Premium 6 meses" }[lic.plan] || "Premium Anual")
     : lic.paymentProvider === "transferred" ? "Transferida para outro aparelho"
+    : lic.trialDenied ? "Teste grátis já usado neste aparelho"
     : ({ trial: "Teste", expired: "Trial expirado" }[lic.type] || lic.type);
   var until = lic.expiresAt ? " até " + new Date(lic.expiresAt).toLocaleDateString("pt-BR") : "";
   $("licBadge").className = "badge " + lic.type; $("licBadge").textContent = "Licença: " + label + until;
@@ -369,6 +370,7 @@ async function enterDashboard() {
   $("addForm").classList.toggle("hidden", !licenseActive);
   $("dashSub").textContent = licenseActive
     ? "Tudo o que você mudar aqui aparece no app ao atualizar a lista."
+    : lic.trialDenied ? "Este aparelho já usou o teste grátis. Escolha um plano para usar o Hugo Player."
     : "Seu acesso de teste terminou. Escolha um plano para continuar usando suas playlists.";
   await loadPlaylists();
 }

@@ -74,7 +74,7 @@ fun SettingsScreen(deviceId: String, deviceKey: String, onBack: () -> Unit) {
             val text = withContext(Dispatchers.IO) { HugoApi.get("/devices/status", deviceId, deviceKey) }
             val json = JSONObject(text)
             val lic = json.optJSONObject("license")
-            licenseType = lic?.optString("type") ?: "—"
+            licenseType = if (lic?.optBoolean("trialDenied") == true) "trial_denied" else lic?.optString("type") ?: "—"
             licensePlan = lic?.optString("plan")?.takeIf { it.isNotBlank() && it != "null" }
             licenseExpires = lic?.optString("expiresAt")?.takeIf { it.isNotBlank() && it != "null" }?.take(10)
         } catch (_: Exception) {
@@ -241,6 +241,7 @@ private fun LicenseBadge(type: String?, plan: String?, expires: String?) {
             else -> ("Premium Anual" + (expires?.let { " · $it" } ?: "")) to Color(0xFF34D399)
         }
         "expired" -> "Expirada" to Color(0xFFF87171)
+        "trial_denied" -> "Teste já usado neste aparelho" to Color(0xFFF87171)
         else -> (type ?: "—") to HugoColors.TextMuted
     }
     Text(text, color = color, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)

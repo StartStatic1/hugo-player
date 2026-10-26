@@ -1,10 +1,12 @@
 package com.hugo.player.data
 
+import android.annotation.SuppressLint
 import android.app.UiModeManager
 import android.content.Context
 import android.content.SharedPreferences
 import android.content.pm.PackageManager
 import android.content.res.Configuration
+import android.provider.Settings
 import com.hugo.player.BuildConfig
 import org.json.JSONObject
 import java.nio.ByteBuffer
@@ -76,10 +78,30 @@ object DeviceIdentity {
             context.packageManager.hasSystemFeature(PackageManager.FEATURE_LEANBACK)
     }
 
-    /** Registra o dispositivo no backend (idempotente). Retorna true se ok. */
+    /**
+     * ANDROID_ID (SSAID): fica igual depois de desinstalar/limpar dados (só muda com reset de fábrica).
+     * O servidor usa só para o teste grátis valer 1x por aparelho. null quando o aparelho não tem.
+     */
+    @SuppressLint("HardwareIds")
+    fun androidId(context: Context): String? = runCatching {
+        Settings.Secure.getString(context.applicationContext.contentResolver, Settings.Secure.ANDROID_ID)
+    }.getOrNull()?.trim()?.takeIf { it.isNotEmpty() }
+
+    /** true quando o servidor respondeu que este aparelho já usou o teste grátis. */
+    fun isTrialDenied(context: Context): Boolean = prefs(context).getBoolean("trialDenied", false)
+
+    fun clearTrialDenied(context: Context) {
+        prefs(context).edit().putBoolean("trialDenied", false).apply()
+    }
+
+    /**
+     * Registra o dispositivo no backend (idempotente). Retorna true se ok.
+     * Quem já estava registrado (versões antigas) manda o ANDROID_ID uma vez; isso não muda a licença.
+     */
     suspend fun ensureRegistered(context: Context): Boolean {
         val p = prefs(context)
-        if (p.getBoolean("deviceRegistered", false)) return true
+        val alreadyRegistered = p.getBoolean("deviceRegistered", false)
+        if (alreadyRegistered && p.getBoolean("androidIdSent", false)) return true
         val idt = get(context)
         return try {
             val body = JSONObject()
@@ -87,11 +109,21 @@ object DeviceIdentity {
                 .put("deviceKey", idt.deviceKey)
                 .put("platform", if (isTv(context)) "android-tv" else "android")
                 .put("appVersion", BuildConfig.VERSION_NAME)
-            HugoApi.post("/devices/register", body.toString(), readTimeoutMs = 15_000)
-            p.edit().putBoolean("deviceRegistered", true).apply()
+                .put("androidId", androidId(context) ?: JSONObject.NULL)
+            val resp = HugoApi.post("/devices/register", body.toString(), readTimeoutMs = 15_000)
+            val trial = runCatching { JSONObject(resp).optString("trial") }.getOrNull()
+            p.edit()
+                .putBoolean("deviceRegistered", true)
+                .putBoolean("androidIdSent", true)
+                .putBoolean("trialDenied", trial == "denied")
+                .apply()
             true
+        } catch (e: ApiException) {
+            // já registrado: um erro aqui (ex.: Key trocada pela recuperação) não pode travar o app
+            if (alreadyRegistered && e.status in 400..499) p.edit().putBoolean("androidIdSent", true).apply()
+            alreadyRegistered
         } catch (e: Exception) {
-            false
+            alreadyRegistered
         }
     }
 

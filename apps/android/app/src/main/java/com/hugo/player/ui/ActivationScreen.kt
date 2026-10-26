@@ -95,7 +95,14 @@ fun ActivationScreen(onActivated: (String, String) -> Unit) {
                         Spacer(Modifier.width(8.dp))
                         Text("Registrando dispositivo...", color = HugoColors.TextMuted, fontSize = 13.sp)
                     }
-                    true -> {
+                    true -> if (DeviceIdentity.isTrialDenied(context)) {
+                        Icon(Icons.Default.CloudOff, null, tint = Color(0xFFFBBF24), modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            "Este aparelho já usou o teste grátis. Para usar o Hugo Player, ative um plano no site com o Device ID e a Key acima.",
+                            color = Color(0xFFFBBF24), fontSize = 13.sp, lineHeight = 18.sp, modifier = Modifier.weight(1f),
+                        )
+                    } else {
                         Icon(Icons.Default.CheckCircle, null, tint = Color(0xFF34D399), modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(8.dp))
                         Text("Dispositivo registrado", color = Color(0xFF34D399), fontSize = 13.sp)

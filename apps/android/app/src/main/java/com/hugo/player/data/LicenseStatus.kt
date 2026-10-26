@@ -11,11 +11,13 @@ data class LicenseStatus(
     val plan: String,
     val active: Boolean,
     val expiresAt: String?,
+    val trialDenied: Boolean = false,
 ) {
     fun label(): String = when {
         type == "premium" && plan == "lifetime" -> "Premium Vitalício"
         type == "premium" && plan == "semiannual" -> "Premium 6 meses"
         type == "premium" -> "Premium Anual"
+        trialDenied && !active -> "Teste grátis já usado neste aparelho"
         type == "expired" -> "Licença expirada"
         else -> "Teste"
     }
@@ -40,6 +42,7 @@ data class LicenseStatus(
                 plan = license.optString("plan", "trial"),
                 active = license.optBoolean("active", false),
                 expiresAt = license.optString("expiresAt", "").takeIf { it.isNotBlank() && it != "null" },
+                trialDenied = license.optBoolean("trialDenied", false),
             )
         }
     }

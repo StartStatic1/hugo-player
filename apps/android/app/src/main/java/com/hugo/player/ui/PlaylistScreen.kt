@@ -46,6 +46,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.hugo.player.data.AppSettings
 import com.hugo.player.data.CatalogRepository
+import com.hugo.player.data.ApiException
 import com.hugo.player.data.DeviceIdentity
 import com.hugo.player.data.PlaylistRepository
 import com.hugo.player.data.RecentPlaylists
@@ -115,9 +116,12 @@ fun PlaylistScreen(
             if (migrated > 0) toast = "$migrated playlist(s) copiadas do ID antigo"
             val list = PlaylistRepository.list(identity.deviceId, identity.deviceKey)
             playlists = list
+            if (DeviceIdentity.isTrialDenied(context)) DeviceIdentity.clearTrialDenied(context)
             list.forEach { summaries[it.id] = PlaylistRepository.localSummary(context, it.id) }
         } catch (e: Exception) {
-            listError = e.message ?: "Não foi possível carregar as playlists."
+            listError = if (DeviceIdentity.isTrialDenied(context) && (e as? ApiException)?.status == 401)
+                "Este aparelho já usou o teste grátis. Para continuar, ative um plano no site hugo.streamflixvip.online com o Device ID e a Key deste aparelho (em Configurações)."
+            else e.message ?: "Não foi possível carregar as playlists."
             if (playlists == null) playlists = emptyList()
         }
     }

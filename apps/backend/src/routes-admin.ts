@@ -25,6 +25,9 @@ export interface AdminDevice {
   transferredTo?: string;
   transferredFrom?: string;
   transferredAt?: string;
+  androidIdHash?: string;
+  trialFlag?: string;
+  trialDenied?: { reason: string; firstDeviceId: string; at: string };
 }
 
 export interface AdminDeps {
@@ -82,6 +85,9 @@ export function createAdminRouter(deps: AdminDeps): Router {
         transferredTo: d.transferredTo,
         transferredFrom: d.transferredFrom,
         transferredAt: d.transferredAt,
+        trialFlag: d.trialFlag,
+        trialDenied: d.trialDenied,
+        hasAndroidId: Boolean(d.androidIdHash),
       }));
     res.json({ devices });
   });

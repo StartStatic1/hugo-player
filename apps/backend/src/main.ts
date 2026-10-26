@@ -16,6 +16,7 @@ import { createPlaylistRouter, type StoredPlaylist } from "./routes-playlists.js
 import { createEpgRouter } from "./routes-epg.js";
 import { createAdminRouter } from "./routes-admin.js";
 import type { PlaylistResolver } from "./routes-catalog.js";
+import { backfillExisting, decideTrial, newDeviceTrial, type TrialFlag, type TrialLedger } from "./trial-ledger.js";
 import { PAID_PLANS, PLAN_LABELS, PLAN_PRICES, planExpiry, type PaidPlan } from "./plans.js";
 
 const PORT = Number(process.env.PORT ?? 8080);
@@ -52,6 +53,12 @@ interface Device {
   transferredTo?: string;
   transferredFrom?: string;
   transferredAt?: string;
+  /** hash do ANDROID_ID (teste grátis 1x por aparelho) */
+  androidIdHash?: string;
+  /** teste liberado sem conferir o ANDROID_ID (revisar) */
+  trialFlag?: TrialFlag;
+  /** teste recusado: este aparelho já usou o teste com outro Device ID */
+  trialDenied?: { reason: "trial_already_used"; firstDeviceId: string; at: string };
 }
 
 interface Db {
@@ -59,6 +66,8 @@ interface Db {
   playlists: StoredPlaylist[];
   orders: PaymentOrder[];
   transfers?: TransferRecord[];
+  /** hash do ANDROID_ID → primeiro aparelho que usou o teste grátis */
+  trialLedger?: TrialLedger;
 }
 
 type PaymentPlan = PaidPlan;
@@ -86,6 +95,7 @@ async function loadDb(): Promise<void> {
     db.devices ??= {};
     db.playlists ??= [];
     db.orders ??= [];
+    db.trialLedger ??= {};
   } catch {
     await fs.mkdir(path.dirname(DATA_FILE), { recursive: true });
     await persist();
@@ -150,6 +160,8 @@ const registerSchema = z.object({
   deviceKey: z.string().min(4).max(64),
   platform: z.string().max(64),
   appVersion: z.string().max(32).optional(),
+  /** Settings.Secure.ANDROID_ID (null quando o aparelho não tem) */
+  androidId: z.string().max(128).nullable().optional(),
 });
 
 const app = express();
@@ -208,29 +220,44 @@ app.post("/devices/register", async (req, res) => {
       existing.lastSeenAt = now.toISOString();
       existing.platform = platform;
       if (appVersion) existing.appVersion = appVersion;
+      // app atualizado: só anota o ANDROID_ID (a licença não muda)
+      backfillExisting(existing, parsed.data.androidId, db.trialLedger ??= {}, now);
       db.devices[storeKey] = existing;
       await persist();
-      return res.json({ registered: true, created: false });
+      return res.json({ registered: true, created: false, ...trialInfo(existing) });
     }
     // Um ID existente não pode trocar de Key só porque recebeu uma Key diferente.
     // A troca após reinstalação deve passar pelo fluxo explícito de recuperação.
     return res.status(409).json({ error: "device_key_mismatch", message: "Este Device ID já está registrado. Use a recuperação para trocar de aparelho." });
   }
   const { salt, hash } = hashKey(deviceKey);
+  const decision = decideTrial(parsed.data.androidId, db.trialLedger ??= {});
+  const trial = newDeviceTrial(decision, storeKey, now, TRIAL_DAYS, db.trialLedger);
   const device: Device = {
     deviceId: storeKey,
     keyHash: hash,
     keySalt: salt,
     platform,
     appVersion: appVersion ?? "",
-    license: { type: "trial", plan: "trial", expiresAt: new Date(now.getTime() + TRIAL_DAYS * 86400000).toISOString() },
+    license: trial.license as Device["license"],
+    ...(trial.androidIdHash ? { androidIdHash: trial.androidIdHash } : {}),
+    ...(trial.trialFlag ? { trialFlag: trial.trialFlag } : {}),
+    ...(trial.trialDenied ? { trialDenied: trial.trialDenied } : {}),
     createdAt: now.toISOString(),
     lastSeenAt: now.toISOString(),
   };
   db.devices[storeKey] = device;
   await persist();
-  res.status(201).json({ registered: true, created: true });
+  res.status(201).json({ registered: true, created: true, ...trialInfo(device) });
 });
+
+/** "denied" = este aparelho já usou o teste grátis (só enquanto não houver plano pago). */
+function trialInfo(device: Device): { trial: "granted" | "denied" | "none"; reason?: string } {
+  if (device.license.type === "premium") return { trial: "none" };
+  // recusado só enquanto não houver licença ativa (pago, transferida ou teste dado pelo admin)
+  if (device.trialDenied && !hasActiveLicense(device)) return { trial: "denied", reason: device.trialDenied.reason };
+  return { trial: device.license.type === "trial" ? "granted" : "none" };
+}
 
 function requireDevice(req: Request, res: Response, next: NextFunction) {
   const device = authDevice(req.header("x-device-id"), req.header("x-device-key"));
@@ -367,6 +394,7 @@ app.get("/devices/status", requireDevice, (req, res) => {
       expiresAt: device.license.expiresAt,
       paymentProvider: device.license.paymentProvider,
       transactionNsu: device.license.transactionNsu,
+      ...(trialInfo(device).trial === "denied" ? { trialDenied: true, reason: "trial_already_used" } : {}),
     },
     playlists: db.playlists.filter((p) => p.deviceId.toUpperCase() === device.deviceId.toUpperCase()).length,
     createdAt: device.createdAt,
