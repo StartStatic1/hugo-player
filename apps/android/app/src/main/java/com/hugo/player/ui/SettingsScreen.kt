@@ -33,6 +33,7 @@ import com.hugo.player.data.DiskCache
 import com.hugo.player.data.HugoApi
 import com.hugo.player.data.WatchHistory
 import com.hugo.player.player.StreamTypes
+import com.hugo.player.ui.components.FocusSurface
 import com.hugo.player.ui.components.HugoColors
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -101,6 +102,35 @@ fun SettingsScreen(deviceId: String, deviceKey: String, onBack: () -> Unit) {
             CompactCopy("API", HugoApi.baseUrl, valueColor = HugoColors.TextMuted) { copy("API", HugoApi.baseUrl) }
         }
 
+        Section("Controle dos pais (PIN adulto)") {
+            fun toggleLock() {
+                val on = !lockOn
+                when {
+                    on && !AdultLock.hasPin(context) -> { enableAfterSet = true; pinStep = "new" }
+                    on -> { AdultLock.setEnabled(context, true); lockOn = true; message = "Bloqueio ligado" }
+                    else -> pinStep = "off"
+                }
+            }
+            // linha inteira focável (controle remoto: OK liga/desliga), com borda no foco
+            FocusSurface(onClick = { toggleLock() }, color = HugoColors.CardAlt, focusedColor = HugoColors.Accent.copy(alpha = 0.35f), focusScale = 1f, focusBorderWidth = 2.dp, shape = RoundedCornerShape(10.dp), modifier = Modifier.fillMaxWidth()) { _ ->
+                Row(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Bloquear categorias adultas: " + if (lockOn) "LIGADO" else "desligado", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                        Text("Adultos / XXX / +18 em TV, filmes e séries pedem PIN (1 vez por sessão)", color = HugoColors.TextMuted, fontSize = 11.sp)
+                    }
+                    Switch(checked = lockOn, onCheckedChange = null, colors = SwitchDefaults.colors(checkedTrackColor = HugoColors.Accent))
+                }
+            }
+            Spacer(Modifier.height(6.dp))
+            FocusSurface(
+                onClick = { enableAfterSet = false; pinStep = if (AdultLock.hasPin(context)) "verify" else "new" },
+                color = HugoColors.CardAlt, focusedColor = HugoColors.Accent.copy(alpha = 0.35f), focusScale = 1f, focusBorderWidth = 2.dp, shape = RoundedCornerShape(10.dp),
+                modifier = Modifier.fillMaxWidth().height(42.dp),
+            ) { _ ->
+                Text(if (AdultLock.hasPin(context)) "Alterar PIN" else "Definir PIN", color = Color.White, fontSize = 13.sp, modifier = Modifier.align(Alignment.CenterStart).padding(horizontal = 12.dp))
+            }
+        }
+
         Section("Diagnóstico") {
             val log = crash
             if (log == null) {
@@ -119,31 +149,6 @@ fun SettingsScreen(deviceId: String, deviceKey: String, onBack: () -> Unit) {
                     OutlinedButton(onClick = { CrashLog.clear(context); crash = null; message = "Registro apagado" }, contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)) { Text("Apagar", fontSize = 12.sp) }
                 }
             }
-        }
-
-        Section("Controle dos pais") {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text("Bloquear categorias adultas", color = Color.White, fontSize = 13.sp)
-                    Text("Adultos / XXX / +18 em TV, filmes e séries pedem PIN (1 vez por sessão)", color = HugoColors.TextMuted, fontSize = 11.sp)
-                }
-                Switch(
-                    checked = lockOn,
-                    onCheckedChange = { on ->
-                        when {
-                            on && !AdultLock.hasPin(context) -> { enableAfterSet = true; pinStep = "new" }
-                            on -> { AdultLock.setEnabled(context, true); lockOn = true; message = "Bloqueio ligado" }
-                            else -> pinStep = "off"
-                        }
-                    },
-                    colors = SwitchDefaults.colors(checkedTrackColor = HugoColors.Accent),
-                )
-            }
-            Spacer(Modifier.height(6.dp))
-            OutlinedButton(
-                onClick = { enableAfterSet = false; pinStep = if (AdultLock.hasPin(context)) "verify" else "new" },
-                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp),
-            ) { Text(if (AdultLock.hasPin(context)) "Alterar PIN" else "Definir PIN", fontSize = 13.sp) }
         }
 
         when (pinStep) {

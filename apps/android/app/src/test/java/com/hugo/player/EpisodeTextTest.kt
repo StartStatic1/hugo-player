@@ -14,6 +14,8 @@ class EpisodeTextTest {
         assertEquals("O Começo", cleanEpisodeTitle("S01E03 - O Começo", "Qualquer"))
         assertEquals("Piloto", cleanEpisodeTitle("Piloto", "Série X"))
         assertEquals("", cleanEpisodeTitle("Série X", "Série X"))
+        assertEquals("", cleanEpisodeTitle("Goblin [L] (2016)", "Goblin [L] (2016)"))
+        assertEquals("", cleanEpisodeTitle("Goblin [L] (2016) S01E05", "Goblin [L] (2016)"))
     }
 
     @Test fun duration() {
