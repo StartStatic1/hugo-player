@@ -138,3 +138,11 @@ test("automática prefere legenda sem SDH e o release que bate com o arquivo", (
   // sem dica: mais baixada entre as não-SDH
   assert.deepEqual(sortOptions(r).map((o) => o.fileId).slice(0, 2), [3, 4]);
 });
+
+test("legenda 'forçada' (só placas) nunca é a primeira escolha", () => {
+  const item = (id: number, release: string, extra: any = {}) => ({ attributes: { language: "pt-BR", download_count: 10, release, files: [{ file_id: id }], ...extra } });
+  const r = rankResults([item(1, "A.Origem.2010.1080p.BluRay.FORCED", { download_count: 9999 }), item(2, "Inception 2010 1080p", { foreign_parts_only: false }), item(3, "Outra", { foreign_parts_only: true, download_count: 5000 })], 6, "A Origem 1080p BluRay");
+  assert.equal(r[0].fileId, 2);
+  assert.equal(r.find((o) => o.fileId === 1)!.forced, true);
+  assert.equal(r.find((o) => o.fileId === 3)!.forced, true);
+});

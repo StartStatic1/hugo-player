@@ -20,6 +20,8 @@ export interface SubtitleOption {
   downloads: number;
   hearingImpaired: boolean;
   machine: boolean;
+  /** só placas/falas em outro idioma ("forced"): não serve como legenda do filme todo */
+  forced?: boolean;
 }
 
 export interface SearchInput {
@@ -55,6 +57,8 @@ export function buildSearchQuery(q: SearchInput): string {
 /** Rótulos que indicam legenda para surdos (descreve sons: "[música]", "[risos]"). */
 const SDH_RE = /(^|[^a-z])(sdh|cc|hi|closed[ ._-]?captions?|hearing[ ._-]?impaired)([^a-z]|$)/i;
 
+const FORCED_RE = /(^|[^a-z])(forced|for[cç]ad[ao]s?|foreign[ ._-]?parts)([^a-z]|$)/i;
+
 /** Pedaços do nome do release que ajudam a acertar a sincronia (fonte, resolução, grupo). */
 export function releaseTokens(s: string): string[] {
   return (s ?? "")
@@ -75,11 +79,11 @@ export function releaseMatch(release: string, hint: string | undefined): number 
 /**
  * Ordem da escolha automática: pt-BR antes de pt-PT; feitas por pessoas antes de tradução automática;
  * SEM descrição de sons (SDH) antes das SDH; depois o release que mais bate com o arquivo; depois mais baixadas.
- * As SDH continuam na lista (para quem escolher manualmente), só não vêm primeiro.
+ * "Forçadas" (só placas) vão para o fim. As SDH continuam na lista (para quem escolher manualmente), só não vêm primeiro.
  */
 export function sortOptions(opts: SubtitleOption[], hint?: string): SubtitleOption[] {
   const score = (o: SubtitleOption) =>
-    (o.lang === "pt-BR" ? 0 : 20) + (o.machine ? 40 : 0) + (o.hearingImpaired ? 15 : 0) - Math.min(4, releaseMatch(o.release, hint)) * 2;
+    (o.forced ? 80 : 0) + (o.lang === "pt-BR" ? 0 : 20) + (o.machine ? 40 : 0) + (o.hearingImpaired ? 15 : 0) - Math.min(4, releaseMatch(o.release, hint)) * 2;
   return [...opts].sort((x, y) => score(x) - score(y) || y.downloads - x.downloads);
 }
 
@@ -98,6 +102,7 @@ export function rankResults(data: any[], limit = 6, hint?: string): SubtitleOpti
       downloads: Number(a.download_count ?? 0),
       hearingImpaired: Boolean(a.hearing_impaired) || SDH_RE.test(release) || SDH_RE.test(String(file.file_name ?? "")),
       machine: Boolean(a.machine_translated || a.ai_translated),
+      forced: Boolean(a.foreign_parts_only) || FORCED_RE.test(release),
     });
   }
   return sortOptions(out, hint).slice(0, limit);
