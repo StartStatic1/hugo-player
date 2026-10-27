@@ -24,4 +24,11 @@ class ListExpiryTest {
         assertNull(ListExpiry.parseIso(null))
         assertNull(ListExpiry.parseIso("null"))
     }
+
+    @Test fun parseExpDate() {
+        assertEquals(1_795_392_000_000L, ListExpiry.parseExpDate("1795392000"))
+        assertEquals(1_795_392_000_000L, ListExpiry.parseExpDate(1795392000))
+        assertEquals(1_795_392_000_000L, ListExpiry.parseExpDate(1.795392E9))
+        for (v in listOf(null, "", "0", "null", "Ilimitado", 0)) assertNull(ListExpiry.parseExpDate(v))
+    }
 }

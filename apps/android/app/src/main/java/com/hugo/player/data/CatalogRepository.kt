@@ -313,29 +313,16 @@ class CatalogRepository(context: Context) {
             try { input.close() } catch (_: Exception) {}
         }
         if (channels.isNotEmpty()) dao.insertChannels(channels)
-        account.let { a -> if (a == null) ListExpiry.clear(appContext, playlistId) else ListExpiry.save(appContext, playlistId, a.first, a.second) }
+        // sem "account" (M3U ou servidor antigo): não marca nada; a conferência leve (ListExpiry.refreshIfStale) resolve
+        account?.let { a -> ListExpiry.save(appContext, playlistId, a.first, a.second) }
         return total
     }
 
     /** Lista baixada no aparelho: se for Xtream, pergunta o vencimento direto ao provedor (rápido; falhar não importa). */
-    private fun saveAccountLocal(playlistId: String, playlistUrl: String) {
-        runCatching {
-            val u = android.net.Uri.parse(playlistUrl)
-            val user = u.getQueryParameter("username") ?: return ListExpiry.clear(appContext, playlistId)
-            val pass = u.getQueryParameter("password") ?: return ListExpiry.clear(appContext, playlistId)
-            val api = android.net.Uri.Builder().scheme(u.scheme).encodedAuthority(u.encodedAuthority).path("/player_api.php")
-                .appendQueryParameter("username", user).appendQueryParameter("password", pass).build().toString()
-            val conn = URL(api).openConnection() as java.net.HttpURLConnection
-            conn.connectTimeout = 8000; conn.readTimeout = 8000
-            conn.setRequestProperty("User-Agent", AppSettings.userAgent)
-            try {
-                if (conn.responseCode !in 200..299) return
-                val ui = org.json.JSONObject(conn.inputStream.bufferedReader().use { it.readText() }).optJSONObject("user_info") ?: return
-                val exp = ui.opt("exp_date")?.toString()?.trim().orEmpty()
-                val secs = exp.toLongOrNull()?.takeIf { it > 0 }
-                ListExpiry.save(appContext, playlistId, secs?.times(1000), unlimited = secs == null)
-            } finally { conn.disconnect() }
-        }
+    private suspend fun saveAccountLocal(playlistId: String, playlistUrl: String) {
+        val u = android.net.Uri.parse(playlistUrl)
+        if (u.getQueryParameter("username") == null || u.getQueryParameter("password") == null) ListExpiry.markNotXtream(appContext, playlistId)
+        else ListExpiry.fromProvider(appContext, playlistId, playlistUrl)
     }
 
     private suspend fun importM3uFullyLocal(

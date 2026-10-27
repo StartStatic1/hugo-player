@@ -535,7 +535,9 @@ private fun PlaylistCard(
                 Text(summaryLine(summary, playlist), color = HugoColors.TextMuted, fontSize = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 // vencimento da conta do provedor (só Xtream; relido quando a lista é atualizada)
                 val ctx = androidx.compose.ui.platform.LocalContext.current
-                val expiry = remember(summary, playlist.id) { com.hugo.player.data.ListExpiry.get(ctx, playlist.id) }
+                val expiryVersion by com.hugo.player.data.ListExpiry.version.collectAsState()
+                val expiry = remember(summary, playlist.id, expiryVersion) { com.hugo.player.data.ListExpiry.get(ctx, playlist.id) }
+                LaunchedEffect(playlist.id) { com.hugo.player.data.ListExpiry.refreshIfStale(ctx, playlist.id, playlist.url) }
                 if (expiry != null) {
                     Spacer(Modifier.height(3.dp))
                     Text(expiry.label, color = expiryColor(expiry.level), fontSize = 12.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)

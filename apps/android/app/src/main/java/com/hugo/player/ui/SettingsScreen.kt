@@ -114,7 +114,10 @@ fun SettingsScreen(deviceId: String, deviceKey: String, onBack: () -> Unit) {
 
     val playlistId = LiveTvCache.playlistId
     val playlistName = LiveTvCache.playlistName
-    val expiry = remember(playlistId) { playlistId?.let { ListExpiry.get(context, it) } }
+    val expiryVersion by ListExpiry.version.collectAsState()
+    val expiry = remember(playlistId, expiryVersion) { playlistId?.let { ListExpiry.get(context, it) } }
+    val expiryState = remember(playlistId, expiryVersion) { playlistId?.let { ListExpiry.state(context, it) } }
+    LaunchedEffect(playlistId) { playlistId?.let { ListExpiry.refreshIfStale(context, it, LiveTvCache.playlistUrl) } }
 
     fun copy(label: String, value: String) {
         val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
@@ -199,8 +202,10 @@ fun SettingsScreen(deviceId: String, deviceKey: String, onBack: () -> Unit) {
                                     "Vencimento da lista",
                                     when {
                                         playlistId == null -> "—"
-                                        expiry == null -> "Não informado pela lista"
-                                        else -> expiry.label.removePrefix("Lista ")
+                                        expiry != null -> expiry.label.removePrefix("Lista ")
+                                        expiryState == ListExpiry.State.NOT_XTREAM -> "Lista M3U não informa vencimento"
+                                        ListExpiry.isChecking(playlistId) || expiryState == ListExpiry.State.UNCHECKED -> "Verificando…"
+                                        else -> "—"
                                     },
                                     null, m,
                                     valueColor = expiry?.let { if (it.level == ListExpiry.Level.OK) Color.White else expiryColor(it.level) } ?: HugoColors.TextMuted,
@@ -331,9 +336,8 @@ fun SettingsScreen(deviceId: String, deviceKey: String, onBack: () -> Unit) {
                             InfoCard("Site", "hugo.streamflixvip.online", "Ativar e gerenciar dispositivos · OK abre", Modifier.weight(1f), onClick = {
                                 runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(SITE_URL))) }.onFailure { message = "Abra $SITE_URL no celular" }
                             }, trailing = Icons.Outlined.OpenInNew)
-                            if (twoCols) InfoCard("Servidor (API)", HugoApi.baseUrl, "OK para copiar", Modifier.weight(1f), valueColor = HugoColors.TextMuted, onClick = { copy("API", HugoApi.baseUrl) })
+                            if (twoCols) Spacer(Modifier.weight(1f))
                         }
-                        if (!twoCols) InfoCard("Servidor (API)", HugoApi.baseUrl, "OK para copiar", Modifier.fillMaxWidth(), valueColor = HugoColors.TextMuted, onClick = { copy("API", HugoApi.baseUrl) })
                     }
                 }
 

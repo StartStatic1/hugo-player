@@ -89,7 +89,10 @@ fun HomeScreen(playlistId: String, playlistName: String, onNavigate: (String) ->
     var continueItems by remember { mutableStateOf(loadContinue()) }
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
     val syncedAt = remember(playlistId) { PlaylistRepository.syncedAt(context, playlistId) }
-    val expiry = remember(playlistId) { com.hugo.player.data.ListExpiry.get(context, playlistId) }
+    // vencimento: confere em segundo plano (consulta leve) se nunca viu ou tem mais de 12 h
+    val expiryVersion by com.hugo.player.data.ListExpiry.version.collectAsState()
+    val expiry = remember(playlistId, expiryVersion) { com.hugo.player.data.ListExpiry.get(context, playlistId) }
+    LaunchedEffect(playlistId) { com.hugo.player.data.ListExpiry.refreshIfStale(context, playlistId, LiveTvCache.playlistUrl) }
     val favCount = remember(playlistId) { runCatching { WatchHistory.listFavorites(context).count { it.playlistId == playlistId } }.getOrDefault(0) }
     val liveFocus = remember { FocusRequester() }
     var menuFor by remember { mutableStateOf<WatchHistory.ProgressItem?>(null) }
