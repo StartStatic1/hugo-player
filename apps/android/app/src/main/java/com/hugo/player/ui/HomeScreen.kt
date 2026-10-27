@@ -75,7 +75,8 @@ private val ShortcutSettings = Color(0xFF94A3B8)
 /**
  * Home: topo (logo, playlist em uso = botão "Trocar", relógio), 3 cartões grandes
  * TV ao Vivo / Filmes / Séries, "Continuar assistindo" (uma série = um cartão; segurar OK remove)
- * e 4 atalhos. Tudo por D-pad; foco inicial em "TV ao Vivo".
+ * Favoritos/Playlists (cartões médios), atalhos no topo (Atualizar, Playlist, Ajustes) e rodapé com o vencimento.
+ * D-pad: topo → cartões grandes → Favoritos/Playlists → Continuar assistindo; foco inicial em "TV ao Vivo".
  * Rotas emitidas: live, movies, series, playlists, settings, refresh, favorites.
  */
 @Composable
@@ -88,6 +89,8 @@ fun HomeScreen(playlistId: String, playlistName: String, onNavigate: (String) ->
     var continueItems by remember { mutableStateOf(loadContinue()) }
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
     val syncedAt = remember(playlistId) { PlaylistRepository.syncedAt(context, playlistId) }
+    val expiry = remember(playlistId) { com.hugo.player.data.ListExpiry.get(context, playlistId) }
+    val favCount = remember(playlistId) { runCatching { WatchHistory.listFavorites(context).count { it.playlistId == playlistId } }.getOrDefault(0) }
     val liveFocus = remember { FocusRequester() }
     var menuFor by remember { mutableStateOf<WatchHistory.ProgressItem?>(null) }
     var opening by remember { mutableStateOf<String?>(null) }
@@ -167,6 +170,13 @@ fun HomeScreen(playlistId: String, playlistName: String, onNavigate: (String) ->
                 Text(SimpleDateFormat("HH:mm", Locale("pt", "BR")).format(Date(now)), color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
                 Text(SimpleDateFormat("EEE, d 'de' MMM", Locale("pt", "BR")).format(Date(now)), color = HugoColors.TextMuted, fontSize = 12.sp)
             }
+            Spacer(Modifier.width(18.dp))
+            // atalhos do topo (canto direito): ícone + rótulo curto
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                TopAction("Atualizar", Icons.Rounded.Refresh, ShortcutRefresh) { onNavigate("refresh") }
+                TopAction("Trocar", Icons.Rounded.SwapHoriz, ShortcutPlaylists) { onNavigate("playlists") }
+                TopAction("Ajustes", Icons.Rounded.Settings, ShortcutSettings) { onNavigate("settings") }
+            }
         }
 
         Spacer(Modifier.height(24.dp))
@@ -175,6 +185,12 @@ fun HomeScreen(playlistId: String, playlistName: String, onNavigate: (String) ->
             MainTile("TV ao Vivo", countLabel(counts.first, "canais"), Icons.Rounded.LiveTv, LiveBrush, Modifier.weight(1f).focusRequester(liveFocus)) { tileClick("live") }
             MainTile("Filmes", countLabel(counts.second, "filmes"), Icons.Rounded.Movie, MoviesBrush, Modifier.weight(1f)) { tileClick("movies") }
             MainTile("Séries", countLabel(counts.third, "séries"), Icons.Rounded.Subscriptions, SeriesBrush, Modifier.weight(1f)) { tileClick("series") }
+        }
+
+        Spacer(Modifier.height(16.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(16.dp), modifier = Modifier.fillMaxWidth()) {
+            ShortcutChip("Favoritos", favCount.takeIf { it > 0 }?.let { "$it salvo(s) nesta playlist" } ?: "Canais, filmes e séries que você marcar", Icons.Rounded.Favorite, ShortcutFavorites, Modifier.weight(1f)) { onNavigate("favorites") }
+            ShortcutChip("Playlists", "Trocar, adicionar ou editar listas", Icons.AutoMirrored.Rounded.FormatListBulleted, ShortcutPlaylists, Modifier.weight(1f)) { onNavigate("playlists") }
         }
 
         if (continueItems.isNotEmpty()) {
@@ -194,17 +210,20 @@ fun HomeScreen(playlistId: String, playlistName: String, onNavigate: (String) ->
             }
         }
 
-        Spacer(Modifier.height(22.dp))
-
-        Row(horizontalArrangement = Arrangement.spacedBy(14.dp), modifier = Modifier.fillMaxWidth()) {
-            ShortcutChip("Playlists", "Trocar ou adicionar", Icons.AutoMirrored.Rounded.FormatListBulleted, ShortcutPlaylists, Modifier.weight(1f)) { onNavigate("playlists") }
-            ShortcutChip("Favoritos", "Seus salvos", Icons.Rounded.Favorite, ShortcutFavorites, Modifier.weight(1f)) { onNavigate("favorites") }
-            ShortcutChip(
-                "Atualizar lista",
-                syncedAt?.let { "atualizada " + DateUtils.getRelativeTimeSpanString(it, now, DateUtils.MINUTE_IN_MILLIS).toString().lowercase(Locale("pt", "BR")) } ?: "Baixar canais e filmes novos",
-                Icons.Rounded.Refresh, ShortcutRefresh, Modifier.weight(1f),
-            ) { onNavigate("refresh") }
-            ShortcutChip("Configurações", "Ajustes do app", Icons.Rounded.Settings, ShortcutSettings, Modifier.weight(1f)) { onNavigate("settings") }
+        // rodapé discreto: playlist em uso · vencimento (Xtream) · última atualização
+        Spacer(Modifier.height(26.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(playlistName, color = HugoColors.TextDim, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.widthIn(max = 320.dp))
+            if (expiry != null) {
+                Text(
+                    " · " + expiry.label.removePrefix("Lista "),
+                    color = if (expiry.level == com.hugo.player.data.ListExpiry.Level.OK || expiry.level == com.hugo.player.data.ListExpiry.Level.UNLIMITED) HugoColors.TextDim else expiryColor(expiry.level),
+                    fontSize = 12.sp, fontWeight = if (expiry.level == com.hugo.player.data.ListExpiry.Level.OK || expiry.level == com.hugo.player.data.ListExpiry.Level.UNLIMITED) FontWeight.Normal else FontWeight.SemiBold, maxLines = 1,
+                )
+            }
+            syncedAt?.let {
+                Text(" · atualizada " + DateUtils.getRelativeTimeSpanString(it, now, DateUtils.MINUTE_IN_MILLIS).toString().lowercase(Locale("pt", "BR")), color = HugoColors.TextDim, fontSize = 12.sp, maxLines = 1)
+            }
         }
     }
 
@@ -321,13 +340,34 @@ private fun MainTile(title: String, subtitle: String, icon: ImageVector, brush: 
     }
 }
 
+/** Botão do topo: ícone num quadrado arredondado + rótulo curto; foco = fundo na cor do atalho e borda. */
+@Composable
+private fun TopAction(label: String, icon: ImageVector, tint: Color, onClick: () -> Unit) {
+    FocusSurface(
+        onClick = onClick,
+        modifier = Modifier.width(72.dp).height(62.dp),
+        shape = RoundedCornerShape(14.dp),
+        color = Color(0x12FFFFFF),
+        focusedColor = tint.copy(alpha = 0.22f),
+        focusBorderWidth = 2.dp,
+        focusBorderColor = tint,
+        focusScale = 1.05f,
+    ) { focused ->
+        Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+            Icon(icon, contentDescription = label, tint = if (focused) Color.White else tint, modifier = Modifier.size(24.dp))
+            Spacer(Modifier.height(4.dp))
+            Text(label, color = if (focused) Color.White else HugoColors.TextMuted, fontSize = 11.sp, fontWeight = FontWeight.Medium, maxLines = 1)
+        }
+    }
+}
+
 /** Atalho: cartão arredondado com ícone num círculo colorido, nome e uma linha de apoio. Foco = realce na cor do atalho. */
 @Composable
 private fun ShortcutChip(title: String, caption: String?, icon: ImageVector, tint: Color, modifier: Modifier, onClick: () -> Unit) {
     val shape = RoundedCornerShape(16.dp)
     FocusSurface(
         onClick = onClick,
-        modifier = modifier.height(66.dp),
+        modifier = modifier.height(78.dp),
         shape = shape,
         color = Color(0x0FFFFFFF),
         focusedColor = tint.copy(alpha = 0.18f),
@@ -342,15 +382,15 @@ private fun ShortcutChip(title: String, caption: String?, icon: ImageVector, tin
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Box(
-                Modifier.size(38.dp).clip(CircleShape).background(if (focused) tint else tint.copy(alpha = 0.16f)),
+                Modifier.size(44.dp).clip(CircleShape).background(if (focused) tint else tint.copy(alpha = 0.16f)),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(icon, null, tint = if (focused) Color(0xFF0B0D16) else tint, modifier = Modifier.size(21.dp))
+                Icon(icon, null, tint = if (focused) Color(0xFF0B0D16) else tint, modifier = Modifier.size(24.dp))
             }
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
-                Text(title, color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                if (caption != null) Text(caption, color = if (focused) Color.White.copy(alpha = 0.8f) else HugoColors.TextDim, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(title, color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                if (caption != null) Text(caption, color = if (focused) Color.White.copy(alpha = 0.8f) else HugoColors.TextDim, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }
     }
