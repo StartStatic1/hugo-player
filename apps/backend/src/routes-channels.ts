@@ -1,7 +1,7 @@
 import { Router } from "express";
 import fs from "fs";
 import { classifyEntry, parseEpisode } from "./content/classify.js";
-import { parseXtreamUrl, buildCatalogFromXtream, fetchSeriesInfo } from "./content/xtream.js";
+import { parseXtreamUrl, buildCatalogFromXtream, fetchSeriesInfo, apiUrl, parseXtreamAccount } from "./content/xtream.js";
 import { blockKey, isBlocked, markBlocked } from "./content/blocked-hosts.js";
 import { rememberChannels } from "./content/known-channels.js";
 import { isRegisteredUrl, noteDeprecated, playlistUrlFor, type StoredPlaylist } from "./playlist-access.js";
@@ -86,6 +86,29 @@ channelsRouter.get("/series-episodes", sourceGate, async (req, res) => {
     res.json({ name: info.name, cover: info.cover, plot: info.plot, episodes });
   } catch (e: any) {
     res.status(502).json({ error: e.message || "series_info_failed" });
+  }
+});
+
+/**
+ * Só o vencimento da conta Xtream (user_info do login da player_api): consulta leve,
+ * sem baixar a lista nem mexer no cache. M3U = { account: null, xtream: false }.
+ */
+channelsRouter.get("/account", sourceGate, async (req, res) => {
+  const playlistUrl = (res.locals.playlistUrl ?? req.query.url) as string;
+  if (!playlistUrl) return res.status(400).json({ error: "missing_playlist" });
+  const xt = parseXtreamUrl(playlistUrl);
+  if (!xt) return res.json({ xtream: false, account: null });
+  try {
+    const r = await fetch(apiUrl(xt), {
+      headers: { "User-Agent": "VLC/3.0.20 LibVLC/3.0.20", Accept: "*/*" },
+      signal: AbortSignal.timeout(12_000),
+    });
+    if (!r.ok) return res.status(502).json({ error: "upstream_" + r.status });
+    const account = parseXtreamAccount(await r.json().catch(() => null));
+    if (!account) return res.status(502).json({ error: "no_user_info" });
+    res.json({ xtream: true, account });
+  } catch (e: any) {
+    res.status(504).json({ error: e?.name === "TimeoutError" ? "timeout" : "account_failed" });
   }
 });
 

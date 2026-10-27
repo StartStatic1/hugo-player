@@ -121,3 +121,28 @@ test("mapa de bloqueio expira e tem limite de tamanho", () => {
   assert.ok(isBlocked(`h${BLOCK_MAX_ENTRIES + 49}|u`, 2));
   assert.ok(!isBlocked("h0|u", 2));
 });
+
+test("/account: só o login da player_api, devolve o vencimento", async () => {
+  handler = (u) => u.pathname === "/player_api.php" && !u.searchParams.get("action")
+    ? Response.json({ user_info: { exp_date: "1795392000", status: "Active" } })
+    : new Response("nope", { status: 500 });
+  const r = await realFetch(`${base}/account?url=${encodeURIComponent(playlist())}`);
+  const body = (await r.json()) as any;
+  assert.equal(r.status, 200);
+  assert.equal(body.xtream, true);
+  assert.equal(body.account.expiresAt, new Date(1795392000 * 1000).toISOString());
+  assert.deepEqual(providerCalls, ["/player_api.php"]);
+});
+
+test("/account: exp_date null = sem data; provedor fora = erro (app tenta direto)", async () => {
+  handler = () => Response.json({ user_info: { exp_date: null } });
+  let r = await realFetch(`${base}/account?url=${encodeURIComponent(playlist())}`);
+  let body = (await r.json()) as any;
+  assert.equal(body.account.expiresAt, null);
+  assert.equal(body.account.unlimited, true);
+  handler = () => new Response("forbidden", { status: 403 });
+  r = await realFetch(`${base}/account?url=${encodeURIComponent(playlist())}`);
+  body = (await r.json()) as any;
+  assert.equal(r.status, 502);
+  assert.equal(body.error, "upstream_403");
+});
