@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<meta name="robots" content="noindex">
+<title>Hugo Player · Área do revendedor</title>
+<style>
+:root{--bg:#07080f;--bg2:#0c0e18;--card:#12141f;--card2:#181b2a;--primary:#8b5cf6;--pink:#ec4899;--ok:#34d399;--err:#f87171;--warn:#fbbf24;--text:#f1f5f9;--muted:#94a3b8;--border:#1f2638}
+*{box-sizing:border-box}html,body{margin:0}
+body{font-family:Inter,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;background:radial-gradient(1200px 600px at 10% -10%,#1e1b4b55,transparent),radial-gradient(900px 500px at 110% 10%,#83184355,transparent),var(--bg);color:var(--text);min-height:100vh}
+a{color:var(--primary)}.hidden{display:none!important}.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+.topbar{position:sticky;top:0;z-index:5;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 24px;background:#07080fcc;backdrop-filter:blur(10px);border-bottom:1px solid var(--border)}
+.brand{display:flex;align-items:center;gap:10px;font-weight:800;font-size:19px}.brand .mark{width:32px;height:32px;border-radius:10px;display:grid;place-items:center;background:linear-gradient(135deg,var(--primary),var(--pink))}.brand span{color:var(--primary)}
+.wrap{max-width:1050px;margin:0 auto;padding:28px 20px 80px}
+.card{background:linear-gradient(180deg,var(--card),#0f111b);border:1px solid var(--border);border-radius:16px;padding:24px;margin-bottom:18px}
+h1{font-size:26px;margin:0 0 6px}h2{font-size:18px;margin:0 0 6px}.desc{color:var(--muted);font-size:14px;margin:0 0 16px;line-height:1.5}
+label{display:block;font-size:12px;color:var(--muted);margin:12px 0 6px;font-weight:600;text-transform:uppercase;letter-spacing:.5px}
+input{width:100%;padding:12px 13px;border-radius:11px;border:1px solid var(--border);background:var(--bg2);color:var(--text);font-size:15px}input:focus{outline:none;border-color:var(--primary)}
+button{font:inherit;cursor:pointer;border:none;border-radius:11px}button:disabled{opacity:.55;cursor:not-allowed}
+.btn{padding:12px 17px;font-weight:650;background:var(--primary);color:#fff}.btn.ghost{background:var(--card2);border:1px solid var(--border)}.btn.sm{padding:8px 12px;font-size:13px}.btn.ok{background:#059669}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:12px}.tabs{display:flex;gap:8px;margin-bottom:10px}.tabs button{padding:9px 14px;background:var(--card2);color:var(--text);border:1px solid var(--border)}.tabs button.on{background:var(--primary)}
+.status{margin-top:12px;font-size:14px;white-space:pre-wrap}.status.ok{color:var(--ok)}.status.err{color:var(--err)}.status.warn{color:var(--warn)}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}.stat{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:14px}.stat b{display:block;font-size:28px}.stat small{color:var(--muted)}
+.packs{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}.pack{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:16px;display:flex;flex-direction:column;gap:6px}.pack b{font-size:22px}.pack .per{color:var(--muted);font-size:13px}.pack .btn{margin-top:auto}
+table{width:100%;border-collapse:collapse;font-size:14px}th,td{text-align:left;padding:9px 8px;border-bottom:1px solid var(--border);vertical-align:top}th{color:var(--muted);font-size:12px;text-transform:uppercase}
+.badge{display:inline-block;padding:3px 9px;border-radius:999px;font-size:12px;font-weight:600;background:var(--card2);border:1px solid var(--border)}.badge.active,.badge.approved{color:var(--ok)}.badge.expired,.badge.blocked,.badge.revoked,.badge.rejected{color:var(--err)}.badge.pending,.badge.transferred{color:var(--warn)}
+.confirm{background:#1b1630;border:1px solid #8b5cf680;border-radius:12px;padding:16px;margin-top:14px}.plus{color:var(--ok)}.minus{color:var(--err)}
+.scroll{overflow-x:auto}
+@media(max-width:800px){.packs{grid-template-columns:1fr 1fr}.row,.stats{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<header class="topbar">
+  <div class="brand"><div class="mark">▶</div>Hugo <span>Player</span> · Revenda</div>
+  <div id="sessionBox" class="hidden"><span id="whoName" style="color:var(--muted);font-size:13px;margin-right:10px"></span><button class="btn ghost sm" id="logoutBtn" type="button">Sair</button></div>
+</header>
+<main class="wrap">
+
+<section id="authView">
+  <div class="card" style="max-width:520px;margin:20px auto">
+    <div class="tabs"><button type="button" id="tabLogin" class="on">Entrar como revendedor</button><button type="button" id="tabSignup">Quero ser revendedor</button></div>
+    <form id="loginForm">
+      <h1>Entrar</h1>
+      <p class="desc">Área para revendedores aprovados ativarem clientes com créditos.</p>
+      <label for="lEmail">E-mail</label><input id="lEmail" type="email" autocomplete="username" required>
+      <label for="lPass">Senha</label><input id="lPass" type="password" autocomplete="current-password" required>
+      <div style="margin-top:16px"><button class="btn" type="submit">Entrar</button></div>
+      <div id="loginStatus" class="status"></div>
+    </form>
+    <form id="signupForm" class="hidden">
+      <h1>Quero ser revendedor</h1>
+      <p class="desc">Preencha seus dados. Seu cadastro fica <b>aguardando aprovação</b>; depois de aprovado você entra aqui, compra créditos e ativa seus clientes (1 crédito = 1 ano de Hugo Player Premium).</p>
+      <label for="sName">Nome</label><input id="sName" maxlength="80" autocomplete="name" required>
+      <label for="sEmail">E-mail</label><input id="sEmail" type="email" maxlength="120" autocomplete="email" required>
+      <label for="sWhats">WhatsApp</label><input id="sWhats" maxlength="30" autocomplete="tel" placeholder="(00) 00000-0000">
+      <div class="row">
+        <div><label for="sPass">Senha (mín. 8)</label><input id="sPass" type="password" minlength="8" autocomplete="new-password" required></div>
+        <div><label for="sPass2">Repita a senha</label><input id="sPass2" type="password" minlength="8" autocomplete="new-password" required></div>
+      </div>
+      <div style="margin-top:16px"><button class="btn" type="submit">Enviar cadastro</button></div>
+      <div id="signupStatus" class="status"></div>
+    </form>
+  </div>
+</section>
+
+<section id="panelView" class="hidden">
+  <div id="statusBanner" class="card hidden"></div>
+  <div class="card">
+    <div class="stats">
+      <div class="stat"><small>Saldo</small><b id="balance">–</b><small>créditos (1 crédito = 1 ano)</small></div>
+      <div class="stat"><small>Clientes ativados</small><b id="clientCount">–</b><small>aparelhos</small></div>
+      <div class="stat"><small>Situação da conta</small><b id="accStatus" style="font-size:20px">–</b><small id="accEmail"></small></div>
+    </div>
+    <div id="payStatus" class="status"></div>
+  </div>
+
+  <div class="card" id="activateCard">
+    <h2>Ativar cliente (1 ano)</h2>
+    <p class="desc">Peça ao cliente o <b>Device ID</b> e a <b>Key</b> que aparecem na tela do app Hugo Player. Se o aparelho ainda tiver dias, o ano novo é <b>somado</b>.</p>
+    <form id="actForm">
+      <div class="row">
+        <div><label for="aId">Device ID do cliente</label><input id="aId" class="mono" maxlength="128" autocomplete="off" required></div>
+        <div><label for="aKey">Key do cliente</label><input id="aKey" class="mono" maxlength="64" autocomplete="off" required></div>
+      </div>
+      <div style="margin-top:14px"><button class="btn" type="submit" id="actCheckBtn">Conferir aparelho</button></div>
+    </form>
+    <div id="actConfirm" class="confirm hidden"></div>
+    <div id="actStatus" class="status"></div>
+  </div>
+
+  <div class="card" id="buyCard">
+    <h2>Comprar créditos</h2>
+    <p class="desc">Pagamento por Pix ou cartão (InfinitePay). Os créditos entram automaticamente depois da confirmação.</p>
+    <div class="packs" id="packs"></div>
+    <div id="buyStatus" class="status"></div>
+  </div>
+
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap"><h2>Meus clientes</h2><button class="btn ghost sm" type="button" id="reloadBtn">↻ Atualizar</button></div>
+    <div class="scroll"><table><thead><tr><th>Aparelho</th><th>Plano</th><th>Vence em</th><th>Situação</th><th></th></tr></thead><tbody id="clients"></tbody></table></div>
+    <div id="renewStatus" class="status"></div>
+  </div>
+
+  <div class="card">
+    <h2>Histórico de créditos</h2>
+    <div class="scroll"><table><thead><tr><th>Data</th><th>Movimento</th><th>Créditos</th><th>Detalhe</th></tr></thead><tbody id="ledger"></tbody></table></div>
+  </div>
+</section>
+</main>
+<script>
+"use strict";
+var API = (new URLSearchParams(location.search).get("api") || "https://api-hugo.streamflixvip.online").replace(/\/+$/, "");
+var KEY = "hugo.reseller";
+var token = sessionStorage.getItem(KEY) || "";
+var me = null, packs = [], pendingDevice = null;
+function $(id) { return document.getElementById(id); }
+function esc(v) { return String(v == null ? "" : v).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); }
+function money(c) { return (c / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" }); }
+function date(s) { if (!s) return "sem vencimento"; var d = new Date(s); return isNaN(d) ? "–" : d.toLocaleDateString("pt-BR"); }
+function dateTime(s) { var d = new Date(s); return isNaN(d) ? "–" : d.toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" }); }
+function show(el, msg, kind) { el.className = "status " + (kind || ""); el.textContent = msg || ""; }
+var STATUS = { pending: "Aguardando aprovação", approved: "Aprovada", rejected: "Recusada", blocked: "Bloqueada" };
+var CLIENT = { active: "Ativo", expired: "Vencido", blocked: "Bloqueado", revoked: "Revogado", transferred: "Transferido", missing: "Não encontrado" };
+var KIND = { purchase: "Compra de pacote", activation: "Ativação", admin_add: "Crédito do admin", admin_remove: "Ajuste do admin", refund: "Estorno de pacote", undo: "Ativação desfeita (devolvido)" };
+var ERR = {
+  invalid_login: "E-mail ou senha incorretos.", too_many_attempts: "Muitas tentativas. Espere alguns minutos e tente de novo.",
+  email_taken: "Este e-mail já tem cadastro. Use Entrar.", validation_error: "Confira os campos preenchidos.",
+  reseller_rejected: "Seu cadastro de revendedor foi recusado.", reseller_not_approved: "Sua conta ainda não está liberada para isso.",
+  insufficient_credits: "Saldo insuficiente. Compre créditos para ativar.", invalid_device: "Device ID ou Key não conferem. Confira na tela do app do cliente.",
+  activation_rate_limited: "Limite de ativações por hora atingido. Tente mais tarde.", payment_not_configured: "Pagamento indisponível no momento. Fale com o administrador.",
+  checkout_create_failed: "Não foi possível abrir o pagamento agora. Tente de novo.", not_your_client: "Este aparelho não está na sua lista de clientes.",
+  session_expired: "Sua sessão expirou. Entre de novo.", not_logged_in: "Entre de novo."
+};
+function errMsg(e) { return (e && (e.message || ERR[e.error])) || "Algo deu errado. Tente de novo."; }
+
+async function api(method, path, body) {
+  var headers = { "Content-Type": "application/json" };
+  if (token) headers.Authorization = "Bearer " + token;
+  var res;
+  try { res = await fetch(API + path, { method: method, headers: headers, body: body === undefined ? undefined : JSON.stringify(body) }); }
+  catch (e) { throw { error: "network", message: "Sem conexão com o servidor. Verifique a internet." }; }
+  var data = {}; try { data = await res.json(); } catch (e) {}
+  if (res.status === 401 && path !== "/reseller/login") { logout(true); }
+  if (!res.ok) { data.status = res.status; throw data; }
+  return data;
+}
+
+function setTab(signup) {
+  $("tabLogin").classList.toggle("on", !signup); $("tabSignup").classList.toggle("on", signup);
+  $("loginForm").classList.toggle("hidden", signup); $("signupForm").classList.toggle("hidden", !signup);
+}
+$("tabLogin").onclick = function () { setTab(false); };
+$("tabSignup").onclick = function () { setTab(true); };
+
+$("signupForm").onsubmit = async function (ev) {
+  ev.preventDefault();
+  var st = $("signupStatus");
+  if ($("sPass").value !== $("sPass2").value) return show(st, "As senhas não são iguais.", "err");
+  try {
+    await api("POST", "/reseller/signup", { name: $("sName").value, email: $("sEmail").value, whatsapp: $("sWhats").value || undefined, password: $("sPass").value });
+    $("signupForm").reset();
+    show(st, "Cadastro enviado! Ele fica aguardando aprovação do administrador. Você já pode entrar para acompanhar.", "ok");
+  } catch (e) { show(st, errMsg(e), "err"); }
+};
+
+$("loginForm").onsubmit = async function (ev) {
+  ev.preventDefault();
+  var st = $("loginStatus"); show(st, "Entrando…");
+  try {
+    var data = await api("POST", "/reseller/login", { email: $("lEmail").value, password: $("lPass").value });
+    token = data.token; sessionStorage.setItem(KEY, token); $("lPass").value = "";
+    show(st, ""); await enterPanel();
+  } catch (e) { show(st, errMsg(e), "err"); }
+};
+
+function logout(expired) {
+  if (token && !expired) { fetch(API + "/reseller/logout", { method: "POST", headers: { Authorization: "Bearer " + token } }).catch(function () {}); }
+  token = ""; me = null; sessionStorage.removeItem(KEY);
+  $("panelView").classList.add("hidden"); $("sessionBox").classList.add("hidden"); $("authView").classList.remove("hidden");
+  if (expired) show($("loginStatus"), "Sua sessão terminou. Entre de novo.", "warn");
+}
+$("logoutBtn").onclick = function () { logout(false); };
+
+async function enterPanel() {
+  $("authView").classList.add("hidden"); $("panelView").classList.remove("hidden"); $("sessionBox").classList.remove("hidden");
+  await refresh();
+  await handlePaymentReturn();
+}
+
+async function refresh() {
+  var data = await api("GET", "/reseller/me");
+  me = data.reseller; packs = data.packs || [];
+  $("whoName").textContent = me.name;
+  $("balance").textContent = me.balance;
+  $("balance").style.color = me.balance < 0 ? "var(--err)" : "";
+  $("accStatus").innerHTML = '<span class="badge ' + esc(me.status) + '">' + esc(STATUS[me.status] || me.status) + "</span>";
+  $("accEmail").textContent = me.email;
+  var banner = $("statusBanner"), approved = me.status === "approved";
+  if (me.status === "pending") { banner.innerHTML = "<h2>Cadastro aguardando aprovação</h2><p class=desc>Assim que o administrador aprovar, você poderá comprar créditos e ativar clientes aqui.</p>"; }
+  else if (me.status === "blocked") { banner.innerHTML = "<h2>Conta bloqueada</h2><p class=desc>" + esc(me.blockedReason || "Fale com o administrador.") + "</p>"; }
+  else if (me.status === "rejected") { banner.innerHTML = "<h2>Cadastro recusado</h2><p class=desc>Fale com o administrador.</p>"; }
+  banner.classList.toggle("hidden", approved);
+  $("activateCard").classList.toggle("hidden", !approved);
+  $("buyCard").classList.toggle("hidden", !approved);
+  renderPacks();
+  await Promise.all([loadClients(), loadLedger()]);
+}
+
+function renderPacks() {
+  $("packs").innerHTML = packs.map(function (p) {
+    return '<div class="pack"><b>' + esc(p.credits) + ' créditos</b><div>' + esc(money(p.amount)) + '</div><div class="per">' + esc(money(Math.round(p.amount / p.credits))) + ' por crédito · ' + esc(p.credits) + ' ativações de 1 ano</div>' +
+      '<button class="btn" type="button" data-pack="' + esc(p.id) + '">Comprar</button></div>';
+  }).join("");
+  Array.prototype.forEach.call($("packs").querySelectorAll("button[data-pack]"), function (b) { b.onclick = function () { buy(b.getAttribute("data-pack"), b); }; });
+}
+
+async function buy(packId, btn) {
+  var st = $("buyStatus"); btn.disabled = true; show(st, "Abrindo pagamento seguro…");
+  try { var data = await api("POST", "/reseller/orders", { packId: packId }); location.href = data.checkoutUrl; }
+  catch (e) { show(st, errMsg(e), "err"); btn.disabled = false; }
+}
+
+async function handlePaymentReturn() {
+  var q = new URLSearchParams(location.search);
+  if (q.get("payment") !== "complete" || !q.get("order_nsu")) return;
+  var st = $("payStatus"); show(st, "Confirmando o pagamento…", "warn");
+  var body = { transaction_nsu: q.get("transaction_nsu") || q.get("transaction_id") || "", slug: q.get("slug") || q.get("invoice_slug") || "" };
+  for (var i = 0; i < 8; i++) {
+    try {
+      var r = await api("POST", "/reseller/orders/" + encodeURIComponent(q.get("order_nsu")) + "/check", body);
+      if (r.status === "paid") { show(st, "Pagamento confirmado! Créditos adicionados. Saldo: " + r.balance, "ok"); history.replaceState(null, "", location.pathname); await refresh(); return; }
+    } catch (e) { if (e.status === 404) break; }
+    await new Promise(function (ok) { setTimeout(ok, 4000); });
+  }
+  show(st, "Ainda não recebemos a confirmação do pagamento. Se você pagou, os créditos entram em alguns minutos — toque em Atualizar.", "warn");
+}
+
+function previewHtml(p, renew) {
+  var d = p.device;
+  return "<b>Confirme a ativação</b><p class=desc style='margin:8px 0'>Aparelho <span class=mono>" + esc(d.deviceId) + "</span> · " + esc(d.platform) + " · cadastrado em " + esc(date(d.createdAt)) + "<br>" +
+    "Licença hoje: " + esc(d.type === "premium" ? "Premium" : d.type === "trial" ? "Teste" : "Vencida") + (d.expiresAt ? " até " + esc(date(d.expiresAt)) : "") + "<br>" +
+    "<b>Depois:</b> Premium 1 ano até <b>" + esc(date(p.newExpiresAt)) + "</b>" + (p.renewal ? " (renovação, dias somados)" : "") + "<br>" +
+    "Custo: <b>" + esc(p.cost) + " crédito</b> · Saldo " + esc(p.balance) + " → <b>" + esc(p.balanceAfter) + "</b></p>" +
+    "<button class='btn ok' type='button' id='doConfirm'" + (p.balanceAfter < 0 ? " disabled" : "") + ">Confirmar e usar 1 crédito</button> <button class='btn ghost' type='button' id='doCancel'>Cancelar</button>" +
+    (p.balanceAfter < 0 ? "<div class='status err'>Saldo insuficiente. Compre créditos.</div>" : "");
+}
+
+$("actForm").onsubmit = async function (ev) {
+  ev.preventDefault();
+  var st = $("actStatus"); show(st, "Conferindo…"); $("actConfirm").classList.add("hidden");
+  var body = { deviceId: $("aId").value.trim(), deviceKey: $("aKey").value.trim() };
+  try {
+    var r = await api("POST", "/reseller/activate", body);
+    show(st, "");
+    pendingDevice = body;
+    var box = $("actConfirm"); box.innerHTML = previewHtml(r.preview); box.classList.remove("hidden");
+    $("doCancel").onclick = function () { box.classList.add("hidden"); pendingDevice = null; };
+    $("doConfirm").onclick = async function () {
+      this.disabled = true;
+      try {
+        var ok = await api("POST", "/reseller/activate", Object.assign({}, pendingDevice, { confirm: true }));
+        box.classList.add("hidden"); $("actForm").reset(); pendingDevice = null;
+        show(st, "Ativado! Premium até " + date(ok.activation.expiresAt) + ". Peça ao cliente para fechar e abrir o app. Saldo: " + ok.balance, "ok");
+        await refresh();
+      } catch (e) { show(st, errMsg(e), "err"); this.disabled = false; }
+    };
+  } catch (e) { show(st, errMsg(e), "err"); }
+};
+
+async function loadClients() {
+  var data = await api("GET", "/reseller/clients");
+  $("clientCount").textContent = data.clients.length;
+  var tb = $("clients");
+  if (!data.clients.length) { tb.innerHTML = "<tr><td colspan=5 style='color:var(--muted)'>Nenhum cliente ativado ainda.</td></tr>"; return; }
+  tb.innerHTML = data.clients.map(function (c) {
+    return "<tr><td><span class=mono>" + esc(c.deviceId) + "</span><br><small style='color:var(--muted)'>" + esc(c.platform || "") + "</small></td>" +
+      "<td>" + esc(c.plan === "annual" ? "Anual" : c.plan === "lifetime" ? "Vitalício" : c.plan === "semiannual" ? "6 meses" : c.plan || "–") + "</td>" +
+      "<td>" + esc(date(c.expiresAt)) + "</td><td><span class='badge " + esc(c.status) + "'>" + esc(CLIENT[c.status] || c.status) + "</span></td>" +
+      "<td>" + (c.canRenew && me.status === "approved" ? "<button class='btn ghost sm' type='button' data-renew='" + esc(c.deviceId) + "'>Renovar +1 ano</button>" : "") + "</td></tr>";
+  }).join("");
+  Array.prototype.forEach.call(tb.querySelectorAll("button[data-renew]"), function (b) { b.onclick = function () { renew(b.getAttribute("data-renew"), b); }; });
+}
+
+async function renew(id, btn) {
+  var st = $("renewStatus");
+  try {
+    var r = await api("POST", "/reseller/renew", { deviceId: id });
+    var p = r.preview;
+    if (!confirm("Renovar " + id + " por mais 1 ano?\nNovo vencimento: " + date(p.newExpiresAt) + "\nCusto: 1 crédito (saldo " + p.balance + " → " + p.balanceAfter + ")")) return;
+    btn.disabled = true;
+    var ok = await api("POST", "/reseller/renew", { deviceId: id, confirm: true });
+    show(st, "Renovado! Premium até " + date(ok.activation.expiresAt) + ". Saldo: " + ok.balance, "ok");
+    await refresh();
+  } catch (e) { show(st, errMsg(e), "err"); btn.disabled = false; }
+}
+
+async function loadLedger() {
+  var data = await api("GET", "/reseller/ledger");
+  var tb = $("ledger");
+  if (!data.entries.length) { tb.innerHTML = "<tr><td colspan=4 style='color:var(--muted)'>Sem movimentos.</td></tr>"; return; }
+  tb.innerHTML = data.entries.map(function (e) {
+    return "<tr><td>" + esc(dateTime(e.at)) + "</td><td>" + esc(KIND[e.kind] || e.kind) + "</td><td class='" + (e.delta > 0 ? "plus" : "minus") + "'>" + (e.delta > 0 ? "+" : "") + esc(e.delta) + "</td><td>" +
+      esc(e.deviceId ? "Aparelho " + e.deviceId : "") + (e.reason ? (e.deviceId ? " · " : "") + esc(e.reason) : "") + "</td></tr>";
+  }).join("");
+}
+
+$("reloadBtn").onclick = function () { refresh().catch(function (e) { show($("renewStatus"), errMsg(e), "err"); }); };
+
+if (token) { enterPanel().catch(function () {}); }
+else if (new URLSearchParams(location.search).get("payment") === "complete") { show($("loginStatus"), "Entre para confirmar seu pagamento e ver os créditos.", "warn"); }
+</script>
+</body>
+</html>
