@@ -30,3 +30,15 @@ test("portal/admin no navegador nunca é bloqueado, nem em WebView Android", () 
   assert.equal(updateRequired(clientVersionCode(undefined, "Mozilla/5.0", undefined), 46), false);
   assert.equal(updateRequired(clientVersionCode(undefined, "Dalvik/2.1.0", undefined), 46), true); // app antigo de verdade
 });
+
+import { safeApkUrl } from "../routes-channels.js";
+test("link fixo do APK só redireciona para o GitHub do projeto ou nosso domínio", () => {
+  const gh = "https://github.com/StartStatic1/hugo-player/releases/download/v0.5.46/app-release.apk";
+  assert.equal(safeApkUrl(gh), gh);
+  assert.equal(safeApkUrl("https://api-hugo.streamflixvip.online/channels/latest.apk"), "https://api-hugo.streamflixvip.online/channels/latest.apk");
+  const fallback = "https://github.com/StartStatic1/hugo-player/releases/latest/download/app-release.apk";
+  assert.equal(safeApkUrl("https://evil.example/app.apk"), fallback);
+  assert.equal(safeApkUrl("http://github.com/StartStatic1/hugo-player/releases/x.apk"), fallback);
+  assert.equal(safeApkUrl("https://github.com/outro/repo/releases/x.apk"), fallback);
+  assert.equal(safeApkUrl(undefined), fallback);
+});

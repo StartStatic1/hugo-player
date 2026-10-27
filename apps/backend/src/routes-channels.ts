@@ -105,16 +105,17 @@ channelsRouter.get("/latest.apk", (_req, res) => {
   res.redirect("https://github.com/StartStatic1/hugo-player/releases/latest/download/app-release.apk");
 });
 
-channelsRouter.get("/version", async (_req, res) => {
+const LATEST_APK_GITHUB = "https://github.com/StartStatic1/hugo-player/releases/latest/download/app-release.apk";
+
+/** Versão publicada (update.json do GitHub; sem rede usa o arquivo local). */
+export async function currentVersion(): Promise<Record<string, any>> {
   try {
     const r = await fetch(UPDATE_JSON_REMOTE, {
       headers: { "Cache-Control": "no-cache", Accept: "application/json" },
     });
     if (r.ok) {
       const data = await r.json();
-      if (data && typeof data.versionCode === "number") {
-        return res.json({ ...data, ...versionConfig() });
-      }
+      if (data && typeof data.versionCode === "number") return { ...data, ...versionConfig() };
     }
   } catch (e: any) {
     console.warn("update.json remote failed:", e.message);
@@ -123,18 +124,45 @@ channelsRouter.get("/version", async (_req, res) => {
     const file = "/root/hugo-player/apps/backend/update.json";
     if (fs.existsSync(file)) {
       const data = JSON.parse(fs.readFileSync(file, "utf8"));
-      return res.json({ ...data, ...versionConfig() });
+      return { ...data, ...versionConfig() };
     }
   } catch (e: any) {
     console.error("update.json local error:", e.message);
   }
-  res.json({
+  return {
     versionCode: 5,
     versionName: "0.5.0",
     notes: "Atualização disponível.",
-    apkUrl: "https://github.com/StartStatic1/hugo-player/releases/latest/download/app-release.apk",
-  });
+    apkUrl: LATEST_APK_GITHUB,
+  };
+}
+
+channelsRouter.get("/version", async (_req, res) => {
+  res.json(await currentVersion());
 });
+
+/** Só links https do GitHub do projeto (ou do nosso domínio) — nunca redireciona para outro lugar. */
+export function safeApkUrl(url: unknown): string {
+  if (typeof url !== "string") return LATEST_APK_GITHUB;
+  try {
+    const u = new URL(url);
+    const ok = u.protocol === "https:" && (
+      (u.hostname === "github.com" && u.pathname.startsWith("/StartStatic1/hugo-player/releases/")) ||
+      u.hostname.endsWith(".streamflixvip.online"));
+    return ok ? u.toString() : LATEST_APK_GITHUB;
+  } catch {
+    return LATEST_APK_GITHUB;
+  }
+}
+
+/** Link fixo de download: sempre manda (302) para o APK da versão publicada agora. */
+export const downloadLatest: import("express").RequestHandler = async (_req, res) => {
+  const v = await currentVersion();
+  res.setHeader("Cache-Control", "no-store");
+  if (v.versionName) res.setHeader("X-Hugo-Version", String(v.versionName));
+  res.redirect(302, safeApkUrl(v.apkUrl));
+};
+channelsRouter.get("/download", downloadLatest);
 
 /** Recebe M3U baixada no aparelho (fallback 403) e devolve o mesmo JSON do GET /channels. */
 channelsRouter.post("/from-m3u", async (req, res) => {

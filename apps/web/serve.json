@@ -1,0 +1,19 @@
+{
+  "redirects": [
+    {
+      "source": "/baixar",
+      "destination": "https://api-hugo.streamflixvip.online/download",
+      "type": 302
+    },
+    {
+      "source": "/download",
+      "destination": "https://api-hugo.streamflixvip.online/download",
+      "type": 302
+    },
+    {
+      "source": "/apk",
+      "destination": "https://api-hugo.streamflixvip.online/download",
+      "type": 302
+    }
+  ]
+}

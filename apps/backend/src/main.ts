@@ -9,7 +9,7 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import { tmdbRouter } from "./routes-tmdb.js";
 import { createTransferRouter, type TransferRecord } from "./routes-transfer.js";
-import { channelsRouter, setChannelsAccess, setVersionConfig } from "./routes-channels.js";
+import { downloadLatest, channelsRouter, setChannelsAccess, setVersionConfig } from "./routes-channels.js";
 import { isRegisteredUrl } from "./playlist-access.js";
 import { createPlaylistRouter, type StoredPlaylist } from "./routes-playlists.js";
 import { createEpgRouter } from "./routes-epg.js";
@@ -199,6 +199,8 @@ setChannelsAccess({
 });
 setVersionConfig(() => ({ minVersionCode: minVersionCode() }));
 app.use("/channels", channelsRouter);
+// link fixo do APK mais novo (o site usa hugo.streamflixvip.online/baixar → aqui)
+app.get(["/download", "/baixar", "/apk"], downloadLatest);
 app.use(
   "/subtitles",
   requireCurrentApp,
