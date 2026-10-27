@@ -346,11 +346,15 @@ channelsRouter.get("/", sourceGate, async (req, res) => {
     } else {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 180000);
-      const response = await fetch(playlistUrl, {
-        signal: controller.signal,
-        headers: { "User-Agent": "VLC/3.0.20 LibVLC/3.0.20" },
-      });
-      clearTimeout(timeout);
+      let response: Response;
+      try {
+        response = await fetch(playlistUrl, {
+          signal: controller.signal,
+          headers: { "User-Agent": "VLC/3.0.20 LibVLC/3.0.20" },
+        });
+      } finally {
+        clearTimeout(timeout);
+      }
       if (!response.ok) return res.status(502).json({ error: `upstream_${response.status}` });
       const text = await response.text();
       if (!text || text.length < 10) return res.status(422).json({ error: "empty_playlist" });
@@ -378,9 +382,27 @@ channelsRouter.get("/", sourceGate, async (req, res) => {
     });
   } catch (e: any) {
     if (e.name === "AbortError") return res.status(504).json({ error: "timeout" });
+    // provedor inalcançável da VPS (DNS, conexão recusada/caída, TLS): 502 → o app baixa a lista no próprio aparelho.
+    // Antes isso virava 500 "fetch failed" e o app só mostrava "Erro: HTTP 500".
+    if (isUpstreamNetworkError(e)) {
+      console.warn("upstream unreachable from server:", networkErrorCode(e));
+      return res.status(502).json({ error: "upstream_unreachable", hint: BLOCKED_HINT });
+    }
+    console.error("GET /channels failed:", e?.message);
     res.status(500).json({ error: e.message || "fetch_failed" });
   }
 });
+
+/** Erro de rede do fetch (undici): "fetch failed" com cause.code ECONNREFUSED/ENOTFOUND/ECONNRESET/UND_ERR_* etc. */
+export function isUpstreamNetworkError(e: any): boolean {
+  if (!e) return false;
+  if (e.name === "TypeError" && /fetch failed/i.test(String(e.message))) return true;
+  const code = networkErrorCode(e);
+  return !!code && /^(E[A-Z]+|UND_ERR_.*|CERT_.*|ERR_TLS.*|DEPTH_ZERO.*|UNABLE_TO_.*|SELF_SIGNED.*)$/.test(code);
+}
+function networkErrorCode(e: any): string {
+  return String(e?.cause?.code ?? e?.code ?? e?.cause?.name ?? "").slice(0, 40);
+}
 
 function parseM3U(content: string) {
   const lines = content.split(/\r?\n/);

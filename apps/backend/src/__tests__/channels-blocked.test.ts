@@ -146,3 +146,18 @@ test("/account: exp_date null = sem data; provedor fora = erro (app tenta direto
   assert.equal(r.status, 502);
   assert.equal(body.error, "upstream_403");
 });
+
+test("provedor inalcançável (fetch failed) responde 502 upstream_unreachable, não 500", async () => {
+  handler = () => { throw Object.assign(new TypeError("fetch failed"), { cause: { code: "ECONNREFUSED" } }); };
+  const res = await get(playlist());
+  assert.equal(res.status, 502);
+  assert.equal(res.body.error, "upstream_unreachable");
+});
+
+test("M3U comum inalcançável também responde 502", async () => {
+  handler = () => { throw Object.assign(new TypeError("fetch failed"), { cause: { code: "ENOTFOUND" } }); };
+  n++;
+  const res = await get(`http://cdn${n}.example.test/lista.m3u`);
+  assert.equal(res.status, 502);
+  assert.equal(res.body.error, "upstream_unreachable");
+});
