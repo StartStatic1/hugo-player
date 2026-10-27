@@ -153,6 +153,7 @@ button:disabled { opacity: .55; cursor: not-allowed; }
   .pl .actions { justify-content: flex-start; }
   .trust-grid { grid-template-columns: 1fr; }
 }
+[data-support-wa][hidden]{display:none !important}.wa-link{display:inline-flex;align-items:center;gap:6px;border-color:#25D36655 !important}.wa-link .wa-ico{flex:none}
 </style>
 </head>
 <body>
@@ -161,6 +162,7 @@ button:disabled { opacity: .55; cursor: not-allowed; }
   <div class="top-right">
     <a class="btn ghost sm reseller-link" href="/baixar" title="Baixar o app Hugo Player (celular, Fire TV e TV Box)">⬇ Baixar app</a>
     <a class="btn ghost sm reseller-link" href="/revendedor" title="Área do revendedor: compre créditos e ative clientes">🤝 Área do revendedor</a>
+    <a class="btn ghost sm reseller-link wa-link" data-support-wa data-wa-icon hidden href="#" title="Suporte: grupo da comunidade Hugo Player no WhatsApp">Suporte</a>
     <div class="session hidden" id="session">
       <span class="who mono" id="whoId"></span>
       <span class="badge" id="licBadge"></span>
@@ -277,7 +279,7 @@ button:disabled { opacity: .55; cursor: not-allowed; }
     <div class="legal-card"><h3>Responsabilidade do usuário</h3><p>Você deve utilizar somente listas e links obtidos legalmente e ter autorização para acessá-los. O serviço não se responsabiliza pelo conteúdo, disponibilidade ou origem de listas adicionadas pelo usuário.</p></div>
     <div class="legal-card"><h3>Direitos autorais e DMCA</h3><p>Se você é titular de direitos e acredita que um link fornecido por um usuário viola seus direitos, envie uma notificação com a identificação da obra, URL e comprovação de titularidade pelo canal oficial de suporte.</p></div>
   </section>
-  <div class="footer">Hugo Player • Gerenciamento de playlists • Licenciamento por dispositivo · <a href="/revendedor">Área do revendedor</a></div>
+  <div class="footer">Hugo Player • Gerenciamento de playlists • Licenciamento por dispositivo · <a href="/revendedor">Área do revendedor</a> · <a class="wa-link" data-support-wa data-wa-icon hidden href="#">Grupo no WhatsApp</a></div>
 </main>
 <div class="modal-bg hidden" id="modalBg">
   <form class="card modal" id="modalForm">

@@ -129,6 +129,22 @@ fun ActivationScreen(onActivated: (String, String) -> Unit) {
                 Spacer(Modifier.width(8.dp))
                 Icon(Icons.AutoMirrored.Filled.ArrowForward, null)
             }
+            Spacer(Modifier.height(10.dp))
+            val (openSupport, supportDialog) = rememberSupportWhatsapp()
+            com.hugo.player.ui.components.FocusSurface(
+                onClick = openSupport,
+                modifier = Modifier.fillMaxWidth().height(46.dp),
+                color = Color(0x1A25D366),
+                focusedColor = Color(0x4025D366),
+                focusBorderColor = WhatsappGreen,
+                focusScale = 1.02f,
+                shape = RoundedCornerShape(12.dp),
+            ) { _ ->
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text("Precisa de ajuda? Suporte no WhatsApp", color = WhatsappGreen, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                }
+            }
+            supportDialog()
         }
     }
 }

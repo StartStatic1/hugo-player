@@ -30,12 +30,13 @@ table{width:100%;border-collapse:collapse;font-size:14px}th,td{text-align:left;p
 .scroll{overflow-x:auto}
 @media(max-width:480px){.topbar{padding:12px 14px}.brand{font-size:17px}.brand-sub{display:none}}
 @media(max-width:800px){.packs{grid-template-columns:1fr 1fr}.row,.stats{grid-template-columns:1fr}}
+[data-support-wa][hidden]{display:none !important}.wa-link{display:inline-flex;align-items:center;gap:6px;border-color:#25D36655 !important}.wa-link .wa-ico{flex:none}
 </style>
 </head>
 <body>
 <header class="topbar">
   <div class="brand" style="white-space:nowrap"><div class="mark">▶</div>Hugo&nbsp;<span>Player</span><small class="brand-sub" style="color:var(--muted);font-weight:600;font-size:13px;margin-left:6px">Revenda</small></div>
-  <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:flex-end"><a class="btn ghost sm" href="/" style="text-decoration:none;color:var(--text);white-space:nowrap">← Área do cliente</a>
+  <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:flex-end"><a class="btn ghost sm" href="/" style="text-decoration:none;color:var(--text);white-space:nowrap">← Área do cliente</a><a class="btn ghost sm wa-link" data-support-wa data-wa-icon hidden href="#" style="text-decoration:none;color:var(--text);white-space:nowrap">Suporte</a>
   <div id="sessionBox" class="hidden"><span id="whoName" style="color:var(--muted);font-size:13px;margin-right:10px"></span><button class="btn ghost sm" id="logoutBtn" type="button">Sair</button></div></div>
 </header>
 <main class="wrap">
@@ -313,5 +314,6 @@ $("reloadBtn").onclick = function () { refresh().catch(function (e) { show($("re
 if (token) { enterPanel().catch(function () {}); }
 else if (new URLSearchParams(location.search).get("payment") === "complete") { show($("loginStatus"), "Entre para confirmar seu pagamento e ver os créditos.", "warn"); }
 </script>
+<script src="/site-config.js"></script>
 </body>
 </html>

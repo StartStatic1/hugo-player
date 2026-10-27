@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { supportWhatsappUrl } from "./support.js";
 import fs from "fs";
 import { classifyEntry, parseEpisode } from "./content/classify.js";
 import { parseXtreamUrl, buildCatalogFromXtream, fetchSeriesInfo, apiUrl, parseXtreamAccount } from "./content/xtream.js";
@@ -161,7 +162,7 @@ export async function currentVersion(): Promise<Record<string, any>> {
 }
 
 channelsRouter.get("/version", async (_req, res) => {
-  res.json(await currentVersion());
+  res.json({ ...(await currentVersion()), supportWhatsappUrl: supportWhatsappUrl() });
 });
 
 /** Só links https do GitHub do projeto (ou do nosso domínio) — nunca redireciona para outro lugar. */

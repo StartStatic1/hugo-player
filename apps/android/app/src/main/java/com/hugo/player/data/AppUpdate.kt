@@ -63,6 +63,7 @@ object AppUpdate {
                 offline = true,
             ) else null
         }
+        SupportLink.save(context, json.optString("supportWhatsappUrl", ""))
         val remote = json.optInt("versionCode", 0)
         val min = json.optInt("minVersionCode", 0)
         val apkUrl = json.optString("apkUrl", "${HugoApi.baseUrl}/channels/latest.apk")
@@ -86,6 +87,7 @@ object AppUpdate {
         val fallback = "${HugoApi.baseUrl}/channels/latest.apk"
         val json = fetchVersionJson()
         if (json != null) {
+            SupportLink.save(context, json.optString("supportWhatsappUrl", ""))
             val url = json.optString("apkUrl", "").ifBlank { fallback }
             p.edit().putString("apkUrl", url).apply()
             url

@@ -23,6 +23,7 @@ import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.PlayCircle
 import androidx.compose.material.icons.rounded.Public
+import androidx.compose.material.icons.rounded.QrCode2
 import androidx.compose.material.icons.rounded.Storage
 import androidx.compose.material.icons.rounded.Subtitles
 import androidx.compose.material3.*
@@ -77,7 +78,7 @@ private enum class SettingsCat(val label: String, val hint: String, val icon: Im
     PARENTAL("Controle dos pais", "PIN para conteúdo adulto", Icons.Rounded.Lock),
     CACHE("Cache e histórico", "Lista salva no aparelho e histórico", Icons.Rounded.Storage),
     DIAG("Diagnóstico", "Último fechamento inesperado", Icons.Rounded.BugReport),
-    ABOUT("Site e suporte", "Gerenciar dispositivos pelo site", Icons.Rounded.Public),
+    ABOUT("Site e suporte", "Site e grupo de suporte no WhatsApp", Icons.Rounded.Public),
 }
 
 /**
@@ -88,6 +89,8 @@ private enum class SettingsCat(val label: String, val hint: String, val icon: Im
 @Composable
 fun SettingsScreen(deviceId: String, deviceKey: String, onBack: () -> Unit) {
     val context = LocalContext.current
+    val (openSupport, supportDialog) = rememberSupportWhatsapp()
+    val supportOnTv = remember { isTvLike(context) }
     val scope = rememberCoroutineScope()
     val focusManager = LocalFocusManager.current
     var catalogTtl by remember { mutableIntStateOf(AppSettings.catalogTtlHours) }
@@ -333,11 +336,27 @@ fun SettingsScreen(deviceId: String, deviceKey: String, onBack: () -> Unit) {
                     }
 
                     SettingsCat.ABOUT -> {
-                        Row(horizontalArrangement = Arrangement.spacedBy(14.dp), modifier = Modifier.fillMaxWidth().padding(bottom = 14.dp)) {
-                            InfoCard("Site", "hugo.streamflixvip.online", "Ativar e gerenciar dispositivos · OK abre", Modifier.weight(1f), onClick = {
+                        val siteCard: @Composable (Modifier) -> Unit = { m ->
+                            InfoCard("Site", "hugo.streamflixvip.online", "Ativar e gerenciar dispositivos · OK abre", m, onClick = {
                                 runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(SITE_URL))) }.onFailure { message = "Abra $SITE_URL no celular" }
                             }, trailing = Icons.Outlined.OpenInNew)
-                            if (twoCols) Spacer(Modifier.weight(1f))
+                        }
+                        val supportCard: @Composable (Modifier) -> Unit = { m ->
+                            InfoCard(
+                                "Suporte no WhatsApp", "Entrar no grupo da comunidade",
+                                if (supportOnTv) "OK mostra o QR para abrir no celular" else "OK abre o grupo no WhatsApp",
+                                m, valueColor = WhatsappGreen, onClick = openSupport,
+                                trailing = if (supportOnTv) Icons.Rounded.QrCode2 else Icons.Outlined.OpenInNew,
+                            )
+                        }
+                        if (compact) {
+                            Column(verticalArrangement = Arrangement.spacedBy(14.dp), modifier = Modifier.fillMaxWidth().padding(bottom = 14.dp)) {
+                                supportCard(Modifier.fillMaxWidth()); siteCard(Modifier.fillMaxWidth())
+                            }
+                        } else {
+                            Row(horizontalArrangement = Arrangement.spacedBy(14.dp), modifier = Modifier.fillMaxWidth().padding(bottom = 14.dp)) {
+                                supportCard(Modifier.weight(1f)); siteCard(Modifier.weight(1f))
+                            }
                         }
                     }
                 }
@@ -348,6 +367,7 @@ fun SettingsScreen(deviceId: String, deviceKey: String, onBack: () -> Unit) {
         }
     }
 
+    supportDialog()
     when (pinStep) {
         "off" -> PinDialog("PIN atual", "Para desligar o bloqueio", onSubmit = { p ->
             if (AdultLock.check(context, p)) { AdultLock.setEnabled(context, false); lockOn = false; pinStep = null; message = "Bloqueio desligado"; null } else "PIN errado"

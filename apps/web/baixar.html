@@ -46,12 +46,14 @@ ol.steps b{color:#fff}ol.steps .path{display:inline-block;margin-top:4px;font-si
 .or{display:flex;align-items:center;gap:10px;color:var(--muted);font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin:10px 0 4px}.or::before,.or::after{content:"";flex:1;height:1px;background:var(--border)}
 .footer{text-align:center;color:var(--muted);font-size:12px;margin-top:34px}
 @media(max-width:860px){.hero,.cols{grid-template-columns:1fr}h1{font-size:32px}}
+[data-support-wa][hidden]{display:none !important}.wa-link{display:inline-flex;align-items:center;gap:6px;border-color:#25D36655 !important}.wa-link .wa-ico{flex:none}
+.support-card{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-top:18px;padding:16px 18px;border-radius:14px;background:#0f2a1c;border:1px solid #25D36655}.support-card b{display:block;font-size:16px}.support-card span{color:var(--muted);font-size:13px}
 </style>
 </head>
 <body>
 <header class="topbar">
   <a class="brand" href="/"><div class="mark">▶</div>Hugo&nbsp;<span>Player</span></a>
-  <nav class="nav"><a class="btn ghost sm" href="/">Área do cliente</a><a class="btn ghost sm" href="/revendedor">🤝 Área do revendedor</a></nav>
+  <nav class="nav"><a class="btn ghost sm" href="/">Área do cliente</a><a class="btn ghost sm" href="/revendedor">🤝 Área do revendedor</a><a class="btn ghost sm wa-link" data-support-wa data-wa-icon hidden href="#">Suporte</a></nav>
 </header>
 <main class="wrap">
   <section class="hero">
@@ -106,7 +108,8 @@ ol.steps b{color:#fff}ol.steps .path{display:inline-block;margin-top:4px;font-si
   </section>
 
   <div class="note">⚠️ Baixe o Hugo Player só por este site (<b>hugo.streamflixvip.online</b>). O app não vem com canais, filmes ou listas: você adiciona a sua própria playlist depois de instalar.</div>
-  <div class="footer">Hugo Player • Link fixo para a versão mais nova: <a href="/apk">hugo.streamflixvip.online/apk</a> • Código Downloader: <span data-dl-code></span></div>
+  <div class="support-card"><div><b>Dúvida na instalação?</b><span>Entre no grupo da comunidade Hugo Player no WhatsApp.</span></div><a class="btn wa-link" style="background:#25D366;color:#06210f" data-support-wa data-wa-icon hidden href="#">Grupo no WhatsApp</a></div>
+  <div class="footer">Hugo Player • Link fixo para a versão mais nova: <a href="/apk">hugo.streamflixvip.online/apk</a> • Código Downloader: <span data-dl-code></span> • <a class="wa-link" data-support-wa data-wa-icon hidden href="#">Suporte no WhatsApp</a></div>
 </main>
 <script src="/site-config.js"></script>
 <script>
