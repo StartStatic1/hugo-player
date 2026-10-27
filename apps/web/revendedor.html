@@ -28,13 +28,15 @@ table{width:100%;border-collapse:collapse;font-size:14px}th,td{text-align:left;p
 .badge{display:inline-block;padding:3px 9px;border-radius:999px;font-size:12px;font-weight:600;background:var(--card2);border:1px solid var(--border)}.badge.active,.badge.approved{color:var(--ok)}.badge.expired,.badge.blocked,.badge.revoked,.badge.rejected{color:var(--err)}.badge.pending,.badge.transferred{color:var(--warn)}
 .confirm{background:#1b1630;border:1px solid #8b5cf680;border-radius:12px;padding:16px;margin-top:14px}.plus{color:var(--ok)}.minus{color:var(--err)}
 .scroll{overflow-x:auto}
+@media(max-width:480px){.topbar{padding:12px 14px}.brand{font-size:17px}.brand-sub{display:none}}
 @media(max-width:800px){.packs{grid-template-columns:1fr 1fr}.row,.stats{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
 <header class="topbar">
-  <div class="brand"><div class="mark">▶</div>Hugo <span>Player</span> · Revenda</div>
-  <div id="sessionBox" class="hidden"><span id="whoName" style="color:var(--muted);font-size:13px;margin-right:10px"></span><button class="btn ghost sm" id="logoutBtn" type="button">Sair</button></div>
+  <div class="brand" style="white-space:nowrap"><div class="mark">▶</div>Hugo&nbsp;<span>Player</span><small class="brand-sub" style="color:var(--muted);font-weight:600;font-size:13px;margin-left:6px">Revenda</small></div>
+  <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:flex-end"><a class="btn ghost sm" href="/" style="text-decoration:none;color:var(--text);white-space:nowrap">← Área do cliente</a>
+  <div id="sessionBox" class="hidden"><span id="whoName" style="color:var(--muted);font-size:13px;margin-right:10px"></span><button class="btn ghost sm" id="logoutBtn" type="button">Sair</button></div></div>
 </header>
 <main class="wrap">
 

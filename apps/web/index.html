@@ -114,11 +114,24 @@ button:disabled { opacity: .55; cursor: not-allowed; }
 .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); padding: 12px 18px; border-radius: 12px; background: var(--card2); border: 1px solid var(--border); font-size: 14px; z-index: 60; }
 .toast.ok { border-color: #34d39955; color: var(--ok); }
 .toast.err { border-color: #f8717155; color: var(--err); }
+.top-right { display: flex; align-items: center; gap: 12px; min-width: 0; flex-wrap: wrap; justify-content: flex-end; }
+.reseller-link { display: inline-flex; align-items: center; gap: 6px; text-decoration: none; white-space: nowrap; color: #e9d5ff; border: 1px solid #8b5cf680 !important; background: #8b5cf61f !important; }
+.reseller-link:hover, .reseller-link:focus-visible { background: #8b5cf63d !important; outline: none; box-shadow: 0 0 0 3px #8b5cf655; }
+.rs-acc { margin-top: 18px; border: 1px solid #8b5cf650; border-radius: 14px; background: linear-gradient(180deg, #8b5cf614, #12141f); }
+.rs-acc summary { cursor: pointer; list-style: none; padding: 14px 16px; font-weight: 700; display: flex; align-items: center; justify-content: space-between; gap: 10px; border-radius: 14px; }
+.rs-acc summary::-webkit-details-marker { display: none; }
+.rs-acc summary::after { content: "▾"; color: var(--primary); transition: transform .2s; }
+.rs-acc[open] summary::after { transform: rotate(180deg); }
+.rs-acc summary:focus-visible { outline: none; box-shadow: 0 0 0 3px #8b5cf655; }
+.rs-acc .rs-body { padding: 0 16px 16px; color: var(--muted); font-size: 14px; line-height: 1.55; }
+.rs-acc .rs-body p { margin: 0 0 12px; }
+.rs-acc .rs-body a.btn { display: inline-block; text-decoration: none; }
 .footer { text-align: center; color: var(--muted); font-size: 12px; margin-top: 40px; }
 @media (max-width: 880px) { .login, .grid { grid-template-columns: 1fr; } .hero h1 { font-size: 30px; } .pl { grid-template-columns: 40px minmax(0, 1fr); } .pl .actions { grid-column: 1 / -1; } .topbar { padding: 12px 16px; } .legal { grid-template-columns: 1fr; } }
 @media (max-width: 560px) {
   .topbar { align-items: flex-start; flex-wrap: wrap; gap: 8px 12px; }
   .brand { font-size: 18px; }
+  .top-right { width: 100%; }
   .session { width: 100%; justify-content: flex-end; gap: 8px; }
   .session .who { max-width: 150px; }
   .wrap { padding: 24px 14px 72px; }
@@ -132,10 +145,13 @@ button:disabled { opacity: .55; cursor: not-allowed; }
 <body>
 <header class="topbar">
   <div class="brand"><div class="mark">▶</div>Hugo <span>Player</span></div>
-  <div class="session hidden" id="session">
-    <span class="who mono" id="whoId"></span>
-    <span class="badge" id="licBadge"></span>
-    <button class="btn ghost sm" id="logoutBtn" type="button">Sair</button>
+  <div class="top-right">
+    <a class="btn ghost sm reseller-link" href="/revendedor" title="Área do revendedor: compre créditos e ative clientes">🤝 Área do revendedor</a>
+    <div class="session hidden" id="session">
+      <span class="who mono" id="whoId"></span>
+      <span class="badge" id="licBadge"></span>
+      <button class="btn ghost sm" id="logoutBtn" type="button">Sair</button>
+    </div>
   </div>
 </header>
 <main class="wrap">
@@ -153,6 +169,13 @@ button:disabled { opacity: .55; cursor: not-allowed; }
         <div class="trust-item"><strong>☁️ Suas listas no servidor</strong><span>As playlists ficam associadas ao seu dispositivo para aparecer no app.</span></div>
         <div class="trust-item"><strong>⚡ Controle simples</strong><span>Adicione, edite, proteja com PIN ou remova suas próprias listas.</span></div>
       </div>
+      <details class="rs-acc">
+        <summary>🤝 Seja revendedor Hugo Player</summary>
+        <div class="rs-body">
+          <p>Compre créditos e ative licenças de <b>1 ano</b> para os seus clientes (1 crédito = 1 ano). Você tem um painel próprio com saldo, clientes e renovações; pagamento por Pix ou cartão.</p>
+          <a class="btn sm" href="/revendedor">Entrar ou cadastrar como revendedor</a>
+        </div>
+      </details>
     </div>
     <form class="card" id="loginForm" autocomplete="off">
       <h2>Entrar com o dispositivo</h2>
