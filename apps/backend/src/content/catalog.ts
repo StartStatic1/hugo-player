@@ -80,6 +80,8 @@ export interface Catalog {
   movies: Section<MovieItem>;
   series: Section<SeriesItem>;
   stats: { live: number; movies: number; series: number; episodes: number };
+  /** Só Xtream: vencimento da conta do provedor (user_info.exp_date). */
+  account?: { expiresAt: string | null; unlimited: boolean; status?: string; maxConnections?: number } | null;
 }
 
 export function shortId(...parts: string[]): string {

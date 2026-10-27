@@ -217,7 +217,7 @@ channelsRouter.get("/", sourceGate, async (req, res) => {
     if (xt) {
       const ua = "VLC/3.0.20 LibVLC/3.0.20";
       let usedSource = "xtream";
-      let data: { channels: any[]; categories: any[]; stats: any; timestamp: number } | null = null;
+      let data: { channels: any[]; categories: any[]; stats: any; timestamp: number; account?: any } | null = null;
       const hostKey = blockKey(xt.baseUrl, xt.username);
       if (isBlocked(hostKey)) {
         // 403 recente deste provedor: não insiste da VPS, o app baixa no aparelho.
@@ -255,7 +255,7 @@ channelsRouter.get("/", sourceGate, async (req, res) => {
             ...catalog.movies.categories.map((c, i) => ({ name: c.name, count: c.count, type: "movie", position: i })),
             ...catalog.series.categories.map((c, i) => ({ name: c.name, count: c.count, type: "series", position: i })),
           ];
-          data = { channels, categories, stats: catalog.stats, timestamp: Date.now() };
+          data = { channels, categories, stats: catalog.stats, timestamp: Date.now(), account: catalog.account ?? null };
         }
       } catch (e: any) {
         if (forbidden || e?.message === "upstream_403") {
@@ -310,6 +310,8 @@ channelsRouter.get("/", sourceGate, async (req, res) => {
         limit,
         hasMore: start + limit < filtered.length,
         source: usedSource,
+        // vencimento da conta Xtream (null quando veio pelo M3U)
+        account: data.account ?? null,
       });
     }
 

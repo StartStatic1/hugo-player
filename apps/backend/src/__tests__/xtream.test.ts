@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { buildCatalogFromXtream, fetchSeriesInfo, fetchShortEpg, hmsToSecs, parseXtreamUrl } from "../content/xtream.js";
+import { buildCatalogFromXtream, fetchSeriesInfo, fetchShortEpg, hmsToSecs, parseXtreamAccount, parseXtreamUrl } from "../content/xtream.js";
 
 test("detecta credenciais Xtream", () => {
   const c = parseXtreamUrl("http://panel.example.test:8080/get.php?username=u1&password=p1&type=m3u_plus&output=ts")!;
@@ -102,4 +102,21 @@ test("get_short_epg decodifica base64", async () => {
   assert.equal(epg[0].title, "Jornal Nacional");
   assert.equal(epg[0].description, "Notícias");
   assert.equal(epg[0].start, new Date(1760000000 * 1000).toISOString());
+});
+
+test("vencimento da conta Xtream (user_info.exp_date)", async () => {
+  assert.deepEqual(parseXtreamAccount({ user_info: { exp_date: "1795392000", status: "Active", max_connections: "2" } }), {
+    expiresAt: new Date(1795392000 * 1000).toISOString(), unlimited: false, status: "Active", maxConnections: 2,
+  });
+  for (const v of [null, "", "0", "null", "Ilimitado", undefined]) {
+    assert.equal(parseXtreamAccount({ user_info: { exp_date: v } })?.unlimited, true);
+    assert.equal(parseXtreamAccount({ user_info: { exp_date: v } })?.expiresAt, null);
+  }
+  assert.equal(parseXtreamAccount({}), null);
+  assert.equal(parseXtreamAccount(null), null);
+  const { fetcher } = fakeApi({ "": { user_info: { exp_date: 1795392000 } }, get_live_streams: [{ stream_id: 1, name: "A", category_id: "1" }] });
+  const cat = await buildCatalogFromXtream(creds, fetcher);
+  assert.equal(cat.account?.expiresAt, new Date(1795392000 * 1000).toISOString());
+  const { fetcher: f2 } = fakeApi({ get_live_streams: [{ stream_id: 1, name: "A", category_id: "1" }] });
+  assert.equal((await buildCatalogFromXtream(creds, f2)).account, null);
 });

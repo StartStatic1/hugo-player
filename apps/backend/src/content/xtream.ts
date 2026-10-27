@@ -100,8 +100,31 @@ export interface XtreamOptions {
   liveFormat?: "m3u8" | "ts";
 }
 
+/** Conta do provedor (user_info do login da player_api). */
+export interface XtreamAccount {
+  /** ISO; null = sem data (ilimitada). */
+  expiresAt: string | null;
+  unlimited: boolean;
+  status?: string;
+  maxConnections?: number;
+}
+
+/** user_info.exp_date: segundos unix (texto ou número); null/""/"0"/"null"/"Ilimitado" = sem vencimento. */
+export function parseXtreamAccount(raw: unknown): XtreamAccount | null {
+  const ui = raw && typeof raw === "object" ? (raw as Obj).user_info : null;
+  if (!ui || typeof ui !== "object") return null;
+  const exp = str(ui.exp_date);
+  const secs = /^\d+$/.test(exp) ? parseInt(exp, 10) : NaN;
+  const status = str(ui.status) || undefined;
+  const maxConnections = num(ui.max_connections);
+  if (!Number.isFinite(secs) || secs <= 0) return { expiresAt: null, unlimited: true, status, maxConnections };
+  return { expiresAt: new Date(secs * 1000).toISOString(), unlimited: false, status, maxConnections };
+}
+
 export async function buildCatalogFromXtream(c: XtreamCredentials, fetchJson: JsonFetcher, opts: XtreamOptions = {}): Promise<Catalog> {
   const liveFormat = opts.liveFormat ?? "m3u8";
+  // login (player_api sem action) só para o vencimento da conta; falhar aqui não atrapalha o catálogo
+  const accountP = Promise.resolve().then(() => fetchJson(apiUrl(c))).then(parseXtreamAccount, () => null);
   const settled = await Promise.allSettled([
     fetchJson(apiUrl(c, "get_live_categories")),
     fetchJson(apiUrl(c, "get_live_streams")),
@@ -182,6 +205,7 @@ export async function buildCatalogFromXtream(c: XtreamCredentials, fetchJson: Js
     movies: { categories: categoryList(vodCatsRaw, "movie", countBy(vodRaw)), items: movies },
     series: { categories: categoryList(seriesCatsRaw, "series", countBy(seriesRaw)), items: series },
     stats: { live: live.length, movies: movies.length, series: series.length, episodes: 0 },
+    account: await accountP,
   };
 }
 
