@@ -126,6 +126,16 @@ button:disabled { opacity: .55; cursor: not-allowed; }
 .rs-acc .rs-body { padding: 0 16px 16px; color: var(--muted); font-size: 14px; line-height: 1.55; }
 .rs-acc .rs-body p { margin: 0 0 12px; }
 .rs-acc .rs-body a.btn { display: inline-block; text-decoration: none; }
+.dl-card { margin-top: 26px; display: grid; grid-template-columns: 1fr auto; gap: 22px; align-items: center; border-color: #8b5cf650; background: linear-gradient(120deg, #1b1630, #12141f 60%); }
+.dl-card h2 { font-size: 22px; }
+.dl-card .dl-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 4px; }
+.dl-card .dl-actions a { text-decoration: none; }
+.dl-card .dl-big { background: linear-gradient(90deg, #7c3aed, #db2777); padding: 15px 22px; font-size: 16px; }
+.dl-card .tv { margin-top: 12px; color: var(--muted); font-size: 13px; }
+.dl-card .tv code { color: #fff; background: #0b0b14; border: 1px dashed #8b5cf6; border-radius: 8px; padding: 3px 8px; font-size: 14px; }
+.dl-card .qrbox { text-align: center; color: var(--muted); font-size: 12px; }
+.dl-card .qrbox img { width: 132px; height: 132px; background: #fff; border-radius: 12px; padding: 6px; display: block; margin: 0 auto 6px; }
+@media (max-width: 640px) { .dl-card { grid-template-columns: 1fr; } .dl-card .qrbox { display: none; } }
 .footer { text-align: center; color: var(--muted); font-size: 12px; margin-top: 40px; }
 @media (max-width: 880px) { .login, .grid { grid-template-columns: 1fr; } .hero h1 { font-size: 30px; } .pl { grid-template-columns: 40px minmax(0, 1fr); } .pl .actions { grid-column: 1 / -1; } .topbar { padding: 12px 16px; } .legal { grid-template-columns: 1fr; } }
 @media (max-width: 560px) {
@@ -146,6 +156,7 @@ button:disabled { opacity: .55; cursor: not-allowed; }
 <header class="topbar">
   <div class="brand"><div class="mark">▶</div>Hugo <span>Player</span></div>
   <div class="top-right">
+    <a class="btn ghost sm reseller-link" href="/baixar" title="Baixar o app Hugo Player (celular, Fire TV e TV Box)">⬇ Baixar app</a>
     <a class="btn ghost sm reseller-link" href="/revendedor" title="Área do revendedor: compre créditos e ative clientes">🤝 Área do revendedor</a>
     <div class="session hidden" id="session">
       <span class="who mono" id="whoId"></span>
@@ -244,6 +255,18 @@ button:disabled { opacity: .55; cursor: not-allowed; }
       </form>
       <div><div class="pl-list" id="plList"></div></div>
     </div>
+  </section>
+  <section class="card dl-card" id="downloadCard">
+    <div>
+      <h2>📲 Baixe o app Hugo Player</h2>
+      <p class="desc" style="margin:0 0 12px">Versão mais nova para celular Android, Fire TV e TV Box. <span id="dlVer"></span></p>
+      <div class="dl-actions">
+        <a class="btn dl-big" href="/apk">⬇ Baixar APK</a>
+        <a class="btn ghost" href="/baixar">Como instalar (celular e TV)</a>
+      </div>
+      <div class="tv">Na Fire TV, abra o app <b>Downloader</b> e digite: <code>hugo.streamflixvip.online/apk</code></div>
+    </div>
+    <div class="qrbox"><img src="/qr-apk.svg" alt="QR code para baixar o Hugo Player" width="132" height="132">Escaneie com o celular</div>
   </section>
   <section class="legal">
     <div class="legal-card"><h3>O que é o Hugo Player?</h3><p>Uma ferramenta de gerenciamento e reprodução para playlists fornecidas pelo próprio usuário. O Hugo Player não vende, hospeda, indexa ou distribui filmes, séries, canais ou arquivos de terceiros.</p></div>
@@ -590,6 +613,10 @@ try {
   var saved = JSON.parse(sessionStorage.getItem("hugo.session") || "null");
   if (saved && saved.deviceId && saved.deviceKey) { session = saved; enterDashboard(); }
 } catch (e) {}
+</script>
+<script>
+fetch(API + "/channels/version", { cache: "no-store" }).then(function (r) { return r.json(); })
+  .then(function (v) { if (v && v.versionName) document.getElementById("dlVer").textContent = "Versão atual: " + v.versionName + "."; }).catch(function () {});
 </script>
 </body>
 </html>
