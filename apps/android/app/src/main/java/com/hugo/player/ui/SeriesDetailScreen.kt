@@ -95,46 +95,10 @@ fun SeriesDetailScreen(
     LaunchedEffect(playlistId, activeName) {
         val name = activeName ?: return@LaunchedEffect
         episodes = null; meta = emptyMap(); errorMsg = null
-        val local = withContext(Dispatchers.IO) { repo.episodes(playlistId, name) }
-        val marker = local.firstOrNull()?.url
-        if (marker != null && marker.startsWith("xtream://series/")) {
-            val seriesId = marker.removePrefix("xtream://series/")
-            // só o id da playlist + aparelho: o servidor usa o link guardado (sem usuário/senha na URL)
-            val identity = com.hugo.player.data.DeviceIdentity.get(context)
-            val endpoint = "${com.hugo.player.data.HugoApi.baseUrl}/channels/series-episodes?playlistId=${java.net.URLEncoder.encode(playlistId, "UTF-8")}&seriesId=$seriesId"
-            try {
-                val body = withContext(Dispatchers.IO) {
-                    val conn = URL(endpoint).openConnection() as java.net.HttpURLConnection
-                    conn.setRequestProperty("x-device-id", identity.deviceId)
-                    conn.setRequestProperty("x-device-key", identity.deviceKey)
-                    conn.connectTimeout = 20000
-                    conn.readTimeout = 30000
-                    val code = conn.responseCode
-                    val b = (if (code in 200..299) conn.inputStream else conn.errorStream)?.bufferedReader()?.use { it.readText() }.orEmpty()
-                    if (code !in 200..299) throw Exception("HTTP $code: ${b.take(200)}")
-                    b
-                }
-                val json = JSONObject(body)
-                val arr = json.optJSONArray("episodes")
-                val list = mutableListOf<ChannelEntity>()
-                val metaOut = HashMap<String, EpisodeMeta>()
-                if (arr != null) {
-                    for (i in 0 until arr.length()) {
-                        val e = arr.getJSONObject(i)
-                        val plot = e.optString("plot").takeIf { it.isNotBlank() && it != "null" }
-                        val dur = e.optInt("durationSecs", 0).takeIf { it > 0 }
-                        if (plot != null || dur != null) metaOut[e.getString("url")] = EpisodeMeta(plot, dur)
-                        list.add(ChannelEntity(name = e.optString("name", name), url = e.getString("url"), logo = e.optString("logo").takeIf { it.isNotEmpty() }, group = "", type = "series", playlistId = playlistId, seriesName = name, season = e.optInt("season", 1), episode = e.optInt("episode", i + 1)))
-                    }
-                }
-                meta = metaOut
-                episodes = list
-            } catch (ex: Exception) {
-                errorMsg = "Não deu para carregar os episódios do servidor" + (if (local.size > 1) " — mostrando os salvos." else ".") +
-                    " (" + (ex.message?.substringBefore(':')?.take(40) ?: ex.javaClass.simpleName) + ")"
-                episodes = local
-            }
-        } else episodes = local
+        val loaded = com.hugo.player.data.SeriesEpisodes.load(context, playlistId, name)
+        meta = loaded.meta.mapValues { (_, m) -> EpisodeMeta(m.plot, m.durationSecs) }
+        errorMsg = loaded.error
+        episodes = loaded.episodes
     }
     val bySeason = remember(episodes) { episodes.orEmpty().groupBy { it.season ?: 1 }.toSortedMap() }
     LaunchedEffect(bySeason) { if (selectedSeason == null || selectedSeason !in bySeason.keys) selectedSeason = bySeason.keys.firstOrNull() }
@@ -163,7 +127,7 @@ fun SeriesDetailScreen(
     val shownName = activeName ?: seriesName
 
     fun play(ep: ChannelEntity) {
-        val ordered = bySeason.values.flatten()
+        val ordered = com.hugo.player.data.SeriesEpisodes.ordered(episodes.orEmpty())
         val idx = ordered.indexOf(ep)
         // playlistId + pôster também nos próximos episódios (senão somem do "Continuar assistindo")
         val queue = ordered.drop(idx + 1).take(50).map { PlaybackRequest(url = it.url, title = shownName, subtitle = epLabel(it), isLive = false, playlistId = playlistId, logo = poster) }
@@ -399,7 +363,7 @@ fun SeriesDetailScreen(
     }
 }
 
-private fun epLabel(ep: ChannelEntity): String {
+internal fun epLabel(ep: ChannelEntity): String {
     val s = ep.season ?: 1
     val e = ep.episode
     val code = if (e != null) "T%d · E%02d".format(s, e) else "Temporada $s"

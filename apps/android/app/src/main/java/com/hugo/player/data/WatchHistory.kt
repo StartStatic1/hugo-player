@@ -164,6 +164,28 @@ object WatchHistory {
 
     fun clearContinue(ctx: Context) { prefs(ctx).edit().remove(KEY_PROGRESS).apply() }
 
+    /** Episódio de série? (o subtítulo salvo começa com "T2 · E05" ou "Temporada 2"). */
+    fun isEpisode(item: ProgressItem): Boolean =
+        item.subtitle?.let { Regex("""^(T\d+ · E\d+|Temporada \d+)""").containsMatchIn(it) } == true
+
+    private fun seriesGroup(item: ProgressItem) = "${item.playlistId}|${item.title}"
+
+    /** Home: uma série = um cartão (o episódio mais recente). Entrada já vem do mais novo para o mais velho. */
+    fun groupContinue(items: List<ProgressItem>): List<ProgressItem> {
+        val seen = HashSet<String>()
+        return items.filter { !isEpisode(it) || seen.add(seriesGroup(it)) }
+    }
+
+    /** Tira o item do Continuar assistindo; numa série, tira todos os episódios dela pela metade. */
+    fun removeContinue(ctx: Context, item: ProgressItem) {
+        val keys = if (isEpisode(item)) listContinue(ctx).filter { isEpisode(it) && seriesGroup(it) == seriesGroup(item) }.map { it.key }
+        else listOf(item.key)
+        val p = prefs(ctx)
+        val root = JSONObject(p.getString(KEY_PROGRESS, "{}"))
+        (keys + item.key).forEach { root.remove(it) }
+        p.edit().putString(KEY_PROGRESS, root.toString()).apply()
+    }
+
     fun listContinue(ctx: Context, playlistId: String? = null): List<ProgressItem> {
         val root = JSONObject(prefs(ctx).getString(KEY_PROGRESS, "{}"))
         val out = mutableListOf<ProgressItem>()
