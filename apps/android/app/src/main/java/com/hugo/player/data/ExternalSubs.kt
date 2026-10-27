@@ -12,15 +12,20 @@ import java.io.File
  * Só busca português (pt-BR, depois pt-PT). O .srt fica num cache pequeno no aparelho.
  */
 object ExternalSubs {
-    data class Query(val title: String, val year: Int?, val season: Int?, val episode: Int?)
+    /** hint = título + nome do arquivo (só para o servidor escolher o release que sincroniza melhor) */
+    data class Query(val title: String, val year: Int?, val season: Int?, val episode: Int?, val hint: String? = null)
 
-    data class Option(val fileId: Long, val lang: String, val release: String, val machine: Boolean) {
+    data class Option(val fileId: Long, val lang: String, val release: String, val machine: Boolean, val hearingImpaired: Boolean = false) {
         val label: String
             get() = buildString {
                 append(if (lang == "pt-PT") "Português (Portugal)" else "Português")
-                append(" (automática)")
+                append(" (internet)")
+                if (hearingImpaired) append(" · descreve sons")
             }
     }
+
+    /** Uma fala do .srt (tempos em ms). */
+    data class Cue(val startMs: Long, val endMs: Long, val text: String)
 
     sealed class Result {
         data class Found(val options: List<Option>) : Result()
@@ -45,12 +50,78 @@ object ExternalSubs {
             year = if (m == null) TmdbMatch.yearOf(r.title) else null,
             season = m?.groupValues?.get(1)?.toInt(),
             episode = m?.groupValues?.get(2)?.toInt(),
+            hint = releaseHint(r.title, r.url),
         )
     }
 
-    /** Usuário escolheu "Desligada": não busca legenda sozinho até ele escolher uma de novo. */
-    fun autoOff(context: Context): Boolean = prefs(context).getBoolean("auto_off", false)
-    fun setAutoOff(context: Context, off: Boolean) { prefs(context).edit().putBoolean("auto_off", off).apply() }
+    /**
+     * Título + nome do arquivo do link (ex.: "Filme.2024.1080p.BluRay.mkv"). Só o último pedaço do
+     * caminho, sem "?..." — nunca manda usuário/senha da lista.
+     */
+    fun releaseHint(title: String, url: String?): String {
+        val last = url?.substringBefore('?')?.substringBefore('#')?.trimEnd('/')?.substringAfterLast('/').orEmpty()
+        val file = last.takeIf { it.substringBeforeLast('.').count { c -> c.isLetter() } >= 3 && '@' !in it && '=' !in it && !it.startsWith("get.php") }
+        return listOfNotNull(title, file).joinToString(" ").take(180)
+    }
+
+    private val timeRe = Regex("""(\d{1,2}):(\d{2}):(\d{2})[,.](\d{1,3})\s*-->\s*(\d{1,2}):(\d{2}):(\d{2})[,.](\d{1,3})""")
+    private val tagRe = Regex("""<[^>]+>|\{\\[^}]*\}""")
+
+    /** Lê o .srt em falas ordenadas (sem tags/estilos embutidos). */
+    fun parseSrt(text: String): List<Cue> {
+        val out = ArrayList<Cue>()
+        val lines = text.replace("\r\n", "\n").replace('\r', '\n').split('\n')
+        var i = 0
+        fun ms(h: String, m: String, s: String, f: String) =
+            ((h.toLong() * 60 + m.toLong()) * 60 + s.toLong()) * 1000 + f.padEnd(3, '0').take(3).toLong()
+        while (i < lines.size) {
+            val t = timeRe.find(lines[i])
+            if (t == null) { i++; continue }
+            val g = t.groupValues
+            val start = ms(g[1], g[2], g[3], g[4]); val end = ms(g[5], g[6], g[7], g[8])
+            i++
+            val body = StringBuilder()
+            while (i < lines.size && lines[i].isNotBlank() && timeRe.find(lines[i]) == null) {
+                if (body.isNotEmpty()) body.append('\n')
+                body.append(lines[i].replace(tagRe, "").trim())
+                i++
+            }
+            val txt = body.toString().trim()
+            if (txt.isNotEmpty() && end > start) out.add(Cue(start, end, txt))
+        }
+        out.sortBy { it.startMs }
+        return out
+    }
+
+    /**
+     * Fala na tela no instante [positionMs] com o ajuste [offsetMs]
+     * (positivo = legenda aparece mais tarde; negativo = mais cedo).
+     */
+    fun cueAt(cues: List<Cue>, positionMs: Long, offsetMs: Long): Cue? {
+        val t = positionMs - offsetMs
+        var lo = 0; var hi = cues.size - 1; var idx = -1
+        while (lo <= hi) {
+            val mid = (lo + hi) ushr 1
+            if (cues[mid].startMs <= t) { idx = mid; lo = mid + 1 } else hi = mid - 1
+        }
+        // falas podem se sobrepor: olha algumas para trás
+        var k = idx
+        while (k >= 0 && k > idx - 4) {
+            val c = cues[k]
+            if (t < c.endMs) return c
+            k--
+        }
+        return null
+    }
+
+    /** "+1,25s", "−0,5s", "0s" */
+    fun formatOffset(ms: Long): String {
+        if (ms == 0L) return "0s"
+        val sign = if (ms > 0) "+" else "−"
+        val v = kotlin.math.abs(ms) / 1000.0
+        val txt = if (v == kotlin.math.floor(v)) v.toLong().toString() else "%.2f".format(java.util.Locale.US, v).trimEnd('0').trimEnd('.').replace('.', ',')
+        return "$sign${txt}s"
+    }
 
     private fun prefs(c: Context) = c.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
@@ -60,12 +131,13 @@ object ExternalSubs {
             append("/subtitles/search?title=").append(HugoApi.enc(q.title))
             q.year?.let { append("&year=").append(it) }
             if (q.season != null && q.episode != null) append("&season=").append(q.season).append("&episode=").append(q.episode)
+            q.hint?.takeIf { it.isNotBlank() }?.let { append("&hint=").append(HugoApi.enc(it)) }
         }
         try {
             val arr = JSONObject(HugoApi.get(path, idt.deviceId, idt.deviceKey, readTimeoutMs = 15_000)).optJSONArray("items")
             val list = (0 until (arr?.length() ?: 0)).mapNotNull { i ->
                 val o = arr!!.optJSONObject(i) ?: return@mapNotNull null
-                Option(o.optLong("fileId"), o.optString("lang", "pt-BR"), o.optString("release"), o.optBoolean("machine"))
+                Option(o.optLong("fileId"), o.optString("lang", "pt-BR"), o.optString("release"), o.optBoolean("machine"), o.optBoolean("hearingImpaired"))
             }.filter { it.fileId > 0 }
             if (list.isEmpty()) Result.None else Result.Found(list)
         } catch (e: ApiException) {

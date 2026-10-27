@@ -23,6 +23,12 @@ object AppSettings {
     fun isCatalogFresh(total: Int, syncedAt: Long?, now: Long, ttlHours: Int): Boolean =
         total > 0 && syncedAt != null && syncedAt <= now && now - syncedAt < ttlHours * 3_600_000L
 
+    /** Fundo da legenda: "none" (só contorno, padrão), "translucent" ou "black". */
+    var subtitleBackground: String
+        get() = (if (isReady) prefs.getString("subtitleBackground", null) else null)?.takeIf { it in SUBTITLE_BACKGROUNDS } ?: "none"
+        set(v) { prefs.edit().putString("subtitleBackground", v).apply() }
+    val SUBTITLE_BACKGROUNDS = listOf("none", "translucent", "black")
+
     /** Validade do cache do catálogo em disco, em horas. */
     var catalogTtlHours: Int
         get() = if (isReady) prefs.getInt("catalogTtlHours", DEFAULT_CATALOG_TTL_HOURS) else DEFAULT_CATALOG_TTL_HOURS

@@ -55,6 +55,10 @@ import android.net.Uri
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MimeTypes
+import androidx.media3.common.text.Cue
+import androidx.media3.common.text.CueGroup
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import com.hugo.player.data.ApiException
 import com.hugo.player.data.ExternalSubs
 import kotlinx.coroutines.launch
@@ -65,6 +69,9 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.HttpDataSource
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
+import androidx.media3.ui.CaptionStyleCompat
+import androidx.media3.ui.SubtitleView
+import com.hugo.player.data.AppSettings
 import com.hugo.player.data.WatchHistory
 import com.hugo.player.player.HugoPlayerFactory
 import com.hugo.player.player.PlaybackRequest
@@ -122,6 +129,19 @@ fun PlayerScreen(request: PlaybackRequest, onBack: () -> Unit) {
     var readyOnce by remember { mutableStateOf(false) }
     /** legenda ligada sozinha porque o usuário trocou para áudio estrangeiro (desliga ao voltar ao português) */
     var subByAudioSwitch by remember { mutableStateOf(false) }
+    /** legenda da internet: o próprio app desenha as falas (permite ajustar a sincronia sem recarregar o vídeo) */
+    var extCues by remember { mutableStateOf<List<ExternalSubs.Cue>>(emptyList()) }
+    var extActive by remember { mutableStateOf(false) }
+    var subOffsetMs by remember { mutableLongStateOf(0L) }
+    /** "Desligada" vale só para este vídeo (antes valia para sempre e travava a legenda automática) */
+    var subsOffThisVideo by remember { mutableStateOf(false) }
+    /** aviso curto na tela ("Buscando legenda…", "Legenda em português ligada"…) */
+    var subNotice by remember { mutableStateOf<String?>(null) }
+    var subNoticeTick by remember { mutableIntStateOf(0) }
+    /** última vez que a legenda do arquivo mostrou texto (para detectar legenda embutida vazia) */
+    var lastCueAt by remember { mutableLongStateOf(0L) }
+    var embeddedAutoAt by remember { mutableStateOf<Long?>(null) }
+    var playerViewRef by remember { mutableStateOf<PlayerView?>(null) }
     val scope = rememberCoroutineScope()
     /** "Próximo episódio em N s" (null = sem contagem). */
     var nextCountdown by remember { mutableStateOf<Int?>(null) }
@@ -147,6 +167,8 @@ fun PlayerScreen(request: PlaybackRequest, onBack: () -> Unit) {
         errorDetail = null
         loading = true
         extOptions = emptyList(); extApplied = null; subStatus = null; autoSubTried = false; readyOnce = false; subByAudioSwitch = false
+        extCues = emptyList(); extActive = false; subOffsetMs = 0L; subsOffThisVideo = false; embeddedAutoAt = null; subNotice = null
+        playerViewRef?.subtitleView?.setCues(emptyList())
         exoPlayer.setMediaItem(HugoPlayerFactory.mediaItem(current.url, forceHls))
         exoPlayer.prepare()
         val resumeAt = if (current.isLive != true) WatchHistory.getProgress(context, progressKeyFor(current)) else 0L
@@ -194,6 +216,10 @@ fun PlayerScreen(request: PlaybackRequest, onBack: () -> Unit) {
                     if (sleep == SleepOption.END_OF_EPISODE) { onBack(); return }
                     if (queue.isNotEmpty()) { showControls = false; nextCountdown = NEXT_COUNTDOWN_S }
                 }
+            }
+
+            override fun onCues(cueGroup: CueGroup) {
+                if (cueGroup.cues.any { !it.text.isNullOrBlank() }) lastCueAt = System.currentTimeMillis()
             }
 
             override fun onTracksChanged(tracks: Tracks) {
@@ -277,101 +303,180 @@ fun PlayerScreen(request: PlaybackRequest, onBack: () -> Unit) {
         current = next
     }
 
-    /** Baixa o .srt e coloca como faixa de legenda (recarrega no mesmo ponto). */
-    fun applyExternal(opt: ExternalSubs.Option, silent: Boolean) {
+    fun notify(msg: String?) { subNotice = msg; subNoticeTick++ }
+
+    /** Desliga a legenda da internet (para de desenhar as falas). */
+    fun stopExternal() {
+        extActive = false
+        playerViewRef?.subtitleView?.setCues(emptyList())
+    }
+
+    /**
+     * Baixa o .srt e liga a legenda da internet. O app desenha as falas na tela do player
+     * (sem recarregar o vídeo), o que também permite ajustar a sincronia na hora.
+     * announce = mostra aviso na tela (troca de áudio / automática).
+     */
+    fun applyExternal(opt: ExternalSubs.Option, announce: Boolean, inDialog: Boolean = false) {
         val req = current
         scope.launch {
-            if (!silent) subStatus = "Baixando legenda…"
+            if (inDialog) subStatus = "Baixando legenda…"
             val file = try {
                 ExternalSubs.file(context, opt)
             } catch (e: ApiException) {
-                if (!silent) subStatus = if (e.apiError == "subtitle_quota" || e.status == 429) "Limite diário de legendas atingido. Tente mais tarde." else "Não foi possível baixar a legenda."
+                val msg = if (e.apiError == "subtitle_quota" || e.status == 429) "Limite diário de legendas atingido. Tente mais tarde." else "Não foi possível baixar a legenda."
+                if (inDialog) subStatus = msg
+                if (announce) notify(msg)
                 return@launch
             } catch (e: Exception) {
-                if (!silent) subStatus = "Sem conexão para baixar a legenda."
+                if (inDialog) subStatus = "Sem conexão para baixar a legenda."
+                if (announce) notify("Sem conexão para baixar a legenda.")
                 return@launch
             }
+            val cues = withContext(Dispatchers.IO) { runCatching { ExternalSubs.parseSrt(file.readText()) }.getOrDefault(emptyList()) }
             if (req != current) return@launch
-            val sub = MediaItem.SubtitleConfiguration.Builder(Uri.fromFile(file))
-                .setMimeType(MimeTypes.APPLICATION_SUBRIP)
-                .setLanguage("pt")
-                .setLabel(opt.label)
-                .setSelectionFlags(C.SELECTION_FLAG_DEFAULT)
-                .setId("ext-${opt.fileId}")
-                .build()
-            val item = HugoPlayerFactory.mediaItem(req.url, forceHls).buildUpon().setSubtitleConfigurations(listOf(sub)).build()
-            val pos = exoPlayer.currentPosition
-            val play = exoPlayer.playWhenReady
-            val keepAudioByLanguage = exoPlayer.trackSelectionParameters.preferredAudioLanguages.isNotEmpty()
-            exoPlayer.trackSelectionParameters = exoPlayer.trackSelectionParameters.buildUpon()
-                .clearOverridesOfType(C.TRACK_TYPE_TEXT)
-                .apply { if (keepAudioByLanguage) clearOverridesOfType(C.TRACK_TYPE_AUDIO) }
-                .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
-                .setPreferredTextLanguage("pt")
-                .build()
-            exoPlayer.setMediaItem(item, pos)
-            exoPlayer.prepare()
-            exoPlayer.playWhenReady = play
+            if (cues.isEmpty()) {
+                if (inDialog) subStatus = "Essa legenda veio vazia. Escolha outra."
+                if (announce) notify("Nenhuma legenda encontrada")
+                return@launch
+            }
+            // legenda do arquivo desligada: só a da internet aparece
+            applyTextTrack(exoPlayer, null, null)
+            if (extApplied != opt.fileId) subOffsetMs = 0L
+            extCues = cues
             extApplied = opt.fileId
+            extActive = true
+            embeddedAutoAt = null
+            subsOffThisVideo = false
             subStatus = null
-            if (!silent) ExternalSubs.setAutoOff(context, false)
+            if (announce) notify("Legenda em português ligada")
         }
     }
 
-    /** Busca legenda em português. silent = automática (não mostra nada se não achar). */
-    fun searchSubs(silent: Boolean) {
+    /**
+     * Busca legenda em português.
+     *  - inDialog: busca manual pelo menu (mostra o andamento dentro do menu e deixa escolher);
+     *  - announce: automática com aviso na tela (troca de áudio) — liga a melhor sozinha;
+     *  - nenhum dos dois: automática ao abrir o vídeo (só avisa quando liga).
+     */
+    fun searchSubs(inDialog: Boolean, announce: Boolean = false) {
         val q = ExternalSubs.queryFor(current)
-        if (q == null) { if (!silent) subStatus = "Busca de legenda indisponível para este conteúdo."; return }
+        if (q == null) {
+            if (inDialog) subStatus = "Busca de legenda indisponível para este conteúdo."
+            if (announce) notify("Nenhuma legenda encontrada")
+            return
+        }
         scope.launch {
-            if (!silent) subStatus = "Buscando legenda…"
-            when (val r = ExternalSubs.search(context, q)) {
-                is ExternalSubs.Result.Found -> {
-                    extOptions = r.options.take(4)
-                    if (silent) applyExternal(r.options.first(), silent = true)
-                    else subStatus = "Escolha uma legenda acima."
-                }
-                ExternalSubs.Result.None -> if (!silent) subStatus = "Nenhuma legenda em português encontrada."
-                ExternalSubs.Result.Quota -> if (!silent) subStatus = "Limite diário de legendas atingido. Tente mais tarde."
-                ExternalSubs.Result.NotConfigured -> if (!silent) subStatus = "Legenda automática ainda não foi ativada no servidor."
-                is ExternalSubs.Result.Error -> if (!silent) subStatus = "Não foi possível buscar a legenda (${r.message})."
+            if (inDialog) subStatus = "Buscando legenda…"
+            if (announce) notify("Buscando legenda…")
+            val r = ExternalSubs.search(context, q)
+            val msg: String? = when (r) {
+                is ExternalSubs.Result.Found -> null
+                ExternalSubs.Result.None -> "Nenhuma legenda em português encontrada."
+                ExternalSubs.Result.Quota -> "Limite diário de legendas atingido. Tente mais tarde."
+                ExternalSubs.Result.NotConfigured -> "Legenda automática ainda não foi ativada no servidor."
+                is ExternalSubs.Result.Error -> "Não foi possível buscar a legenda (${r.message})."
+            }
+            if (r is ExternalSubs.Result.Found) {
+                extOptions = r.options.take(6)
+                if (inDialog) subStatus = "Escolha uma legenda abaixo."
+                // automática: a primeira é a melhor (pt-BR, sem descrição de sons, release mais parecido)
+                else applyExternal(r.options.first(), announce = true)
+            } else {
+                if (inDialog) subStatus = msg
+                if (announce) notify(
+                    when (r) {
+                        ExternalSubs.Result.Quota -> "Limite diário de legendas atingido"
+                        ExternalSubs.Result.None -> "Nenhuma legenda encontrada"
+                        else -> msg
+                    }
+                )
             }
         }
     }
 
-    // automática: filme/episódio sem legenda em português, versão legendada ou áudio estrangeiro,
-    // e o usuário não desligou a legenda. Em segundo plano; se não achar, fica desligada em silêncio.
+    /** Liga a legenda em português do próprio arquivo e confere depois se ela tem texto de verdade. */
+    fun applyEmbeddedPt(track: TrackOption, announce: Boolean) {
+        stopExternal()
+        applyTextTrack(exoPlayer, track.groupIndex, track.trackIndex)
+        lastCueAt = 0L
+        embeddedAutoAt = System.currentTimeMillis()
+        if (announce) notify("Legenda em português ligada")
+    }
+
+    // automática ao abrir: filme/episódio com versão legendada ou áudio estrangeiro → legenda em português.
+    // Usa a do arquivo se for completa (não "forçada"); senão busca na internet em segundo plano.
     LaunchedEffect(readyOnce) {
         if (!readyOnce || autoSubTried || isLive || current.isLive == true) return@LaunchedEffect
         delay(2_500)
         autoSubTried = true
-        val hasPt = textOpts.any { it.label.startsWith("Português") }
+        if (subsOffThisVideo || extActive) return@LaunchedEffect
         val audioLang = selectedAudioLanguage(exoPlayer.currentTracks)
-        if (!hasPt && !ExternalSubs.autoOff(context) && wantsAutoSubtitle(current.title, audioLang)) searchSubs(silent = true)
+        if (!wantsAutoSubtitle(current.title, audioLang)) return@LaunchedEffect
+        val embedded = portugueseTextTrack(textOpts)
+        if (embedded != null) applyEmbeddedPt(embedded, announce = false) else searchSubs(inDialog = false)
+    }
+
+    // legenda do arquivo ligada sozinha mas nunca mostra texto (vazia): troca pela da internet
+    LaunchedEffect(embeddedAutoAt) {
+        val since = embeddedAutoAt ?: return@LaunchedEffect
+        var watched = 0L
+        while (watched < 90_000) {
+            delay(1_000)
+            if (embeddedAutoAt != since || extActive || subsOffThisVideo) return@LaunchedEffect
+            if (exoPlayer.isPlaying) watched += 1_000
+        }
+        if (lastCueAt < since && embeddedAutoAt == since) {
+            embeddedAutoAt = null
+            searchSubs(inDialog = false, announce = true)
+        }
+    }
+
+    // desenha a fala da legenda da internet na posição atual (+ ajuste de sincronia)
+    LaunchedEffect(extActive, extCues, subOffsetMs, playerViewRef) {
+        val view = playerViewRef?.subtitleView ?: return@LaunchedEffect
+        if (!extActive || extCues.isEmpty()) { view.setCues(emptyList()); return@LaunchedEffect }
+        var shown: ExternalSubs.Cue? = null
+        var first = true
+        var ticks = 0
+        while (true) {
+            val cue = ExternalSubs.cueAt(extCues, exoPlayer.currentPosition, subOffsetMs)
+            ticks++
+            // reaplica de vez em quando (o PlayerView pode limpar a tela ao buscar/pausar)
+            if (first || cue !== shown || ticks % 10 == 0) {
+                shown = cue; first = false
+                view.setCues(if (cue == null) emptyList() else listOf(Cue.Builder().setText(cue.text).build()))
+            }
+            delay(100)
+        }
+    }
+
+    LaunchedEffect(subNoticeTick) {
+        val msg = subNotice ?: return@LaunchedEffect
+        delay(if (msg.endsWith("…")) 15_000 else 3_500)
+        if (subNotice == msg) subNotice = null
     }
 
     /**
      * Filme dual áudio: trocou para áudio que não é português → liga legenda em português
-     * (a do arquivo, se tiver; senão busca na internet em segundo plano). Voltou ao português → desliga
-     * a que foi ligada sozinha. Nada disso acontece se o usuário escolheu "Desligada".
+     * (a do arquivo, se for completa; senão a da internet), com aviso na tela. Isso vale mesmo se
+     * antes tinha escolhido "Desligada". Voltou ao português → desliga a que foi ligada sozinha.
      */
     fun onAudioPicked(opt: TrackOption) {
         applyAudioTrack(exoPlayer, opt.groupIndex, opt.trackIndex)
         if (isLive || current.isLive == true) return
-        if (isPortuguese(opt.language)) {
-            if (subByAudioSwitch) { applyTextTrack(exoPlayer, null, null); subByAudioSwitch = false }
+        if (!isForeignAudio(opt, audioOpts)) {
+            if (subByAudioSwitch) { applyTextTrack(exoPlayer, null, null); stopExternal(); embeddedAutoAt = null; subByAudioSwitch = false }
             return
         }
-        if (opt.language.isNullOrBlank() || ExternalSubs.autoOff(context)) return
+        subsOffThisVideo = false
+        subByAudioSwitch = true
         val embedded = portugueseTextTrack(textOpts)
         when {
-            embedded != null -> { applyTextTrack(exoPlayer, embedded.groupIndex, embedded.trackIndex); subByAudioSwitch = true }
-            extApplied != null -> {
-                exoPlayer.trackSelectionParameters = exoPlayer.trackSelectionParameters.buildUpon()
-                    .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false).setPreferredTextLanguage("pt").build()
-                subByAudioSwitch = true
-            }
-            extOptions.isNotEmpty() -> { applyExternal(extOptions.first(), silent = true); subByAudioSwitch = true }
-            else -> { searchSubs(silent = true); subByAudioSwitch = true }
+            extActive -> notify("Legenda em português ligada")
+            extApplied != null && extCues.isNotEmpty() -> { applyTextTrack(exoPlayer, null, null); extActive = true; notify("Legenda em português ligada") }
+            embedded != null -> applyEmbeddedPt(embedded, announce = true)
+            extOptions.isNotEmpty() -> { notify("Buscando legenda…"); applyExternal(extOptions.first(), announce = true) }
+            else -> searchSubs(inDialog = false, announce = true)
         }
     }
 
@@ -470,7 +575,8 @@ fun PlayerScreen(request: PlaybackRequest, onBack: () -> Unit) {
                     keepScreenOn = true
                     setShowBuffering(PlayerView.SHOW_BUFFERING_NEVER)
                     isFocusable = false
-                }
+                    applySubtitleStyle(this)
+                }.also { v -> playerViewRef = v }
             },
             update = {
                 it.player = exoPlayer
@@ -632,6 +738,20 @@ fun PlayerScreen(request: PlaybackRequest, onBack: () -> Unit) {
             }
         }
 
+        subNotice?.let { msg ->
+            Text(
+                msg,
+                color = Color.White,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(top = 28.dp)
+                    .background(Color(0xD9111827), RoundedCornerShape(12.dp))
+                    .padding(horizontal = 18.dp, vertical = 10.dp),
+            )
+        }
+
         nextCountdown?.let { n ->
             NextEpisodeCard(
                 seconds = n,
@@ -644,32 +764,70 @@ fun PlayerScreen(request: PlaybackRequest, onBack: () -> Unit) {
         }
 
         if (showTracks) {
+            val embeddedOn = textOpts.any { it.selected }
             TrackPickerDialog(
                 audio = audioOpts,
-                text = textOpts,
+                text = if (extActive) textOpts.map { it.copy(selected = false) } else textOpts,
                 onPickAudio = { opt -> onAudioPicked(opt); showTracks = false; touch() },
                 onPickText = { opt ->
+                    stopExternal()
+                    embeddedAutoAt = null
                     if (opt == null) applyTextTrack(exoPlayer, null, null)
                     else applyTextTrack(exoPlayer, opt.groupIndex, opt.trackIndex)
-                    ExternalSubs.setAutoOff(context, opt == null)
+                    // "Desligada" só para este vídeo
+                    subsOffThisVideo = opt == null
                     subByAudioSwitch = false
                     showTracks = false
                     touch()
                 },
                 onDismiss = { showTracks = false; subStatus = null },
-                external = extOptions.filter { it.fileId != extApplied }.map { o ->
-                    ExternalRow(o.label + (o.release.takeIf { it.isNotBlank() }?.let { " · ${it.take(28)}" } ?: "")) {
-                        applyExternal(o, silent = false); showTracks = false; touch()
+                external = extOptions.map { o ->
+                    val selected = extActive && o.fileId == extApplied
+                    ExternalRow(o.label + (o.release.takeIf { it.isNotBlank() }?.let { " · ${it.take(28)}" } ?: ""), selected = selected) {
+                        if (selected) { showTracks = false; return@ExternalRow }
+                        applyExternal(o, announce = true, inDialog = true); showTracks = false; touch()
                     }
                 },
-                onSearch = if (!isLive && current.isLive != true) ({ searchSubs(silent = false) }) else null,
+                onSearch = if (!isLive && current.isLive != true) ({ searchSubs(inDialog = true) }) else null,
                 searchStatus = subStatus,
+                textOff = !extActive && !embeddedOn,
+                sync = if (extActive) SubtitleSync(
+                    label = ExternalSubs.formatOffset(subOffsetMs),
+                    onShift = { d -> subOffsetMs = (subOffsetMs + d).coerceIn(-60_000L, 60_000L); touch() },
+                    onReset = { subOffsetMs = 0L; touch() },
+                ) else null,
             )
         }
     }
 }
 
 private const val NEXT_COUNTDOWN_S = 10
+
+/**
+ * Estilo da legenda (Configurações → Legendas): texto branco com contorno preto e, por padrão,
+ * SEM a caixa preta atrás. Ignora cores/fundos que venham dentro do arquivo de legenda.
+ */
+@OptIn(UnstableApi::class)
+internal fun applySubtitleStyle(view: PlayerView) {
+    val sv = view.subtitleView ?: return
+    val bg = when (AppSettings.subtitleBackground) {
+        "translucent" -> 0x99000000.toInt()
+        "black" -> android.graphics.Color.BLACK
+        else -> android.graphics.Color.TRANSPARENT
+    }
+    sv.setApplyEmbeddedStyles(false)
+    sv.setStyle(
+        CaptionStyleCompat(
+            android.graphics.Color.WHITE,
+            bg,
+            android.graphics.Color.TRANSPARENT,
+            CaptionStyleCompat.EDGE_TYPE_OUTLINE,
+            android.graphics.Color.BLACK,
+            null,
+        )
+    )
+    sv.setFractionalTextSize(SubtitleView.DEFAULT_TEXT_SIZE_FRACTION * 1.08f)
+}
 
 internal fun progressKeyFor(r: PlaybackRequest): String = WatchHistory.contentKey(r.playlistId ?: "_", r.url)
 

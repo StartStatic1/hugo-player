@@ -49,6 +49,7 @@ fun SettingsScreen(deviceId: String, deviceKey: String, onBack: () -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var catalogTtl by remember { mutableIntStateOf(AppSettings.catalogTtlHours) }
+    var subBg by remember { mutableStateOf(AppSettings.subtitleBackground) }
     var autoOpen by remember { mutableStateOf(AppSettings.autoOpenLastPlaylist) }
     var liveFormat by remember { mutableStateOf(AppSettings.liveFormat) }
     var ua by remember { mutableStateOf(AppSettings.userAgent) }
@@ -193,6 +194,16 @@ fun SettingsScreen(deviceId: String, deviceKey: String, onBack: () -> Unit) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(onClick = { AppSettings.userAgent = ua.trim(); message = "User-Agent salvo" }, colors = ButtonDefaults.buttonColors(containerColor = HugoColors.Accent), contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)) { Text("Salvar", fontSize = 13.sp) }
                 OutlinedButton(onClick = { ua = StreamTypes.DEFAULT_USER_AGENT; AppSettings.userAgent = StreamTypes.DEFAULT_USER_AGENT; message = "User-Agent padrão" }, contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)) { Text("Padrão", fontSize = 13.sp) }
+            }
+        }
+
+        Section("Legendas") {
+            Text("Fundo da legenda", color = HugoColors.TextMuted, fontSize = 11.sp)
+            Spacer(Modifier.height(6.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                listOf("none" to "Nenhum (contorno)", "translucent" to "Translúcido", "black" to "Preto").forEach { (k, label) ->
+                    Chip(label, subBg == k) { subBg = k; AppSettings.subtitleBackground = k; message = "Fundo da legenda: $label" }
+                }
             }
         }
 
