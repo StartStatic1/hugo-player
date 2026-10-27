@@ -40,28 +40,45 @@ object CrashLog {
         if (prevVersionCode != 0 && prevVersionCode != currentVersionCode) return null
         return when (exitReason) {
             null, REASON_UNKNOWN -> "O app fechou com a tela aberta sem erro Java (falha nativa/decodificador ou o sistema encerrou por falta de memória)."
-            REASON_PACKAGE_UPDATED, REASON_USER_REQUESTED, REASON_USER_STOPPED, REASON_EXIT_SELF, REASON_PACKAGE_STATE_CHANGE -> null
+            // não são falhas: atualização, app desativado/reativado, usuário fechou/forçou parar, permissão trocada
+            REASON_PACKAGE_UPDATED, REASON_PACKAGE_STATE_CHANGE, REASON_USER_REQUESTED, REASON_USER_STOPPED,
+            REASON_EXIT_SELF, REASON_PERMISSION_CHANGE -> null
             REASON_LOW_MEMORY -> "O Android fechou o app por falta de memória no aparelho."
+            REASON_CRASH -> "O app fechou por um erro."
             REASON_CRASH_NATIVE -> "O app fechou por uma falha nativa (decodificador de vídeo/sistema)."
             REASON_ANR -> "O app travou e o Android o fechou (não respondia)."
             REASON_SIGNALED -> "O sistema encerrou o app (provavelmente para liberar memória)."
             REASON_EXCESSIVE_RESOURCE_USAGE -> "O Android fechou o app por uso excessivo de recursos."
+            REASON_INITIALIZATION_FAILURE -> "O app não conseguiu iniciar."
+            REASON_DEPENDENCY_DIED -> "Um componente do sistema usado pelo app parou."
+            REASON_FREEZER -> "O Android congelou o app em segundo plano."
+            REASON_OTHER -> "O sistema encerrou o app (motivo não informado pelo Android)."
             else -> "O app fechou com a tela aberta sem erro Java (código do sistema $exitReason)."
         }
     }
 
-    // valores de android.app.ApplicationExitInfo (constantes estáveis; assim o teste roda sem Android)
+    // valores de android.app.ApplicationExitInfo.REASON_* (conferidos no teste contra o SDK)
     internal const val REASON_UNKNOWN = 0
     internal const val REASON_EXIT_SELF = 1
     internal const val REASON_SIGNALED = 2
     internal const val REASON_LOW_MEMORY = 3
+    internal const val REASON_CRASH = 4
     internal const val REASON_CRASH_NATIVE = 5
     internal const val REASON_ANR = 6
+    internal const val REASON_INITIALIZATION_FAILURE = 7
+    internal const val REASON_PERMISSION_CHANGE = 8
     internal const val REASON_EXCESSIVE_RESOURCE_USAGE = 9
     internal const val REASON_USER_REQUESTED = 10
     internal const val REASON_USER_STOPPED = 11
-    internal const val REASON_PACKAGE_STATE_CHANGE = 12
-    internal const val REASON_PACKAGE_UPDATED = 15
+    internal const val REASON_DEPENDENCY_DIED = 12
+    internal const val REASON_OTHER = 13
+    internal const val REASON_FREEZER = 14
+    internal const val REASON_PACKAGE_STATE_CHANGE = 15
+    internal const val REASON_PACKAGE_UPDATED = 16
+
+    /** Aviso antigo que na verdade foi atualização (0.5.43 mostrava "código do sistema 15/16"). */
+    internal fun isStaleUpdateNotice(text: String?): Boolean =
+        text != null && Regex("""código do sistema 1[56]\)""").containsMatchIn(text)
 
     /** Motivo real da última saída do processo (Android 11+). */
     private fun lastExitReason(context: Context, since: Long): Int? {
@@ -83,6 +100,11 @@ object CrashLog {
             @Suppress("DEPRECATION")
             app.packageManager.getPackageInfo(app.packageName, 0).let { if (Build.VERSION.SDK_INT >= 28) it.longVersionCode.toInt() else it.versionCode }
         }.getOrDefault(0)
+        // aviso pendente que era só a atualização (bug da 0.5.43): apaga
+        runCatching {
+            val f = File(dir, FILE)
+            if (f.exists() && isStaleUpdateNotice(f.readText())) { f.delete(); prefs!!.edit().putBoolean("seen", true).commit() }
+        }
         // a sessão anterior ficou "na tela" e não há registro novo -> fechou sem exceção Java
         runCatching {
             val p = prefs!!
