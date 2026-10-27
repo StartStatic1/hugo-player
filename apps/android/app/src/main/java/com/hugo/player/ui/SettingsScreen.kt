@@ -212,7 +212,6 @@ fun SettingsScreen(deviceId: String, deviceKey: String, onBack: () -> Unit) {
                                 )
                             },
                             { m -> InfoCard("Versão do app", "v${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})", null, m) },
-                            { m -> InfoCard("Plataforma", platformLabel(context), null, m) },
                         )
                         cards.chunked(if (twoCols) 2 else 1).forEach { row ->
                             Row(horizontalArrangement = Arrangement.spacedBy(14.dp), modifier = Modifier.fillMaxWidth().padding(bottom = 14.dp)) {
@@ -220,6 +219,8 @@ fun SettingsScreen(deviceId: String, deviceKey: String, onBack: () -> Unit) {
                                 if (row.size == 1 && twoCols) Spacer(Modifier.weight(1f))
                             }
                         }
+                        // largura total: deixa claro que o app não é só para celular
+                        InfoCard("Este aparelho", platformLabel(context), "Funciona em: celular, tablet, Android TV, Fire TV/Firestick e TV Box", Modifier.fillMaxWidth())
                     }
 
                     SettingsCat.PLAYER -> Panel {
@@ -372,6 +373,7 @@ private fun platformLabel(context: Context): String {
     val device = when {
         Build.MANUFACTURER.equals("Amazon", true) -> "Fire TV"
         pm.hasSystemFeature("android.software.leanback") -> "Android TV"
+        !pm.hasSystemFeature("android.hardware.touchscreen") -> "TV Box"
         else -> "Celular / tablet"
     }
     return "$device · Android ${Build.VERSION.RELEASE}"
