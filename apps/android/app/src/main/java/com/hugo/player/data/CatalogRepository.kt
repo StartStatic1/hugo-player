@@ -185,6 +185,7 @@ class CatalogRepository(context: Context) {
 
         onProgress("Provedor bloqueou o servidor. Baixando no aparelho...")
         val total = importM3uFullyLocal(playlistId, playlistUrl, onProgress, onFraction)
+        saveAccountLocal(playlistId, playlistUrl)
         onFraction(1f)
         invalidateSeriesTwins(playlistId); onProgress("Pronto! $total itens")
     }
@@ -200,6 +201,7 @@ class CatalogRepository(context: Context) {
         val channels = ArrayList<ChannelEntity>(800)
         var total = 0
         var estimated = 50000
+        var account: Pair<Long?, Boolean>? = null
         try {
             reader.beginObject()
             while (reader.hasNext()) {
@@ -284,6 +286,24 @@ class CatalogRepository(context: Context) {
                         reader.endArray()
                         if (categories.isNotEmpty()) dao.insertCategories(categories)
                     }
+                    // vencimento da conta Xtream (null quando a lista veio por M3U)
+                    "account" -> {
+                        if (reader.peek() == android.util.JsonToken.NULL) reader.nextNull()
+                        else {
+                            var expIso: String? = null
+                            var unlimited = false
+                            reader.beginObject()
+                            while (reader.hasNext()) {
+                                when (reader.nextName()) {
+                                    "expiresAt" -> expIso = reader.nextStringOrNull()
+                                    "unlimited" -> unlimited = if (reader.peek() == android.util.JsonToken.BOOLEAN) reader.nextBoolean() else { reader.skipValue(); false }
+                                    else -> reader.skipValue()
+                                }
+                            }
+                            reader.endObject()
+                            account = ListExpiry.parseIso(expIso) to unlimited
+                        }
+                    }
                     else -> reader.skipValue()
                 }
             }
@@ -293,7 +313,29 @@ class CatalogRepository(context: Context) {
             try { input.close() } catch (_: Exception) {}
         }
         if (channels.isNotEmpty()) dao.insertChannels(channels)
+        account.let { a -> if (a == null) ListExpiry.clear(appContext, playlistId) else ListExpiry.save(appContext, playlistId, a.first, a.second) }
         return total
+    }
+
+    /** Lista baixada no aparelho: se for Xtream, pergunta o vencimento direto ao provedor (rápido; falhar não importa). */
+    private fun saveAccountLocal(playlistId: String, playlistUrl: String) {
+        runCatching {
+            val u = android.net.Uri.parse(playlistUrl)
+            val user = u.getQueryParameter("username") ?: return ListExpiry.clear(appContext, playlistId)
+            val pass = u.getQueryParameter("password") ?: return ListExpiry.clear(appContext, playlistId)
+            val api = android.net.Uri.Builder().scheme(u.scheme).encodedAuthority(u.encodedAuthority).path("/player_api.php")
+                .appendQueryParameter("username", user).appendQueryParameter("password", pass).build().toString()
+            val conn = URL(api).openConnection() as java.net.HttpURLConnection
+            conn.connectTimeout = 8000; conn.readTimeout = 8000
+            conn.setRequestProperty("User-Agent", AppSettings.userAgent)
+            try {
+                if (conn.responseCode !in 200..299) return
+                val ui = org.json.JSONObject(conn.inputStream.bufferedReader().use { it.readText() }).optJSONObject("user_info") ?: return
+                val exp = ui.opt("exp_date")?.toString()?.trim().orEmpty()
+                val secs = exp.toLongOrNull()?.takeIf { it > 0 }
+                ListExpiry.save(appContext, playlistId, secs?.times(1000), unlimited = secs == null)
+            } finally { conn.disconnect() }
+        }
     }
 
     private suspend fun importM3uFullyLocal(
