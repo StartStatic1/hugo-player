@@ -136,6 +136,9 @@ button:disabled { opacity: .55; cursor: not-allowed; }
 .dl-card .qrbox { text-align: center; color: var(--muted); font-size: 12px; }
 .dl-card .qrbox img { width: 132px; height: 132px; background: #fff; border-radius: 12px; padding: 6px; display: block; margin: 0 auto 6px; }
 @media (max-width: 640px) { .dl-card { grid-template-columns: 1fr; } .dl-card .qrbox { display: none; } }
+.dl-card .tv-code { margin-top: 14px; display: inline-flex; align-items: center; gap: 14px; flex-wrap: wrap; padding: 10px 16px; border-radius: 14px; background: linear-gradient(120deg, #2a1650, #160d2a); border: 2px solid #f97316; }
+.dl-card .tv-code .lbl { font-size: 12px; font-weight: 800; letter-spacing: 1px; text-transform: uppercase; color: #fdba74; }
+.dl-card .tv-code .code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 32px; font-weight: 900; letter-spacing: 4px; color: #fff; }
 .footer { text-align: center; color: var(--muted); font-size: 12px; margin-top: 40px; }
 @media (max-width: 880px) { .login, .grid { grid-template-columns: 1fr; } .hero h1 { font-size: 30px; } .pl { grid-template-columns: 40px minmax(0, 1fr); } .pl .actions { grid-column: 1 / -1; } .topbar { padding: 12px 16px; } .legal { grid-template-columns: 1fr; } }
 @media (max-width: 560px) {
@@ -264,7 +267,8 @@ button:disabled { opacity: .55; cursor: not-allowed; }
         <a class="btn dl-big" href="/apk">⬇ Baixar APK</a>
         <a class="btn ghost" href="/baixar">Como instalar (celular e TV)</a>
       </div>
-      <div class="tv">Na Fire TV, abra o app <b>Downloader</b> e digite: <code>hugo.streamflixvip.online/apk</code></div>
+      <div class="tv-code" data-dl-code-box><span class="lbl">📺 Fire TV / TV Box · Código Downloader</span><span class="code" data-dl-code></span></div>
+      <div class="tv">No app <b>Downloader</b>, digite o código acima ou o endereço <code data-tv-url></code></div>
     </div>
     <div class="qrbox"><img src="/qr-apk.svg" alt="QR code para baixar o Hugo Player" width="132" height="132">Escaneie com o celular</div>
   </section>
@@ -614,6 +618,7 @@ try {
   if (saved && saved.deviceId && saved.deviceKey) { session = saved; enterDashboard(); }
 } catch (e) {}
 </script>
+<script src="/site-config.js"></script>
 <script>
 fetch(API + "/channels/version", { cache: "no-store" }).then(function (r) { return r.json(); })
   .then(function (v) { if (v && v.versionName) document.getElementById("dlVer").textContent = "Versão atual: " + v.versionName + "."; }).catch(function () {});

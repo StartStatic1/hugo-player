@@ -40,6 +40,10 @@ ol.steps b{color:#fff}ol.steps .path{display:inline-block;margin-top:4px;font-si
 .mock .bar{display:flex;gap:8px;align-items:center}.mock .field{flex:1;background:#1b1f33;border-radius:8px;padding:8px 10px;font-family:ui-monospace,monospace;color:#fff}.mock .go{background:#f97316;color:#fff;border-radius:8px;padding:8px 12px;font-weight:800}
 .mock .switch{display:flex;justify-content:space-between;align-items:center}.mock .tog{width:38px;height:20px;border-radius:999px;background:#34d399;position:relative}.mock .tog::after{content:"";position:absolute;right:2px;top:2px;width:16px;height:16px;border-radius:50%;background:#fff}
 .note{margin-top:22px;border-left:4px solid var(--warn);background:#fbbf2410;padding:14px 16px;border-radius:10px;color:#fde68a;font-size:14px;line-height:1.55}
+.code-box{margin:10px 0;padding:14px 16px;border-radius:16px;background:linear-gradient(120deg,#2a1650,#160d2a);border:2px solid #f97316;text-align:center}
+.code-box .lbl{font-size:13px;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;color:#fdba74}
+.code-box .code{display:block;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:clamp(34px,9vw,52px);font-weight:900;letter-spacing:6px;color:#fff;line-height:1.15;margin-top:4px}
+.or{display:flex;align-items:center;gap:10px;color:var(--muted);font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin:10px 0 4px}.or::before,.or::after{content:"";flex:1;height:1px;background:var(--border)}
 .footer{text-align:center;color:var(--muted);font-size:12px;margin-top:34px}
 @media(max-width:860px){.hero,.cols{grid-template-columns:1fr}h1{font-size:32px}}
 </style>
@@ -62,8 +66,9 @@ ol.steps b{color:#fff}ol.steps .path{display:inline-block;margin-top:4px;font-si
       <h2>Escaneie para baixar</h2>
       <img src="/qr-apk.svg" alt="QR code para baixar o Hugo Player" width="230" height="230">
       <div class="small">Aponte a câmera do celular</div>
-      <div class="small" style="margin-top:6px">Na TV, digite no app Downloader:</div>
-      <span class="tv-url" style="font-size:15px;margin:0;width:100%;padding:12px 8px">hugo.streamflixvip.online/apk</span>
+      <div class="code-box" data-dl-code-box style="width:100%;margin:6px 0 0"><div class="lbl">Código Downloader</div><span class="code" data-dl-code></span></div>
+      <div class="small">Na TV, digite no app Downloader o código acima ou:</div>
+      <span class="tv-url" data-tv-url style="font-size:15px;margin:0;width:100%;padding:12px 8px"></span>
     </div>
   </section>
 
@@ -90,17 +95,20 @@ ol.steps b{color:#fff}ol.steps .path{display:inline-block;margin-top:4px;font-si
         <li><div>Na tela inicial, procure por <b>Downloader</b> (ícone laranja, da AFTVnews) e instale. Na TV Box, instale o Downloader pela Play Store.</div></li>
         <li><div>Libere a instalação: <span class="path">Configurações › Minha Fire TV › Opções do desenvolvedor › Instalar apps desconhecidos › Downloader: Ativado</span>
           <div class="small" style="margin-top:6px">Não aparece “Opções do desenvolvedor”? Vá em <b>Minha Fire TV › Sobre</b> e clique 7 vezes no nome do aparelho. Na TV Box: Configurações › Segurança/Apps › Fontes desconhecidas.</div></div></li>
-        <li><div>Abra o Downloader e, no campo de endereço, digite:
-          <span class="tv-url">hugo.streamflixvip.online/apk</span>
-          <div class="mock"><div class="bar"><span class="field">hugo.streamflixvip.online/apk</span><span class="go">Go</span></div></div></div></li>
+        <li><div>Abra o Downloader e, no campo de endereço (onde está “Enter a URL or Search Term”), digite o <b>código</b>:
+          <div class="code-box" data-dl-code-box><div class="lbl">Código Downloader</div><span class="code" data-dl-code></span></div>
+          <div class="mock"><div class="bar"><span class="field" data-dl-code></span><span class="go">Go</span></div></div>
+          <div class="or">ou digite o endereço</div>
+          <span class="tv-url" data-tv-url></span></div></li>
         <li><div>Toque em <b>Go</b>, espere baixar e toque em <b>Instalar</b>. No fim, pode tocar em <b>Excluir</b> o arquivo para liberar espaço e depois <b>Abrir</b> o Hugo Player.</div></li>
       </ol>
     </div>
   </section>
 
   <div class="note">⚠️ Baixe o Hugo Player só por este site (<b>hugo.streamflixvip.online</b>). O app não vem com canais, filmes ou listas: você adiciona a sua própria playlist depois de instalar.</div>
-  <div class="footer">Hugo Player • Link fixo para a versão mais nova: <a href="/apk">hugo.streamflixvip.online/apk</a></div>
+  <div class="footer">Hugo Player • Link fixo para a versão mais nova: <a href="/apk">hugo.streamflixvip.online/apk</a> • Código Downloader: <span data-dl-code></span></div>
 </main>
+<script src="/site-config.js"></script>
 <script>
 fetch("https://api-hugo.streamflixvip.online/channels/version", { cache: "no-store" })
   .then(function (r) { return r.json(); })
