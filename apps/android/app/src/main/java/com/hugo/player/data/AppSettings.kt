@@ -51,8 +51,9 @@ object AppSettings {
 
     /** Abrir automaticamente a última playlist ao iniciar. */
     var autoOpenLastPlaylist: Boolean
-        get() = if (isReady) prefs.getBoolean("autoOpenLast", true) else true
-        set(v) { prefs.edit().putBoolean("autoOpenLast", v).apply() }
+        // padrão desligado: quem não mexeu continua vendo a lista de playlists ao abrir o app
+        get() = if (isReady) prefs.getBoolean("autoOpenLastV2", false) else false
+        set(v) { prefs.edit().putBoolean("autoOpenLastV2", v).apply() }
 
     var lastPlaylistId: String?
         get() = if (isReady) prefs.getString("lastPlaylistId", null) else null

@@ -385,6 +385,7 @@ fun PlaylistScreen(
                                 repo.deletePlaylist(pl.id)
                                 PlaylistRepository.clearSync(context, pl.id)
                                 RecentPlaylists.remove(context, pl.id)
+                                if (AppSettings.lastPlaylistId == pl.id) AppSettings.lastPlaylistId = null
                                 if (LiveTvCache.playlistId == pl.id) { LiveTvCache.clear(); LiveTvCache.save(context) }
                                 playlists = playlists?.filterNot { it.id == pl.id }
                                 summaries.remove(pl.id); loads.remove(pl.id)

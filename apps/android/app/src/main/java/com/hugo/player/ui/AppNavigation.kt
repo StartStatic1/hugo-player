@@ -40,6 +40,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import coil.compose.SubcomposeAsyncImage
+import com.hugo.player.data.AppSettings
 import com.hugo.player.data.DeviceIdentity
 import com.hugo.player.data.WatchHistory
 import com.hugo.player.data.db.ChannelEntity
@@ -82,6 +83,11 @@ private fun AppNavigationContent() {
     val nav = rememberNavController()
     val identity = remember { DeviceIdentity.get(context) }
     val startDest = remember { if (DeviceIdentity.isActivationDone(context)) "playlists?open={open}&refresh={refresh}" else "activation" }
+    // "Abrir última playlist" ligado: ao abrir o app, já entra na última playlist aberta (se ainda existir;
+    // se foi apagada ou o app precisa atualizar, fica na lista normal). Só no arranque.
+    val startOpenId = remember {
+        if (DeviceIdentity.isActivationDone(context) && AppSettings.autoOpenLastPlaylist) AppSettings.lastPlaylistId?.takeIf { it.isNotBlank() } else null
+    }
 
     NavHost(navController = nav, startDestination = startDest) {
         composable("activation") {
@@ -92,7 +98,7 @@ private fun AppNavigationContent() {
         composable(
             "playlists?open={open}&refresh={refresh}",
             arguments = listOf(
-                navArgument("open") { type = NavType.StringType; nullable = true; defaultValue = null },
+                navArgument("open") { type = NavType.StringType; nullable = true; defaultValue = startOpenId },
                 navArgument("refresh") { type = NavType.StringType; nullable = true; defaultValue = null },
             ),
         ) { backStack ->
