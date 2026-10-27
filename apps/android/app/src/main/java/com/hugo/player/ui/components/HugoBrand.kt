@@ -15,7 +15,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.clickable
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -42,12 +41,12 @@ val HugoGradient = Brush.linearGradient(listOf(Color(0xFF8B5CF6), Color(0xFFEC48
 @Composable
 fun HugoLogo(modifier: Modifier = Modifier, markSize: Dp = 36.dp, textSize: TextUnit = 22.sp) {
     Row(modifier, verticalAlignment = Alignment.CenterVertically) {
-        Box(
-            Modifier.size(markSize).clip(RoundedCornerShape(markSize / 3.5f)).background(HugoGradient),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(Icons.Default.PlayArrow, contentDescription = null, tint = Color.White, modifier = Modifier.size(markSize * 0.7f))
-        }
+        // mesmo desenho do ícone do app (TV retrô + play, ciano → roxo)
+        androidx.compose.foundation.Image(
+            painter = androidx.compose.ui.res.painterResource(com.hugo.player.R.drawable.hugo_logo_mark),
+            contentDescription = null,
+            modifier = Modifier.size(markSize).clip(RoundedCornerShape(markSize * 0.24f)),
+        )
         Spacer(Modifier.width(10.dp))
         Text(
             buildAnnotatedString {
