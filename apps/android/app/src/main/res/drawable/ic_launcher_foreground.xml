@@ -1,14 +1,41 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Ícone Hugo Player (proposta F): TV retrô com antena e play; tudo dentro da zona segura (círculo de 66dp) -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <!-- Rounded play triangle -->
+    <!-- antena -->
     <path
-        android:fillColor="#7C5CFF"
-        android:pathData="M42,34L74,54L42,74Z" />
+        android:pathData="M54,38L45,28M54,38L63,28"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="3"
+        android:strokeLineCap="round" />
     <path
-        android:fillColor="#22D3EE"
-        android:pathData="M36,34h4v40h-4z" />
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M45,28m-2.6,0a2.6,2.6 0,1 1,5.2 0a2.6,2.6 0,1 1,-5.2 0M63,28m-2.6,0a2.6,2.6 0,1 1,5.2 0a2.6,2.6 0,1 1,-5.2 0" />
+    <!-- corpo da TV -->
+    <path
+        android:fillColor="#FF120B2E"
+        android:pathData="M38,37h32a11,11 0,0 1,11 11v16a11,11 0,0 1,-11 11h-32a11,11 0,0 1,-11 -11v-16a11,11 0,0 1,11 -11z" />
+    <!-- tela -->
+    <path android:pathData="M39,42h30a7,7 0,0 1,7 7v14a7,7 0,0 1,-7 7h-30a7,7 0,0 1,-7 -7v-14a7,7 0,0 1,7 -7z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="linear"
+                android:startX="32" android:startY="42"
+                android:endX="76" android:endY="70">
+                <item android:offset="0" android:color="#FF8B5CF6" />
+                <item android:offset="1" android:color="#FFEC4899" />
+            </gradient>
+        </aapt:attr>
+    </path>
+    <!-- play -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="4"
+        android:strokeLineJoin="round"
+        android:pathData="M50,50L61,56L50,62Z" />
 </vector>

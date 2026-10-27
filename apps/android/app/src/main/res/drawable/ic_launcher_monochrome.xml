@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Ícone temático (Android 13+): silhueta da TV com antena e play -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:pathData="M54,38L45,28M54,38L63,28"
+        android:strokeColor="#FF000000"
+        android:strokeWidth="3"
+        android:strokeLineCap="round" />
+    <path
+        android:fillColor="#FF000000"
+        android:pathData="M45,28m-2.6,0a2.6,2.6 0,1 1,5.2 0a2.6,2.6 0,1 1,-5.2 0M63,28m-2.6,0a2.6,2.6 0,1 1,5.2 0a2.6,2.6 0,1 1,-5.2 0" />
+    <path
+        android:fillColor="#FF000000"
+        android:fillType="evenOdd"
+        android:pathData="M38,37h32a11,11 0,0 1,11 11v16a11,11 0,0 1,-11 11h-32a11,11 0,0 1,-11 -11v-16a11,11 0,0 1,11 -11zM39,42a7,7 0,0 0,-7 7v14a7,7 0,0 0,7 7h30a7,7 0,0 0,7 -7v-14a7,7 0,0 0,-7 -7z" />
+    <path
+        android:fillColor="#FF000000"
+        android:strokeColor="#FF000000"
+        android:strokeWidth="4"
+        android:strokeLineJoin="round"
+        android:pathData="M50,50L61,56L50,62Z" />
+</vector>
