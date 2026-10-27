@@ -23,7 +23,7 @@ import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.PlayCircle
 import androidx.compose.material.icons.rounded.Public
-import androidx.compose.material.icons.rounded.QrCode2
+import androidx.compose.material.icons.rounded.Language
 import androidx.compose.material.icons.rounded.Storage
 import androidx.compose.material.icons.rounded.Subtitles
 import androidx.compose.material3.*
@@ -42,6 +42,7 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
@@ -78,7 +79,7 @@ private enum class SettingsCat(val label: String, val hint: String, val icon: Im
     PARENTAL("Controle dos pais", "PIN para conteúdo adulto", Icons.Rounded.Lock),
     CACHE("Cache e histórico", "Lista salva no aparelho e histórico", Icons.Rounded.Storage),
     DIAG("Diagnóstico", "Último fechamento inesperado", Icons.Rounded.BugReport),
-    ABOUT("Site e suporte", "Site e grupo de suporte no WhatsApp", Icons.Rounded.Public),
+    ABOUT("Site e suporte", "Ajuda e site oficial", Icons.Rounded.Public),
 }
 
 /**
@@ -89,8 +90,7 @@ private enum class SettingsCat(val label: String, val hint: String, val icon: Im
 @Composable
 fun SettingsScreen(deviceId: String, deviceKey: String, onBack: () -> Unit) {
     val context = LocalContext.current
-    val (openSupport, supportDialog) = rememberSupportWhatsapp()
-    val supportOnTv = remember { isTvLike(context) }
+    val (openQrLink, supportDialog) = rememberQrLinkOpener()
     val scope = rememberCoroutineScope()
     val focusManager = LocalFocusManager.current
     var catalogTtl by remember { mutableIntStateOf(AppSettings.catalogTtlHours) }
@@ -336,26 +336,26 @@ fun SettingsScreen(deviceId: String, deviceKey: String, onBack: () -> Unit) {
                     }
 
                     SettingsCat.ABOUT -> {
-                        val siteCard: @Composable (Modifier) -> Unit = { m ->
-                            InfoCard("Site", "hugo.streamflixvip.online", "Ativar e gerenciar dispositivos · OK abre", m, onClick = {
-                                runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(SITE_URL))) }.onFailure { message = "Abra $SITE_URL no celular" }
-                            }, trailing = Icons.Outlined.OpenInNew)
+                        val support: @Composable (Modifier) -> Unit = { m ->
+                            LinkButton("Suporte", "Tire dúvidas pelo WhatsApp", WhatsappGreen, m, onClick = { openQrLink(supportQrLink(context), true) }) {
+                                androidx.compose.foundation.Image(androidx.compose.ui.res.painterResource(com.hugo.player.R.drawable.ic_whatsapp), null, Modifier.fillMaxSize())
+                            }
                         }
-                        val supportCard: @Composable (Modifier) -> Unit = { m ->
-                            InfoCard(
-                                "Suporte no WhatsApp", "Entrar no grupo da comunidade",
-                                if (supportOnTv) "OK mostra o QR para abrir no celular" else "OK abre o grupo no WhatsApp",
-                                m, valueColor = WhatsappGreen, onClick = openSupport,
-                                trailing = if (supportOnTv) Icons.Rounded.QrCode2 else Icons.Outlined.OpenInNew,
-                            )
+                        val site: @Composable (Modifier) -> Unit = { m ->
+                            LinkButton("Site oficial", "Licença, download e revenda", HugoColors.Cyan, m, onClick = {
+                                // na TV: abre no navegador se houver; sem navegador mostra o QR
+                                openQrLink(QrLink(SITE_URL, "Site oficial", "Aponte a câmera do celular para o código e abra o site do Hugo Player", HugoColors.Cyan), false)
+                            }) {
+                                Icon(Icons.Rounded.Language, null, tint = HugoColors.Cyan, modifier = Modifier.fillMaxSize())
+                            }
                         }
                         if (compact) {
                             Column(verticalArrangement = Arrangement.spacedBy(14.dp), modifier = Modifier.fillMaxWidth().padding(bottom = 14.dp)) {
-                                supportCard(Modifier.fillMaxWidth()); siteCard(Modifier.fillMaxWidth())
+                                support(Modifier.fillMaxWidth()); site(Modifier.fillMaxWidth())
                             }
                         } else {
-                            Row(horizontalArrangement = Arrangement.spacedBy(14.dp), modifier = Modifier.fillMaxWidth().padding(bottom = 14.dp)) {
-                                supportCard(Modifier.weight(1f)); siteCard(Modifier.weight(1f))
+                            Row(horizontalArrangement = Arrangement.spacedBy(16.dp), modifier = Modifier.fillMaxWidth().padding(bottom = 14.dp)) {
+                                support(Modifier.weight(1f)); site(Modifier.weight(1f))
                             }
                         }
                     }
@@ -509,4 +509,32 @@ private fun Chip(label: String, selected: Boolean, onClick: () -> Unit) {
     val bg = if (selected) HugoColors.Accent else HugoColors.CardAlt
     val fg = if (selected) Color.White else HugoColors.TextMuted
     Button(onClick = onClick, colors = ButtonDefaults.buttonColors(containerColor = bg, contentColor = fg), shape = RoundedCornerShape(16.dp), contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)) { Text(label, fontSize = 12.sp) }
+}
+
+/** Botão grande de link (Site e suporte): ícone grande à esquerda, título e subtítulo; foco = borda na cor do botão. */
+@Composable
+private fun LinkButton(title: String, subtitle: String, accent: Color, modifier: Modifier, onClick: () -> Unit, icon: @Composable () -> Unit) {
+    FocusSurface(
+        onClick = onClick,
+        modifier = modifier.height(112.dp),
+        shape = RoundedCornerShape(18.dp),
+        color = HugoColors.Card,
+        focusedColor = accent.copy(alpha = 0.16f).compositeOver(HugoColors.Card),
+        focusBorderWidth = 3.dp,
+        focusBorderColor = accent,
+        focusScale = 1.03f,
+    ) { focused ->
+        Row(Modifier.fillMaxSize().padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                Modifier.size(64.dp).clip(RoundedCornerShape(18.dp)).background(accent.copy(alpha = if (focused) 0.22f else 0.12f)).padding(12.dp),
+                contentAlignment = Alignment.Center,
+            ) { icon() }
+            Spacer(Modifier.width(16.dp))
+            Column(Modifier.weight(1f)) {
+                Text(title, color = Color.White, fontSize = 21.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+                Spacer(Modifier.height(3.dp))
+                Text(subtitle, color = if (focused) Color.White.copy(alpha = 0.85f) else HugoColors.TextMuted, fontSize = 13.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            }
+        }
+    }
 }

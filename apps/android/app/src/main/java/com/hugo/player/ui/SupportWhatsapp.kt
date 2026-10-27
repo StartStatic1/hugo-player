@@ -43,22 +43,35 @@ fun openLink(c: Context, url: String): Boolean = runCatching {
     c.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
 }.isSuccess
 
+/** O que mostrar na janela de QR (título, explicação e cor do link). */
+data class QrLink(val url: String, val title: String, val hint: String, val color: Color)
+
 /**
- * Clique em "Suporte no WhatsApp": no celular abre o grupo direto; na TV (ou se nada abrir o link)
- * mostra o QR grande para escanear com o celular.
+ * Abre links sem travar na TV. [open] tenta abrir; se [preferQrOnTv] e o aparelho for TV
+ * (ou se nada abrir o link), mostra o QR grande para abrir no celular.
  */
+@Composable
+fun rememberQrLinkOpener(): Pair<(QrLink, Boolean) -> Unit, @Composable () -> Unit> {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    var showing by remember { mutableStateOf<QrLink?>(null) }
+    val open: (QrLink, Boolean) -> Unit = { link, preferQrOnTv ->
+        if ((preferQrOnTv && isTvLike(context)) || !openLink(context, link.url)) showing = link
+    }
+    val dialog: @Composable () -> Unit = { showing?.let { SupportQrDialog(it, onDismiss = { showing = null }) } }
+    return open to dialog
+}
+
+fun supportQrLink(c: Context) = QrLink(
+    SupportLink.whatsapp(c), "Suporte no WhatsApp",
+    "Aponte a câmera do celular para o código e fale com o suporte do Hugo Player", WhatsappGreen,
+)
+
+/** Clique em "Suporte": no celular abre o WhatsApp direto; na TV (ou se nada abrir) mostra o QR. */
 @Composable
 fun rememberSupportWhatsapp(): Pair<() -> Unit, @Composable () -> Unit> {
     val context = androidx.compose.ui.platform.LocalContext.current
-    var showQr by remember { mutableStateOf(false) }
-    val open: () -> Unit = {
-        val url = SupportLink.whatsapp(context)
-        if (isTvLike(context) || !openLink(context, url)) showQr = true
-    }
-    val dialog: @Composable () -> Unit = {
-        if (showQr) SupportQrDialog(SupportLink.whatsapp(context), onDismiss = { showQr = false })
-    }
-    return open to dialog
+    val (open, dialog) = rememberQrLinkOpener()
+    return { open(supportQrLink(context), true) } to dialog
 }
 
 fun qrBitmap(text: String, size: Int = 600): ImageBitmap? = runCatching {
@@ -69,7 +82,8 @@ fun qrBitmap(text: String, size: Int = 600): ImageBitmap? = runCatching {
 }.getOrNull()
 
 @Composable
-fun SupportQrDialog(url: String, onDismiss: () -> Unit) {
+fun SupportQrDialog(link: QrLink, onDismiss: () -> Unit) {
+    val url = link.url
     val context = androidx.compose.ui.platform.LocalContext.current
     val qr = remember(url) { qrBitmap(url) }
     val close = remember { FocusRequester() }
@@ -79,20 +93,20 @@ fun SupportQrDialog(url: String, onDismiss: () -> Unit) {
             Modifier.widthIn(max = 420.dp).background(HugoColors.Panel, RoundedCornerShape(18.dp)).padding(22.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Text("Suporte no WhatsApp", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
-            Text("Aponte a câmera do celular para o código e entre no grupo da comunidade Hugo Player",
+            Text(link.title, color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+            Text(link.hint,
                 color = HugoColors.TextMuted, fontSize = 13.sp, textAlign = TextAlign.Center, modifier = Modifier.padding(top = 4.dp))
             Spacer(Modifier.height(14.dp))
             Box(Modifier.size(260.dp).background(Color.White, RoundedCornerShape(14.dp)).padding(10.dp), contentAlignment = Alignment.Center) {
-                if (qr != null) Image(qr, "QR code do grupo de suporte no WhatsApp", Modifier.fillMaxSize(), filterQuality = FilterQuality.None)
+                if (qr != null) Image(qr, "QR code: ${link.title}", Modifier.fillMaxSize(), filterQuality = FilterQuality.None)
                 else Text("QR indisponível", color = Color.Black)
             }
             Spacer(Modifier.height(12.dp))
-            Text(SupportLink.display(url), color = WhatsappGreen, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center)
+            Text(SupportLink.display(url), color = link.color, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center)
             note?.let { Text(it, color = Color(0xFFFBBF24), fontSize = 12.sp, textAlign = TextAlign.Center, modifier = Modifier.padding(top = 6.dp)) }
             Spacer(Modifier.height(14.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
-                DialogButton("Abrir aqui", Modifier.weight(1f), WhatsappGreen) {
+                DialogButton("Abrir aqui", Modifier.weight(1f), link.color) {
                     if (openLink(context, url)) onDismiss() else note = "Este aparelho não abre links. Use o QR no celular."
                 }
                 DialogButton("Fechar", Modifier.weight(1f).focusRequester(close), HugoColors.Accent, onDismiss)

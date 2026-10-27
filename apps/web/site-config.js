@@ -1,7 +1,7 @@
 /*
  * Configuração do site Hugo Player — mude aqui e todas as páginas atualizam.
  * downloaderCode: código do app Downloader (AFTVnews) que aponta para tvUrl.
- * supportWhatsappUrl: grupo da comunidade/suporte no WhatsApp (botões [data-support-wa]).
+ * supportWhatsappUrl: link do Suporte no WhatsApp (botões [data-support-wa]).
  *   O app lê o mesmo link pela API (SUPPORT_WHATSAPP_URL no servidor; padrão igual a este).
  * Se algo mudar, troque só aqui.
  */
