@@ -333,7 +333,7 @@ function friendly(err) {
     var f = Object.values(err.details.fieldErrors).flat()[0];
     if (f) return f;
   }
-  return ERRORS[err && err.error] || (err && err.error) || "Erro inesperado.";
+  return ERRORS[err && err.error] || (err && err.message) || (err && err.error) || "Erro inesperado.";
 }
 async function api(method, path, body, extraHeaders) {
   extraHeaders = extraHeaders || {};
@@ -374,6 +374,9 @@ async function startPayment(plan) {
 $("loginForm").addEventListener("submit", async function(e) {
   e.preventDefault();
   var deviceId = $("deviceId").value.trim().toUpperCase();
+  // mesmo conserto do servidor: letra O vira zero, sem espaços/hífens (só quando sobram 12 dígitos hex)
+  var compactId = deviceId.replace(/[\s:\-._]/g, "").replace(/O/g, "0");
+  if (/^[0-9A-F]{12}$/.test(compactId)) deviceId = compactId.match(/.{2}/g).join(":");
   // A Device Key deve ser enviada exatamente como foi cadastrada.
   // Diferente do ID, ela pode ser sensível a maiúsculas/minúsculas.
   var deviceKey = $("deviceKey").value.trim();
@@ -382,8 +385,8 @@ $("loginForm").addEventListener("submit", async function(e) {
   $("loginBtn").disabled = true; $("loginBtn").textContent = "Entrando...";
   try {
     session = null;
-    await api("POST", "/devices/register", { deviceId: deviceId, deviceKey: deviceKey, platform: "web" });
-    session = { deviceId: deviceId, deviceKey: deviceKey };
+    var reg = await api("POST", "/devices/register", { deviceId: deviceId, deviceKey: deviceKey, platform: "web" });
+    session = { deviceId: (reg && reg.deviceId) || deviceId, deviceKey: deviceKey };
     sessionStorage.setItem("hugo.session", JSON.stringify(session));
     await enterDashboard();
   } catch (err) {

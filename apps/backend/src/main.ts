@@ -15,6 +15,7 @@ import { createPlaylistRouter, type StoredPlaylist } from "./routes-playlists.js
 import { createEpgRouter } from "./routes-epg.js";
 import { createAdminRouter } from "./routes-admin.js";
 import type { PlaylistResolver } from "./routes-catalog.js";
+import { canonicalDeviceId, isAppDeviceId } from "./device-id.js";
 import { clientVersionCode, normalizeConfig, updateRequired, type AppConfig } from "./app-config.js";
 import { createSubtitlesRouter } from "./subtitles.js";
 import { searchTmdb } from "./tmdb.js";
@@ -142,7 +143,7 @@ function verifyKey(key: string, device: Device): boolean {
   }
 }
 
-function findDevice(id: string): Device | undefined {
+function findDeviceRaw(id: string): Device | undefined {
   const raw = id.trim();
   return (
     db.devices[raw] ||
@@ -152,16 +153,27 @@ function findDevice(id: string): Device | undefined {
   );
 }
 
+/** Aparelho pelo ID já corrigido (O→0, espaços, minúsculas); se não houver, pelo ID como foi digitado. */
+function findDevice(id: string): Device | undefined {
+  const canon = canonicalDeviceId(id);
+  return db.devices[canon] || Object.values(db.devices).find((d) => d.deviceId.toUpperCase() === canon) || findDeviceRaw(id);
+}
+
+/** Candidatos para login: primeiro o ID corrigido, depois o digitado (cadastros antigos com erro de digitação). */
+function deviceCandidates(id: string): Device[] {
+  const out: Device[] = [];
+  for (const d of [findDevice(id), findDeviceRaw(id)]) if (d && !out.includes(d)) out.push(d);
+  return out;
+}
+
+function keyMatches(key: string, device: Device): boolean {
+  const k = key.trim();
+  return verifyKey(k, device) || verifyKey(k.toUpperCase(), device) || verifyKey(k.toLowerCase(), device);
+}
+
 function authDevice(id: string | undefined, key: string | undefined): Device | null {
   if (!id || !key) return null;
-  const device = findDevice(id);
-  if (!device) return null;
-  if (device.blockedAt) return null;
-  const k = key.trim();
-  if (verifyKey(k, device) || verifyKey(k.toUpperCase(), device) || verifyKey(k.toLowerCase(), device)) {
-    return device;
-  }
-  return null;
+  return deviceCandidates(id).find((d) => !d.blockedAt && keyMatches(key, d)) ?? null;
 }
 
 function hasActiveLicense(device: Device): boolean {
@@ -266,8 +278,9 @@ app.post("/devices/register", async (req, res) => {
   const platform = parsed.data.platform;
   const appVersion = parsed.data.appVersion;
   const now = new Date();
-  const storeKey = deviceId.toUpperCase();
-  const existing = findDevice(deviceId);
+  const storeKey = canonicalDeviceId(deviceId);
+  const candidates = deviceCandidates(deviceId);
+  const existing = candidates.find((d) => verifyKey(deviceKey, d) || verifyKey(deviceKey.toUpperCase(), d)) ?? candidates[0];
   if (existing) {
     if (verifyKey(deviceKey, existing) || verifyKey(deviceKey.toUpperCase(), existing)) {
       existing.lastSeenAt = now.toISOString();
@@ -277,13 +290,17 @@ app.post("/devices/register", async (req, res) => {
       if (!resolvePendingTrial(existing, parsed.data.androidId, db.trialLedger ??= {}, now, TRIAL_DAYS)) {
         backfillExisting(existing, parsed.data.androidId, db.trialLedger, now);
       }
-      db.devices[storeKey] = existing;
+      db.devices[existing.deviceId.toUpperCase()] = existing;
       await persist();
-      return res.json({ registered: true, created: false, ...trialInfo(existing) });
+      return res.json({ registered: true, created: false, deviceId: existing.deviceId, ...trialInfo(existing) });
     }
     // Um ID existente não pode trocar de Key só porque recebeu uma Key diferente.
     // A troca após reinstalação deve passar pelo fluxo explícito de recuperação.
     return res.status(409).json({ error: "device_key_mismatch", message: "Este Device ID já está registrado. Use a recuperação para trocar de aparelho." });
+  }
+  // pelo site só entra Device ID no formato do app (AA:BB:CC:DD:EE:FF): evita criar aparelho fantasma por erro de digitação
+  if (platform === "web" && !isAppDeviceId(storeKey)) {
+    return res.status(400).json({ error: "invalid_device_id", message: "Device ID inválido. Copie exatamente como aparece no app (ex.: F6:55:39:4F:0B:0C — use 0 zero, não a letra O)." });
   }
   const { salt, hash } = hashKey(deviceKey);
   const decision = decideTrial(parsed.data.androidId, db.trialLedger ??= {});
@@ -308,7 +325,7 @@ app.post("/devices/register", async (req, res) => {
   };
   db.devices[storeKey] = device;
   await persist();
-  res.status(201).json({ registered: true, created: true, ...trialInfo(device) });
+  res.status(201).json({ registered: true, created: true, deviceId: device.deviceId, ...trialInfo(device) });
 });
 
 /** "denied" = este aparelho já usou o teste grátis (só enquanto não houver plano pago). */
