@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import type { AddressInfo } from "node:net";
 import express from "express";
-import { buildSearchQuery, cleanSrt, createSubtitlesRouter, pickTmdbId, rankResults } from "../subtitles.js";
+import { buildSearchQuery, cleanSrt, createSubtitlesRouter, pickTmdbId, rankResults, releaseMatch, searchCacheTtlMs, sortOptions, titleMatches } from "../subtitles.js";
 
 test("busca: parâmetros em ordem alfabética e minúsculas (OpenSubtitles exige)", () => {
   assert.equal(buildSearchQuery({ title: "Inception", year: 2010 }), "languages=pt-br,pt-pt&query=inception&type=movie&year=2010");
@@ -30,7 +30,7 @@ test("rota: exige aparelho ativo, baixa 1x e guarda em cache; cota esgotada vira
   const fakeFetch = (async (url: string, init?: any) => {
     const u = String(url);
     const json = (status: number, body: any) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
-    if (u.includes("/subtitles?")) return json(200, { data: [{ attributes: { language: "pt-BR", download_count: 5, release: "Filme.2010", files: [{ file_id: 77 }] } }] });
+    if (u.includes("/subtitles?")) return json(200, { data: [{ attributes: { language: "pt-BR", download_count: 5, release: "Filme.2010", feature_details: { title: "Filme", year: 2010 }, files: [{ file_id: 77 }] } }, { attributes: { language: "pt-BR", download_count: 999, release: "Outro.2010", feature_details: { title: "Outro Filme Qualquer", year: 2010 }, files: [{ file_id: 88 }] } }] });
     if (u.endsWith("/download")) {
       if (quota) return json(406, { remaining: -1, reset_time_utc: "2099-01-01T00:00:00.000Z" });
       downloads++;
@@ -50,6 +50,7 @@ test("rota: exige aparelho ativo, baixa 1x e guarda em cache; cota esgotada vira
     assert.equal((await get("/search?title=Filme&year=2010", "NO")).status, 401);
     const s = (await (await get("/search?title=Filme&year=2010")).json()) as any;
     assert.equal(s.items[0].fileId, 77);
+    assert.equal(s.items.length, 1); // o outro filme (título diferente) não entra
     const a = await get("/file/77");
     assert.equal(a.status, 200);
     assert.match(await a.text(), /Olá/);
@@ -96,4 +97,44 @@ test("login recusado: tenta 1 vez e não repete a cada download (evita bloquear 
   } finally {
     server.close();
   }
+});
+
+test("busca reserva por texto: só aceita o filme/série com o mesmo título (nada de filme errado)", () => {
+  const movie = (title: string, year?: number, movie_name?: string) => ({ attributes: { feature_details: { title, year, movie_name } } });
+  assert.equal(titleMatches(movie("The Last Sunrise", 2024), "o sorveteiro", 2026, false), false);
+  assert.equal(titleMatches(movie("The Whisper Man", 2025), "o sorveteiro", 2026, false), false);
+  assert.equal(titleMatches(movie("O Sorveteiro", 2026), "o sorveteiro", 2026, false), true);
+  assert.equal(titleMatches(movie("Inception", 2010, "2010 - Inception"), "Inception", 2010, false), true);
+  assert.equal(titleMatches(movie("Inception", 2010), "Inception", 2018, false), false); // ano muito diferente
+  assert.equal(titleMatches(movie("Duna: Parte Dois", 2024), "Duna", 2024, false), true);
+  assert.equal(titleMatches(movie("Dunas", 2024), "Duna", 2024, false), false);
+  const ep = { attributes: { feature_details: { title: "Episode 1", parent_title: "Dark" } } };
+  assert.equal(titleMatches(ep, "Dark", undefined, true), true);
+  assert.equal(titleMatches(ep, "Breaking Bad", undefined, true), false);
+  assert.equal(titleMatches({}, "Qualquer", undefined, false), false);
+});
+
+test("cache de busca vazia dura pouco (filme novo ganha legenda logo)", () => {
+  const now = new Date("2026-10-26T00:00:00Z");
+  assert.equal(searchCacheTtlMs(true, 2026, now), 24 * 3600_000);
+  assert.equal(searchCacheTtlMs(false, 2026, now), 30 * 60_000);
+  assert.equal(searchCacheTtlMs(false, 2025, now), 30 * 60_000);
+  assert.equal(searchCacheTtlMs(false, 2010, now), 3 * 3600_000);
+  assert.equal(searchCacheTtlMs(false, undefined, now), 3 * 3600_000);
+});
+
+test("automática prefere legenda sem SDH e o release que bate com o arquivo", () => {
+  const item = (id: number, release: string, extra: any = {}) => ({ attributes: { language: "pt-BR", download_count: 100, release, files: [{ file_id: id }], ...extra } });
+  const r = rankResults([
+    item(1, "Filme.2024.1080p.BluRay.x264", { hearing_impaired: true, download_count: 9000 }),
+    item(2, "Filme.2024.SDH.1080p.WEB-DL", { download_count: 5000 }),
+    item(3, "Filme.2024.720p.AMZ.WEB-DL", { download_count: 50 }),
+    item(4, "Filme.2024.1080p.BluRay.x264-GRP", { download_count: 10 }),
+  ], 6, "Filme (2024) 1080p BluRay");
+  assert.deepEqual(r.map((o) => o.fileId), [4, 3, 1, 2]);
+  assert.equal(r.find((o) => o.fileId === 2)!.hearingImpaired, true); // SDH pelo nome também
+  assert.equal(releaseMatch("Filme.2024.1080p.BluRay.x264", "filme 1080p blu-ray"), 3);
+  assert.equal(releaseMatch("x", undefined), 0);
+  // sem dica: mais baixada entre as não-SDH
+  assert.deepEqual(sortOptions(r).map((o) => o.fileId).slice(0, 2), [3, 4]);
 });

@@ -52,25 +52,55 @@ export function buildSearchQuery(q: SearchInput): string {
     .join("&");
 }
 
-/** Melhores primeiro: pt-BR antes de pt-PT; humanas antes de tradução automática; mais baixadas. */
-export function rankResults(data: any[], limit = 6): SubtitleOption[] {
+/** Rótulos que indicam legenda para surdos (descreve sons: "[música]", "[risos]"). */
+const SDH_RE = /(^|[^a-z])(sdh|cc|hi|closed[ ._-]?captions?|hearing[ ._-]?impaired)([^a-z]|$)/i;
+
+/** Pedaços do nome do release que ajudam a acertar a sincronia (fonte, resolução, grupo). */
+export function releaseTokens(s: string): string[] {
+  return (s ?? "")
+    .toLowerCase()
+    .replace(/web[ ._-]?dl/g, "webdl").replace(/web[ ._-]?rip/g, "webrip").replace(/blu[ ._-]?ray/g, "bluray")
+    .split(/[^a-z0-9]+/)
+    .filter((t) => t.length >= 2 && !/^(19|20)\d\d$/.test(t) && !["the", "and", "dublado", "legendado", "dual", "audio", "mkv", "mp4", "avi"].includes(t));
+}
+
+/** Quantos pedaços do release batem com o nome do arquivo/título do usuário (0 = sem dica). */
+export function releaseMatch(release: string, hint: string | undefined): number {
+  if (!hint) return 0;
+  const want = new Set(releaseTokens(hint));
+  if (!want.size) return 0;
+  return new Set(releaseTokens(release).filter((t) => want.has(t))).size;
+}
+
+/**
+ * Ordem da escolha automática: pt-BR antes de pt-PT; feitas por pessoas antes de tradução automática;
+ * SEM descrição de sons (SDH) antes das SDH; depois o release que mais bate com o arquivo; depois mais baixadas.
+ * As SDH continuam na lista (para quem escolher manualmente), só não vêm primeiro.
+ */
+export function sortOptions(opts: SubtitleOption[], hint?: string): SubtitleOption[] {
+  const score = (o: SubtitleOption) =>
+    (o.lang === "pt-BR" ? 0 : 20) + (o.machine ? 40 : 0) + (o.hearingImpaired ? 15 : 0) - Math.min(4, releaseMatch(o.release, hint)) * 2;
+  return [...opts].sort((x, y) => score(x) - score(y) || y.downloads - x.downloads);
+}
+
+export function rankResults(data: any[], limit = 6, hint?: string): SubtitleOption[] {
   const out: SubtitleOption[] = [];
   for (const item of data ?? []) {
     const a = item?.attributes;
     const file = a?.files?.[0];
     const lang = String(a?.language ?? "").toLowerCase();
     if (!file?.file_id || (lang !== "pt-br" && lang !== "pt-pt")) continue;
+    const release = String(a.release ?? file.file_name ?? "").slice(0, 80);
     out.push({
       fileId: Number(file.file_id),
       lang: lang === "pt-br" ? "pt-BR" : "pt-PT",
-      release: String(a.release ?? file.file_name ?? "").slice(0, 80),
+      release,
       downloads: Number(a.download_count ?? 0),
-      hearingImpaired: Boolean(a.hearing_impaired),
+      hearingImpaired: Boolean(a.hearing_impaired) || SDH_RE.test(release) || SDH_RE.test(String(file.file_name ?? "")),
       machine: Boolean(a.machine_translated || a.ai_translated),
     });
   }
-  const score = (o: SubtitleOption) => (o.lang === "pt-BR" ? 0 : 2) + (o.machine ? 4 : 0) + (o.hearingImpaired ? 1 : 0);
-  return out.sort((x, y) => score(x) - score(y) || y.downloads - x.downloads).slice(0, limit);
+  return sortOptions(out, hint).slice(0, limit);
 }
 
 /** Remove BOM e limita o tamanho (Firestick tem pouca memória). */
@@ -99,6 +129,38 @@ export function pickTmdbId(results: any[], title: string, year: number | undefin
     return close?.id;
   }
   return cands.find((r) => names(r).includes(want))?.id;
+}
+
+/**
+ * Busca reserva por texto (sem TMDB): a OpenSubtitles devolve qualquer coisa "parecida".
+ * Só aceita resultado cujo título (filme ou série) bate com o pedido — na dúvida, nada
+ * (legenda de outro filme é pior que nenhuma).
+ */
+export function titleMatches(item: any, title: string, year: number | undefined, isEpisode: boolean): boolean {
+  const fd = item?.attributes?.feature_details ?? {};
+  const want = norm(title);
+  if (!want) return false;
+  const raw = isEpisode ? [fd.parent_title, fd.parent_original_title] : [fd.title, fd.original_title, fd.movie_name];
+  const names = raw
+    .filter(Boolean)
+    .map((n: string) => norm(String(n).replace(/^\s*\d{4}\s*-\s*/, "")))
+    .filter((n: string) => n.length > 0);
+  // "Duna" ↔ "Duna Parte Dois": aceita quando um começa com o outro (palavra inteira), nunca "no meio"
+  const wordIn = (big: string, small: string) => small.length >= 4 && `${big} `.startsWith(`${small} `);
+  const ok = names.some((n: string) => n === want || wordIn(n, want) || wordIn(want, n));
+  if (!ok) return false;
+  if (!isEpisode && year) {
+    const y = Number(fd.year) || undefined;
+    if (y !== undefined && Math.abs(y - year) > 1) return false;
+  }
+  return true;
+}
+
+/** Quanto tempo guardar um resultado: vazio dura pouco (filme novo ganha legenda em horas). */
+export function searchCacheTtlMs(found: boolean, year: number | undefined, now = new Date()): number {
+  if (found) return 24 * 3600_000;
+  const recent = year !== undefined && year >= now.getUTCFullYear() - 1;
+  return recent ? 30 * 60_000 : 3 * 3600_000;
 }
 
 export interface SubtitlesDeps {
@@ -168,15 +230,19 @@ export function createSubtitlesRouter(deps: SubtitlesDeps): Router {
     }
     const qs = buildSearchQuery({ title, year, season, episode, tmdbId });
     const hit = searchCache.get(qs);
-    if (hit && Date.now() - hit.at < 24 * 3600_000) return res.json({ items: hit.items, cached: true });
+    const hint = String(req.query.hint ?? "").slice(0, 200) || undefined;
+    if (hit && Date.now() - hit.at < searchCacheTtlMs(hit.items.length > 0, year)) return res.json({ items: sortOptions(hit.items, hint).slice(0, 6), cached: true });
     try {
       const resp = await f(`${API}/subtitles?${qs}`, { headers: headers(), redirect: "follow" });
       if (resp.status === 429) return res.status(429).json({ error: "subtitle_rate_limited" });
       if (!resp.ok) return res.status(502).json({ error: `upstream_${resp.status}` });
-      const items = rankResults(((await resp.json()) as any)?.data ?? []);
+      const data: any[] = ((await resp.json()) as any)?.data ?? [];
+      const isEpisode = season !== undefined && episode !== undefined;
+      // com TMDB o id já garante o filme certo; sem ele, confere o título de cada resultado
+      const all = rankResults(tmdbId ? data : data.filter((d) => titleMatches(d, title, year, isEpisode)), 30);
       if (searchCache.size > 400) searchCache.delete(searchCache.keys().next().value as string);
-      searchCache.set(qs, { at: Date.now(), items });
-      res.json({ items });
+      searchCache.set(qs, { at: Date.now(), items: all });
+      res.json({ items: sortOptions(all, hint).slice(0, 6) });
     } catch {
       res.status(502).json({ error: "subtitle_search_failed" });
     }
