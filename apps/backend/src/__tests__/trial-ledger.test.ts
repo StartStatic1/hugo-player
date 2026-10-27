@@ -79,3 +79,25 @@ test("app antigo com atualização obrigatória: teste pendente até mandar o AN
   assert.equal(resolvePendingTrial(dev3, undefined, ledger, now, 7), false);
   assert.equal(dev3.trialPending, "update_required");
 });
+
+test("cadastro pelo site: sem teste; o teste nasce no 1º uso do app (com trava por ANDROID_ID)", async () => {
+  const { webPendingTrial, resolvePendingTrial, hashAndroidId } = await import("../trial-ledger.js");
+  const now = new Date("2026-10-27T12:00:00Z");
+  const ledger: Record<string, any> = {};
+  const web: any = { deviceId: "AA:BB:CC:DD:EE:01", ...webPendingTrial(now) };
+  assert.equal(web.license.type, "expired");
+  assert.equal(web.trialPending, "app_first_use");
+  // site de novo (sem ANDROID_ID): continua sem teste
+  assert.equal(resolvePendingTrial(web, undefined, ledger, now, 7), false);
+  assert.equal(web.license.type, "expired");
+  // app abre com ANDROID_ID novo: ganha o teste
+  assert.equal(resolvePendingTrial(web, "1a2b3c4d5e6f7a8b", ledger, now, 7), true);
+  assert.equal(web.license.type, "trial");
+  assert.equal(web.trialPending, undefined);
+  // outro cadastro pelo site aberto no MESMO aparelho físico: teste negado
+  ledger[hashAndroidId("1a2b3c4d5e6f7a8b")] ??= { deviceId: web.deviceId, at: now.toISOString(), source: "register" };
+  const web2: any = { deviceId: "AA:BB:CC:DD:EE:02", ...webPendingTrial(now) };
+  resolvePendingTrial(web2, "1a2b3c4d5e6f7a8b", ledger, now, 7);
+  assert.equal(web2.license.type, "expired");
+  assert.ok(web2.trialDenied);
+});

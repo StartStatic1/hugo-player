@@ -107,6 +107,11 @@ export function pendingOldAppTrial(now: Date): { license: LicenseLike; trialPend
   return { license: { type: "expired", plan: "trial", expiresAt: now.toISOString() }, trialPending: "update_required" };
 }
 
+/** Aparelho criado pelo site (antes de abrir o app): sem licença até o app decidir o teste ou um plano ser pago. */
+export function webPendingTrial(now: Date): { license: LicenseLike; trialPending: "app_first_use" } {
+  return { license: { type: "expired", plan: "trial", expiresAt: now.toISOString() }, trialPending: "app_first_use" };
+}
+
 /** O app atualizado mandou o ANDROID_ID: decide agora o teste que estava pendente. */
 export function resolvePendingTrial(
   device: TrialDevice & { trialPending?: string },

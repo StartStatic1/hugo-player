@@ -19,7 +19,7 @@ import { canonicalDeviceId, isAppDeviceId } from "./device-id.js";
 import { clientVersionCode, normalizeConfig, updateRequired, type AppConfig } from "./app-config.js";
 import { createSubtitlesRouter } from "./subtitles.js";
 import { searchTmdb } from "./tmdb.js";
-import { backfillExisting, decideTrial, newDeviceTrial, pendingOldAppTrial, resolvePendingTrial, type TrialFlag, type TrialLedger } from "./trial-ledger.js";
+import { backfillExisting, decideTrial, newDeviceTrial, pendingOldAppTrial, webPendingTrial, resolvePendingTrial, type TrialFlag, type TrialLedger } from "./trial-ledger.js";
 import { PAID_PLANS, PLAN_LABELS, PLAN_PRICES, planExpiry, renewalBase, type PaidPlan } from "./plans.js";
 import { revokeRefundedOrder } from "./refunds.js";
 import { createResellerAdminRouter, createResellerRouter, ensureResellerStore, type ActivatedBy, type ResellerStore } from "./resellers.js";
@@ -65,7 +65,8 @@ interface Device {
   /** teste recusado: este aparelho já usou o teste com outro Device ID */
   trialDenied?: { reason: "trial_already_used"; firstDeviceId: string; at: string };
   /** aparelho novo em app antigo: teste espera o app atualizado mandar o ANDROID_ID */
-  trialPending?: "update_required";
+  /** update_required = app antigo sem ANDROID_ID; app_first_use = criado pelo site, teste só no 1º uso do app */
+  trialPending?: "update_required" | "app_first_use";
   /** ativado por um revendedor (último que ativou/renovou) */
   activatedBy?: ActivatedBy;
 }
@@ -306,7 +307,11 @@ app.post("/devices/register", async (req, res) => {
   const decision = decideTrial(parsed.data.androidId, db.trialLedger ??= {});
   // app antigo (sem ANDROID_ID) com atualização obrigatória ligada: teste só depois de atualizar
   const oldAppPending = decision.kind === "unverified" && decision.flag === "old_app" && minVersionCode() > 0;
-  const trial = oldAppPending
+  // criado pelo site: sem teste grátis. O teste nasce no primeiro uso do app (com a trava por ANDROID_ID).
+  const webPending = platform === "web";
+  const trial = webPending
+    ? { ...webPendingTrial(now), androidIdHash: undefined, trialFlag: undefined, trialDenied: undefined }
+    : oldAppPending
     ? { ...pendingOldAppTrial(now), androidIdHash: undefined, trialFlag: undefined, trialDenied: undefined }
     : newDeviceTrial(decision, storeKey, now, TRIAL_DAYS, db.trialLedger);
   const device: Device = {
@@ -319,7 +324,7 @@ app.post("/devices/register", async (req, res) => {
     ...(trial.androidIdHash ? { androidIdHash: trial.androidIdHash } : {}),
     ...(trial.trialFlag ? { trialFlag: trial.trialFlag } : {}),
     ...(trial.trialDenied ? { trialDenied: trial.trialDenied } : {}),
-    ...(oldAppPending ? { trialPending: "update_required" as const } : {}),
+    ...(webPending ? { trialPending: "app_first_use" as const } : oldAppPending ? { trialPending: "update_required" as const } : {}),
     createdAt: now.toISOString(),
     lastSeenAt: now.toISOString(),
   };
@@ -517,6 +522,7 @@ app.get("/devices/status", requireDevice, (req, res) => {
       paymentProvider: device.license.paymentProvider,
       transactionNsu: device.license.transactionNsu,
       ...(trialInfo(device).trial === "denied" ? { trialDenied: true, reason: "trial_already_used" } : {}),
+      ...(trialInfo(device).trial === "pending" ? { trialPending: device.trialPending } : {}),
     },
     playlists: db.playlists.filter((p) => p.deviceId.toUpperCase() === device.deviceId.toUpperCase()).length,
     createdAt: device.createdAt,

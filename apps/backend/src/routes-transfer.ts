@@ -68,7 +68,8 @@ export function licenseRank(l: TransferLicense | undefined, now = Date.now()): n
 /** Licença que o aparelho NOVO deve ficar (a melhor) e se veio do antigo. */
 export function pickTransferLicense(from: TransferLicense | undefined, to: TransferLicense | undefined, now = Date.now()) {
   const rf = licenseRank(from, now), rt = licenseRank(to, now);
-  if (rf > rt && from) return { license: { ...from }, moved: true as const };
+  // só licença PAGA muda de aparelho; teste grátis fica onde nasceu (senão furava a trava por ANDROID_ID)
+  if (rf > rt && from && from.type === "premium") return { license: { ...from }, moved: true as const };
   return { license: to ? { ...to } : undefined, moved: false as const };
 }
 

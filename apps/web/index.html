@@ -199,7 +199,7 @@ button:disabled { opacity: .55; cursor: not-allowed; }
     </div>
     <form class="card" id="loginForm" autocomplete="off">
       <h2>Entrar com o dispositivo</h2>
-      <p class="desc">Novo dispositivo? Ele é ativado automaticamente no primeiro acesso.</p>
+      <p class="desc">Use o Device ID e a Key que aparecem no app. O teste grátis começa no primeiro uso do app.</p>
       <label for="deviceId">Device ID</label>
       <input id="deviceId" class="mono" placeholder="A1:B2:C3:D4:E5:F6" maxlength="40" required>
       <label for="deviceKey">Device Key</label>
@@ -319,6 +319,7 @@ let playlists = [];
 const unlocked = {};
 let addType = "m3u";
 let licenseActive = true;
+let pendingApp = false;
 
 function isHttpUrl(v) {
   try { var u = new URL(v); return (u.protocol === "http:" || u.protocol === "https:") && !!u.hostname; } catch (e) { return false; }
@@ -416,12 +417,14 @@ async function enterDashboard() {
   $("whoId").textContent = session.deviceId;
   var lic = status.license || { type: "trial", active: false };
   licenseActive = lic.active !== false && lic.type !== "expired";
+  pendingApp = !licenseActive && lic.trialPending === "app_first_use";
   var label = lic.type === "premium"
     ? ({ lifetime: "Premium Vitalício", semiannual: "Premium 6 meses" }[lic.plan] || "Premium Anual")
     : lic.paymentProvider === "transferred" ? "Transferida para outro aparelho"
     : lic.trialDenied ? "Teste grátis já usado neste aparelho"
+    : lic.trialPending === "app_first_use" ? "Sem licença"
     : ({ trial: "Teste", expired: "Trial expirado" }[lic.type] || lic.type);
-  var until = lic.expiresAt ? " até " + new Date(lic.expiresAt).toLocaleDateString("pt-BR") : "";
+  var until = lic.expiresAt && lic.active !== false ? " até " + new Date(lic.expiresAt).toLocaleDateString("pt-BR") : "";
   $("licBadge").className = "badge " + lic.type; $("licBadge").textContent = "Licença: " + label + until;
   $("loginView").classList.add("hidden");
   $("dashView").classList.remove("hidden"); $("session").classList.remove("hidden");
@@ -430,6 +433,7 @@ async function enterDashboard() {
   $("dashSub").textContent = licenseActive
     ? "Tudo o que você mudar aqui aparece no app ao atualizar a lista."
     : lic.trialDenied ? "Este aparelho já usou o teste grátis. Escolha um plano para usar o Hugo Player."
+    : lic.trialPending === "app_first_use" ? "Sem licença — abra o app no aparelho para iniciar o teste grátis ou compre um plano abaixo."
     : "Seu acesso de teste terminou. Escolha um plano para continuar usando suas playlists.";
   await loadPlaylists();
 }
@@ -437,7 +441,9 @@ async function enterDashboard() {
 async function loadPlaylists() {
   var box = $("plList");
   if (!licenseActive) {
-    box.innerHTML = '<div class="empty"><div class="big">🔒</div><b>Licença inativa</b><br>Ative o Premium acima para gerenciar e reproduzir suas playlists.</div>';
+    box.innerHTML = pendingApp
+      ? '<div class="empty"><div class="big">📲</div><b>Sem licença</b><br>Abra o Hugo Player no aparelho para iniciar o teste grátis, ou compre um plano acima.</div>'
+      : '<div class="empty"><div class="big">🔒</div><b>Licença inativa</b><br>Ative o Premium acima para gerenciar e reproduzir suas playlists.</div>';
     return;
   }
   box.innerHTML = '<div class="skeleton"></div><div class="skeleton"></div>';

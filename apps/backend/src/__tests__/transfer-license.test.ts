@@ -95,3 +95,13 @@ test("ordem: vitalício > vencimento mais longe > mais perto > teste > expirado"
   assert.equal(p.moved, false);
   assert.equal(p.license?.plan, "trial");
 });
+
+test("teste grátis não muda de aparelho na transferência (só licença paga)", async () => {
+  const { pickTransferLicense } = await import("../routes-transfer.js");
+  const day = 86400000, iso = (ms: number) => new Date(Date.now() + ms).toISOString();
+  const p = pickTransferLicense({ type: "trial", plan: "trial", expiresAt: iso(7 * day) }, { type: "expired", plan: "trial", expiresAt: iso(-day) });
+  assert.equal(p.moved, false);
+  assert.equal(p.license?.type, "expired");
+  const q = pickTransferLicense({ type: "premium", plan: "annual", expiresAt: iso(300 * day) }, { type: "trial", plan: "trial", expiresAt: iso(day) });
+  assert.equal(q.moved, true);
+});
