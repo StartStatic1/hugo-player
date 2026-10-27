@@ -130,7 +130,8 @@ private fun AppNavigationContent() {
                         route.startsWith("recent:") -> nav.goToPlaylists("open=${enc(route.removePrefix("recent:"))}&refresh=")
                         else -> nav.navigate(route)
                     }
-                }
+                },
+                onPlay = { req -> nav.openPlayer(req) },
             )
         }
         composable("live/{playlistId}") { backStack ->
