@@ -1,6 +1,6 @@
 import { Router, type Request, type Response, type NextFunction } from "express";
 import { z } from "zod";
-import { PAID_PLANS, planExpiry, type PaidPlan } from "./plans.js";
+import { PAID_PLANS, planExpiry, renewalBase, type PaidPlan } from "./plans.js";
 
 type LicenseType = "trial" | "premium" | "expired";
 type LicensePlan = "trial" | PaidPlan;
@@ -28,6 +28,7 @@ export interface AdminDevice {
   androidIdHash?: string;
   trialFlag?: string;
   trialDenied?: { reason: string; firstDeviceId: string; at: string };
+  activatedBy?: { resellerId: string; activationId: string; at: string; plan: string };
 }
 
 export interface AdminDeps {
@@ -46,8 +47,13 @@ const planSchema = z.object({
   transactionNsu: z.string().trim().max(200).optional(),
 });
 
-function activeLicense(plan: PaidPlan): { type: LicenseType; plan: LicensePlan; expiresAt: string | null } {
-  return { type: "premium", plan, expiresAt: planExpiry(plan, Date.now()) };
+/** Ativação manual: SOMA aos dias que ainda restam (como o pagamento automático). */
+export function activeLicense(
+  plan: PaidPlan,
+  current?: { type: string; expiresAt: string | null },
+  nowMs = Date.now(),
+): { type: LicenseType; plan: LicensePlan; expiresAt: string | null } {
+  return { type: "premium", plan, expiresAt: planExpiry(plan, renewalBase(current, nowMs)) };
 }
 
 export function createAdminRouter(deps: AdminDeps): Router {
@@ -90,6 +96,7 @@ export function createAdminRouter(deps: AdminDeps): Router {
         trialFlag: d.trialFlag,
         trialDenied: d.trialDenied,
         hasAndroidId: Boolean(d.androidIdHash),
+        activatedBy: d.activatedBy,
       }));
     res.json({ devices });
   });
@@ -109,7 +116,7 @@ export function createAdminRouter(deps: AdminDeps): Router {
     if (!device) return res.status(404).json({ error: "device_not_found" });
     const parsed = planSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: "validation_error", details: parsed.error.flatten() });
-    const license = activeLicense(parsed.data.plan);
+    const license = activeLicense(parsed.data.plan, device.license);
     device.license = {
       ...license,
       paymentProvider: parsed.data.transactionNsu ? "manual-test" : device.license.paymentProvider,

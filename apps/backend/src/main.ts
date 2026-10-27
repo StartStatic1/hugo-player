@@ -8,7 +8,6 @@ import { randomBytes, randomUUID, scryptSync, timingSafeEqual } from "node:crypt
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { tmdbRouter } from "./routes-tmdb.js";
-import { recoveryRouter } from "./routes-recovery.js";
 import { createTransferRouter, type TransferRecord } from "./routes-transfer.js";
 import { channelsRouter, setChannelsAccess, setVersionConfig } from "./routes-channels.js";
 import { isRegisteredUrl } from "./playlist-access.js";
@@ -20,7 +19,9 @@ import { clientVersionCode, normalizeConfig, updateRequired, type AppConfig } fr
 import { createSubtitlesRouter } from "./subtitles.js";
 import { searchTmdb } from "./tmdb.js";
 import { backfillExisting, decideTrial, newDeviceTrial, pendingOldAppTrial, resolvePendingTrial, type TrialFlag, type TrialLedger } from "./trial-ledger.js";
-import { PAID_PLANS, PLAN_LABELS, PLAN_PRICES, planExpiry, type PaidPlan } from "./plans.js";
+import { PAID_PLANS, PLAN_LABELS, PLAN_PRICES, planExpiry, renewalBase, type PaidPlan } from "./plans.js";
+import { revokeRefundedOrder } from "./refunds.js";
+import { createResellerAdminRouter, createResellerRouter, ensureResellerStore, type ActivatedBy, type ResellerStore } from "./resellers.js";
 
 const PORT = Number(process.env.PORT ?? 8080);
 const DATA_FILE = path.resolve(process.env.DATA_FILE ?? "./data/db.json");
@@ -64,6 +65,8 @@ interface Device {
   trialDenied?: { reason: "trial_already_used"; firstDeviceId: string; at: string };
   /** aparelho novo em app antigo: teste espera o app atualizado mandar o ANDROID_ID */
   trialPending?: "update_required";
+  /** ativado por um revendedor (último que ativou/renovou) */
+  activatedBy?: ActivatedBy;
 }
 
 interface Db {
@@ -76,6 +79,8 @@ interface Db {
   /** versão mínima obrigatória etc. (admin) */
   config?: AppConfig;
 }
+
+type FullDb = Db & Partial<ResellerStore>;
 
 type PaymentPlan = PaidPlan;
 type PaymentStatus = "pending" | "paid" | "canceled" | "refunded" | "failed";
@@ -93,7 +98,7 @@ interface PaymentOrder {
   paidAt?: string;
 }
 
-let db: Db = { devices: {}, playlists: [], orders: [] };
+let db: FullDb = { devices: {}, playlists: [], orders: [] };
 let writeChain: Promise<void> = Promise.resolve();
 
 async function loadDb(): Promise<void> {
@@ -103,9 +108,11 @@ async function loadDb(): Promise<void> {
     db.playlists ??= [];
     db.orders ??= [];
     db.trialLedger ??= {};
+    ensureResellerStore(db);
     db.config = normalizeConfig(db.config, process.env.MIN_VERSION_CODE);
   } catch {
     await fs.mkdir(path.dirname(DATA_FILE), { recursive: true });
+    ensureResellerStore(db);
     await persist();
   }
 }
@@ -164,7 +171,10 @@ function hasActiveLicense(device: Device): boolean {
 }
 
 const registerSchema = z.object({
-  deviceId: z.string().min(4).max(128).refine((value) => !/^\d+$/.test(value.trim()), "Device ID não pode ser apenas numérico"),
+  deviceId: z.string().min(4).max(128).refine((value) => !/^\d+$/.test(value.trim()), "Device ID não pode ser apenas numérico")
+    .refine((value) => !/[<>"'`\\]/.test(value), "Device ID com caractere inválido"),
+  // sem caracteres de HTML/aspas (o ID aparece no painel admin)
+  // (nenhum aparelho cadastrado usa esses caracteres)
   deviceKey: z.string().min(4).max(64),
   platform: z.string().max(64),
   appVersion: z.string().max(32).optional(),
@@ -182,7 +192,6 @@ app.use("/channels/from-m3u", express.text({ type: ["text/*", "application/octet
 app.use(rateLimit({ windowMs: 60_000, limit: 200 }));
 
 app.use("/tmdb", tmdbRouter);
-app.use("/recovery", recoveryRouter);
 // /channels e /channels/series-episodes: playlistId + aparelho (novo) ou ?url= cadastrada (apps antigos)
 setChannelsAccess({
   authenticate: (id, key) => authDevice(id, key)?.deviceId ?? null,
@@ -205,6 +214,19 @@ app.use(
     },
   }),
 );
+const resellerDeps = {
+  store: () => ensureResellerStore(db),
+  persist,
+  findDevice: (id: string) => findDevice(id),
+  verifyDevice: (id: string, key: string) => authDevice(id, key),
+  adminToken: ADMIN_TOKEN,
+  publicWebUrl: PUBLIC_WEB_URL,
+  publicApiUrl: PUBLIC_API_URL,
+  createCheckout: INFINITEPAY_HANDLE ? infinitePayLink : undefined,
+  confirmPayment: infinitePayCheck,
+};
+app.use("/reseller", createResellerRouter(resellerDeps));
+app.use("/admin/resellers", createResellerAdminRouter({ ...resellerDeps, allDevices: () => Object.values(db.devices) }));
 app.use("/admin", createAdminRouter({
   devices: () => db.devices,
   persist,
@@ -320,27 +342,56 @@ function requireDevice(req: Request, res: Response, next: NextFunction) {
 const paymentPlanSchema = z.object({ plan: z.enum(PAID_PLANS) });
 const paymentPrices: Record<PaymentPlan, number> = PLAN_PRICES;
 
-async function confirmInfinitePayPayment(order: PaymentOrder, body: Record<string, any>): Promise<boolean> {
-  const transactionNsu = String(body.transaction_nsu ?? "").trim();
-  const slug = String(body.slug ?? body.invoice_slug ?? "").trim();
-  if (!INFINITEPAY_HANDLE || !transactionNsu || !slug) return false;
+/** Confere direto com a InfinitePay se o pedido foi pago e com o valor certo (não confia só no webhook). */
+async function infinitePayCheck(o: { orderNsu: string; amount: number; transactionNsu: string; slug: string }): Promise<boolean> {
+  if (!INFINITEPAY_HANDLE || !o.transactionNsu || !o.slug) return false;
   const response = await fetch("https://api.checkout.infinitepay.io/payment_check", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ handle: INFINITEPAY_HANDLE, order_nsu: order.orderNsu, transaction_nsu: transactionNsu, slug }),
+    body: JSON.stringify({ handle: INFINITEPAY_HANDLE, order_nsu: o.orderNsu, transaction_nsu: o.transactionNsu, slug: o.slug }),
   });
   if (!response.ok) return false;
   const checked = await response.json() as { paid?: boolean; amount?: number; paid_amount?: number };
-  return checked.paid === true && Number(checked.amount ?? checked.paid_amount) === order.amount;
+  return checked.paid === true && Number(checked.amount ?? checked.paid_amount) === o.amount;
 }
+
+async function confirmInfinitePayPayment(order: PaymentOrder, body: Record<string, any>): Promise<boolean> {
+  return infinitePayCheck({
+    orderNsu: order.orderNsu,
+    amount: order.amount,
+    transactionNsu: String(body.transaction_nsu ?? "").trim(),
+    slug: String(body.slug ?? body.invoice_slug ?? "").trim(),
+  });
+}
+
+/** Cria o link de pagamento da InfinitePay (Pix ou cartão). */
+async function infinitePayLink(o: { orderNsu: string; amount: number; description: string; redirectUrl: string; webhookUrl: string }): Promise<string> {
+  const response = await fetch("https://api.checkout.infinitepay.io/links", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      handle: INFINITEPAY_HANDLE,
+      order_nsu: o.orderNsu,
+      items: [{ quantity: 1, price: o.amount, description: o.description }],
+      redirect_url: o.redirectUrl,
+      webhook_url: o.webhookUrl,
+      options: { single_payment: true, payment_methods_enabled: ["credit_card", "pix"] },
+    }),
+  });
+  const data = await response.json() as Record<string, any>;
+  const url = data.url ?? data.checkout_url ?? data.checkoutUrl;
+  if (!response.ok || typeof url !== "string") throw new Error("checkout_create_failed");
+  return url;
+}
+
+
 
 async function settleOrder(order: PaymentOrder, body: Record<string, any>): Promise<void> {
   const device = db.devices[order.deviceId];
   if (!device) throw new Error("device_not_found");
   const now = new Date();
-  const currentExpiry = device.license.expiresAt ? new Date(device.license.expiresAt) : null;
   // renovação soma a partir do vencimento atual (se ainda válido); semestral 180 dias, anual 365, vitalício sem vencimento
-  const expiresAt = planExpiry(order.plan, Math.max(now.getTime(), currentExpiry?.getTime() ?? 0));
+  const expiresAt = planExpiry(order.plan, renewalBase(device.license, now.getTime()));
   device.license = {
     type: "premium",
     plan: order.plan,
@@ -372,21 +423,13 @@ app.post("/payments/checkout", requireDevice, async (req, res) => {
   db.orders.push(order);
   await persist();
   try {
-    const response = await fetch("https://api.checkout.infinitepay.io/links", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        handle: INFINITEPAY_HANDLE,
-        order_nsu: order.orderNsu,
-        items: [{ quantity: 1, price: order.amount, description: PLAN_LABELS[order.plan] }],
-        redirect_url: `${PUBLIC_WEB_URL}/?payment=complete&order_nsu=${encodeURIComponent(order.orderNsu)}`,
-        webhook_url: `${PUBLIC_API_URL}/payments/infinitepay/webhook`,
-        options: { single_payment: true, payment_methods_enabled: ["credit_card", "pix"] },
-      }),
+    const checkoutUrl = await infinitePayLink({
+      orderNsu: order.orderNsu,
+      amount: order.amount,
+      description: PLAN_LABELS[order.plan],
+      redirectUrl: `${PUBLIC_WEB_URL}/?payment=complete&order_nsu=${encodeURIComponent(order.orderNsu)}`,
+      webhookUrl: `${PUBLIC_API_URL}/payments/infinitepay/webhook`,
     });
-    const data = await response.json() as Record<string, any>;
-    const checkoutUrl = data.url ?? data.checkout_url ?? data.checkoutUrl;
-    if (!response.ok || typeof checkoutUrl !== "string") throw new Error("checkout_create_failed");
     order.checkoutUrl = checkoutUrl;
     await persist();
     res.json({ ok: true, orderNsu: order.orderNsu, plan: order.plan, amount: order.amount, checkoutUrl });
@@ -409,10 +452,19 @@ app.post("/payments/infinitepay/webhook", async (req, res) => {
   const orderNsu = String(body.order_nsu ?? "").trim();
   const order = db.orders.find((item) => item.orderNsu === orderNsu);
   if (!order) return res.status(404).json({ error: "order_not_found" });
-  if (order.status === "paid") return res.sendStatus(200);
   const event = String(body.event ?? body.status ?? "paid").toLowerCase();
-  if (["canceled", "cancelled", "refunded", "payment_failed", "failed"].includes(event)) {
-    order.status = event === "refunded" ? "refunded" : event === "canceled" || event === "cancelled" ? "canceled" : "failed";
+  // estorno de pedido JÁ pago: tira a licença (antes só marcava o pedido e o aparelho continuava premium)
+  if (["refunded", "chargeback", "chargedback"].includes(event)) {
+    if (order.status === "paid") {
+      const dev = revokeRefundedOrder(db.devices, order, Date.now());
+      console.log(`order refund ${order.orderNsu}: license revoked on ${dev ?? "-"}`);
+    }
+    if (order.status !== "refunded") { order.status = "refunded"; await persist(); }
+    return res.sendStatus(200);
+  }
+  if (order.status === "paid") return res.sendStatus(200);
+  if (["canceled", "cancelled", "payment_failed", "failed"].includes(event)) {
+    order.status = event === "canceled" || event === "cancelled" ? "canceled" : "failed";
     await persist();
     return res.sendStatus(200);
   }
