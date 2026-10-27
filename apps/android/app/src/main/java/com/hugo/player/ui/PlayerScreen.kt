@@ -251,9 +251,12 @@ fun PlayerScreen(request: PlaybackRequest, onBack: () -> Unit) {
         var wasPlaying = false
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
+                // app saiu da tela (Home, recentes, tela desligou): grava o ponto já, antes que o sistema feche o app
+                Lifecycle.Event.ON_PAUSE -> saveProgressOf(context, current, exoPlayer.currentPosition, exoPlayer.duration, exoPlayer.playbackState == Player.STATE_ENDED)
                 Lifecycle.Event.ON_STOP -> {
                     wasPlaying = exoPlayer.playWhenReady
                     exoPlayer.pause()
+                    saveProgressOf(context, current, exoPlayer.currentPosition, exoPlayer.duration, exoPlayer.playbackState == Player.STATE_ENDED)
                 }
                 Lifecycle.Event.ON_START -> if (wasPlaying) {
                     if (exoPlayer.isCurrentMediaItemLive) exoPlayer.seekToDefaultPosition()
@@ -267,10 +270,17 @@ fun PlayerScreen(request: PlaybackRequest, onBack: () -> Unit) {
     }
 
     LaunchedEffect(exoPlayer) {
+        var lastSave = System.currentTimeMillis()
         while (true) {
             positionMs = exoPlayer.currentPosition
             durationMs = exoPlayer.duration
             nowMs = System.currentTimeMillis()
+            // "Continuar assistindo": grava o ponto a cada 15 s enquanto toca (antes só ao sair da tela —
+            // fechar o app pelos recentes, atualizar ou o sistema matar o app perdia o ponto)
+            if (exoPlayer.isPlaying && nowMs - lastSave >= PROGRESS_SAVE_EVERY_MS) {
+                lastSave = nowMs
+                saveProgressOf(context, current, exoPlayer.currentPosition, exoPlayer.duration, false)
+            }
             delay(500)
         }
     }
@@ -507,7 +517,10 @@ fun PlayerScreen(request: PlaybackRequest, onBack: () -> Unit) {
     val canSeek = !isLive && durationMs != C.TIME_UNSET && durationMs > 0
 
     fun togglePlay() {
-        if (exoPlayer.isPlaying) exoPlayer.pause() else {
+        if (exoPlayer.isPlaying) {
+            exoPlayer.pause()
+            saveProgressOf(context, current, exoPlayer.currentPosition, exoPlayer.duration, false)
+        } else {
             if (exoPlayer.playbackState == Player.STATE_IDLE) exoPlayer.prepare()
             exoPlayer.play()
         }
@@ -802,6 +815,8 @@ fun PlayerScreen(request: PlaybackRequest, onBack: () -> Unit) {
 }
 
 private const val NEXT_COUNTDOWN_S = 10
+/** de quanto em quanto tempo o ponto do "Continuar assistindo" é gravado durante a reprodução */
+internal const val PROGRESS_SAVE_EVERY_MS = 15_000L
 
 /**
  * Estilo da legenda (Configurações → Legendas): texto branco com contorno preto e, por padrão,
