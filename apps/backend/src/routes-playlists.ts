@@ -90,11 +90,25 @@ export const patchSchema = z
   })
   .refine(v => !(v.newPin && v.removePin), { message: "newPin e removePin são exclusivos" });
 
+/**
+ * Conserta erros comuns de digitação no teclado da TV: barras invertidas (http:\\host),
+ * "http://" repetido (http://http://host), "http//host" e espaços nas pontas.
+ */
+export function cleanPlaylistInput(url: string): string {
+  let u = url.trim().replace(/\\/g, "/");
+  u = u.replace(/^(?:\s*https?:?\/*\s*)+(?=https?:)/i, ""); // fica só o último http(s)
+  u = u.replace(/^(https?):?\/*/i, (_m, s) => `${s.toLowerCase()}://`);
+  return u;
+}
+
 export function buildPlaylistUrl(p: { type?: "m3u" | "xtream"; url: string; username?: string; password?: string }): string {
+  p = { ...p, url: cleanPlaylistInput(p.url) };
   if (/^[a-z][a-z0-9+.-]*:\/\//i.test(p.url) && !/^https?:\/\//i.test(p.url)) throw new Error("invalid_protocol");
   const raw = /^https?:\/\//i.test(p.url) ? p.url : `http://${p.url}`;
   const base = new URL(raw); // lança se inválida
   if (!/^https?:$/.test(base.protocol)) throw new Error("invalid_protocol");
+  // host precisa ser um domínio (com ponto), IP ou localhost: "http" sozinho é erro de digitação
+  if (!/\./.test(base.hostname) && !/^\[.*\]$/.test(base.hostname) && base.hostname !== "localhost") throw new Error("invalid_host");
   if (p.type !== "xtream" || !p.username || !p.password) return raw;
   const u = new URL("/get.php", `${base.protocol}//${base.host}`);
   u.searchParams.set("username", p.username);

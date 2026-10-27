@@ -146,3 +146,14 @@ test("EPG opcional por playlist: salvar, validar, trocar e remover", async () =>
     api.close();
   }
 });
+
+test("link digitado na TV: conserta barra invertida e http repetido; host sem ponto é recusado", async () => {
+  const { buildPlaylistUrl, cleanPlaylistInput } = await import("../routes-playlists.js");
+  assert.equal(cleanPlaylistInput("http://http:\\\\exemplo.com:80/get.php?a=1"), "http://exemplo.com:80/get.php?a=1");
+  assert.equal(cleanPlaylistInput("http://http://exemplo.com/x"), "http://exemplo.com/x");
+  assert.equal(cleanPlaylistInput("http//exemplo.com/x"), "http://exemplo.com/x");
+  assert.equal(cleanPlaylistInput(" HTTPS://exemplo.com/x "), "https://exemplo.com/x");
+  assert.equal(cleanPlaylistInput("exemplo.com/x"), "exemplo.com/x");
+  assert.equal(buildPlaylistUrl({ type: "m3u", url: "http://http:\\\\exemplo.com:80/get.php?a=1" }), "http://exemplo.com:80/get.php?a=1");
+  assert.throws(() => buildPlaylistUrl({ type: "m3u", url: "http://http/get.php" }));
+});
