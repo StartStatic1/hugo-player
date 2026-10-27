@@ -9,7 +9,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
@@ -26,6 +25,7 @@ import androidx.compose.ui.unit.sp
 import com.hugo.player.BuildConfig
 import com.hugo.player.data.AppUpdate
 import com.hugo.player.data.UpdateInfo
+import com.hugo.player.data.UpdateStep
 import com.hugo.player.ui.components.FocusSurface
 import com.hugo.player.ui.components.HugoColors
 import com.hugo.player.ui.components.HugoLogo
@@ -58,11 +58,9 @@ fun UpdateGate(content: @Composable () -> Unit) {
 private fun ForcedUpdateScreen(info: UpdateInfo, onRetryCheck: () -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    var downloading by remember { mutableStateOf(false) }
-    var progress by remember { mutableStateOf<Int?>(null) }
-    var error by remember { mutableStateOf<String?>(null) }
+    var step by remember { mutableStateOf<UpdateStep>(UpdateStep.Idle) }
     val installError by com.hugo.player.data.ApkInstall.lastError.collectAsState()
-    LaunchedEffect(installError) { if (installError != null) error = installError }
+    LaunchedEffect(installError) { installError?.let { step = UpdateStep.Failed(it) } }
     val buttonFocus = remember { FocusRequester() }
     BackHandler { /* bloqueado: não sai sem atualizar */ }
     LaunchedEffect(Unit) { kotlinx.coroutines.delay(100); runCatching { buttonFocus.requestFocus() } }
@@ -93,13 +91,10 @@ private fun ForcedUpdateScreen(info: UpdateInfo, onRetryCheck: () -> Unit) {
             Spacer(Modifier.height(24.dp))
             FocusSurface(
                 onClick = {
-                    if (downloading) return@FocusSurface
-                    downloading = true; error = null; progress = 0
+                    if (step.busy) return@FocusSurface
                     scope.launch {
-                        val err = AppUpdate.downloadAndInstall(context, info.apkUrl) { progress = it }
-                        downloading = false
-                        progress = null
-                        if (err != null) { error = err; if (info.offline) onRetryCheck() }
+                        runAppUpdate(context, info.apkUrl, resolveUrl = false) { step = it }
+                        if (step is UpdateStep.Failed && info.offline) onRetryCheck()
                     }
                 },
                 modifier = Modifier.fillMaxWidth().height(56.dp).focusRequester(buttonFocus),
@@ -111,24 +106,12 @@ private fun ForcedUpdateScreen(info: UpdateInfo, onRetryCheck: () -> Unit) {
                 shape = RoundedCornerShape(14.dp),
             ) { _ ->
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text(
-                        when {
-                            downloading && progress != null && progress!! > 0 -> "Baixando… ${progress}%"
-                            downloading -> "Baixando…"
-                            error != null -> "Tentar de novo"
-                            else -> "Baixar e instalar"
-                        },
-                        color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.SemiBold,
-                    )
+                    Text(updateButtonText(step, "Baixar e instalar"), color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
                 }
             }
-            if (downloading && (progress ?: 0) > 0) {
-                Spacer(Modifier.height(10.dp))
-                LinearProgressIndicator(progress = { (progress ?: 0) / 100f }, modifier = Modifier.fillMaxWidth(), color = HugoColors.Accent)
-            }
-            error?.let {
-                Spacer(Modifier.height(12.dp))
-                Text(it, color = Color(0xFFF87171), fontSize = 13.sp, textAlign = TextAlign.Center)
+            if (step != UpdateStep.Idle) {
+                Spacer(Modifier.height(14.dp))
+                UpdateProgress(step)
             }
             Spacer(Modifier.height(14.dp))
             Text("Depois de instalar, abra o Hugo Player de novo.", color = HugoColors.TextMuted, fontSize = 12.sp)
@@ -139,31 +122,35 @@ private fun ForcedUpdateScreen(info: UpdateInfo, onRetryCheck: () -> Unit) {
 @Composable
 private fun OptionalUpdateDialog(current: UpdateInfo, onDismiss: () -> Unit) {
     val context = LocalContext.current
-    var downloading by remember { mutableStateOf(false) }
-    var error by remember { mutableStateOf<String?>(null) }
+    var step by remember { mutableStateOf<UpdateStep>(UpdateStep.Idle) }
     val installError by com.hugo.player.data.ApkInstall.lastError.collectAsState()
-    LaunchedEffect(installError) { if (installError != null) error = installError }
+    LaunchedEffect(installError) { installError?.let { step = UpdateStep.Failed(it) } }
     val scope = rememberCoroutineScope()
+    val confirmFocus = remember { FocusRequester() }
+    LaunchedEffect(Unit) { kotlinx.coroutines.delay(150); runCatching { confirmFocus.requestFocus() } }
     AlertDialog(
-        onDismissRequest = { if (!downloading) onDismiss() },
+        onDismissRequest = { if (!step.busy) onDismiss() },
         title = { Text(if (current.versionName.isNotBlank()) "Atualização ${current.versionName}" else "Atualização disponível") },
         text = {
-            Text(buildString {
-                append(current.notes.ifBlank { "Nova versão disponível." })
-                if (error != null) { append("\n\n"); append(error) }
-            })
-        },
-        confirmButton = {
-            TextButton(enabled = !downloading, onClick = {
-                downloading = true
-                error = null
-                scope.launch {
-                    val err = AppUpdate.downloadAndInstall(context, current.apkUrl)
-                    downloading = false
-                    if (err != null) error = err
+            Column {
+                Text(current.notes.ifBlank { "Nova versão disponível." })
+                if (step != UpdateStep.Idle) {
+                    Spacer(Modifier.height(16.dp))
+                    UpdateProgress(step, textColor = Color.Unspecified)
                 }
-            }) { Text(if (downloading) "Baixando..." else "Baixar e instalar") }
+            }
         },
-        dismissButton = { TextButton(enabled = !downloading, onClick = onDismiss) { Text("Depois") } },
+        // botões continuam focáveis durante o download (o D-pad não perde o foco); só ignoram o clique
+        confirmButton = {
+            TextButton(modifier = Modifier.focusRequester(confirmFocus), onClick = {
+                if (step.busy) return@TextButton
+                scope.launch { runAppUpdate(context, current.apkUrl, resolveUrl = false) { step = it } }
+            }) { Text(updateButtonText(step, "Baixar e instalar")) }
+        },
+        dismissButton = {
+            TextButton(onClick = { if (!step.busy) onDismiss() }) {
+                Text("Depois", color = if (step.busy) Color.Gray else Color.Unspecified)
+            }
+        },
     )
 }

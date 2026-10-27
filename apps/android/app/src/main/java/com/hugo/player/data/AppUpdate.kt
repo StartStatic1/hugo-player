@@ -152,76 +152,125 @@ object AppUpdate {
         }
     }
 
-    /** Baixa o APK e abre o instalador do sistema. */
-    suspend fun downloadAndInstall(context: Context, apkUrl: String, onProgress: ((Int) -> Unit)? = null): String? =
-        withContext(Dispatchers.IO) {
-            try {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
-                    !context.packageManager.canRequestPackageInstalls()
-                ) {
-                    withContext(Dispatchers.Main) {
-                        val intent = Intent(
-                            Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
-                            Uri.parse("package:${context.packageName}"),
-                        ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                        context.startActivity(intent)
-                    }
-                    return@withContext "Permita instalar apps deste app e tente de novo."
+    /** Baixa o APK e abre o instalador do sistema. Etapas (verificando/baixando/abrindo) vão para [onStep]. */
+    suspend fun downloadAndInstall(
+        context: Context,
+        apkUrl: String,
+        onStep: ((UpdateStep) -> Unit)? = null,
+    ): String? = withContext(Dispatchers.IO) {
+        suspend fun step(s: UpdateStep) { if (onStep != null) withContext(Dispatchers.Main) { onStep(s) } }
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
+                !context.packageManager.canRequestPackageInstalls()
+            ) {
+                withContext(Dispatchers.Main) {
+                    val intent = Intent(
+                        Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+                        Uri.parse("package:${context.packageName}"),
+                    ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    context.startActivity(intent)
                 }
-
-                // armazenamento interno do app (sempre existe; o FileProvider tem files-path/updates)
-                val dir = File(context.filesDir, "updates").apply { mkdirs() }
-                val file = File(dir, "hugo-update.apk")
-                if (file.exists()) file.delete()
-                file.parentFile?.mkdirs()
-
-                val conn = (URL(apkUrl).openConnection() as HttpURLConnection).apply {
-                    connectTimeout = 20_000
-                    readTimeout = 120_000
-                    instanceFollowRedirects = true
-                    requestMethod = "GET"
-                }
-                try {
-                    if (conn.responseCode !in 200..299) {
-                        return@withContext "Falha ao baixar APK (HTTP ${conn.responseCode})."
-                    }
-                    val total = conn.contentLengthLong
-                    conn.inputStream.use { input ->
-                        file.outputStream().use { output ->
-                            val buf = ByteArray(64 * 1024)
-                            var done = 0L
-                            var lastPct = -1
-                            while (true) {
-                                val n = input.read(buf)
-                                if (n < 0) break
-                                output.write(buf, 0, n)
-                                done += n
-                                if (total > 0 && onProgress != null) {
-                                    val pct = (done * 100 / total).toInt()
-                                    if (pct != lastPct) { lastPct = pct; withContext(Dispatchers.Main) { onProgress(pct) } }
-                                }
-                            }
-                        }
-                    }
-                } finally {
-                    conn.disconnect()
-                }
-
-                if (!file.exists() || file.length() < 10_000) {
-                    return@withContext "APK inválido ou incompleto."
-                }
-
-                val err = withContext(Dispatchers.Main) { ApkInstall.install(context, file) }
-                err
-            } catch (e: java.net.UnknownHostException) {
-                "Sem conexão com a internet. Conecte o aparelho e tente de novo."
-            } catch (e: java.net.SocketTimeoutException) {
-                "A internet está lenta ou caiu. Tente de novo."
-            } catch (e: java.io.IOException) {
-                "Falha ao baixar (${e.message ?: "rede"}). Verifique a internet e tente de novo."
-            } catch (e: Exception) {
-                Log.e(TAG, "install failed", e)
-                e.message ?: "Erro ao instalar."
+                return@withContext "Permita instalar apps deste app e tente de novo."
             }
+
+            // armazenamento interno do app (sempre existe; o FileProvider tem files-path/updates)
+            val dir = File(context.filesDir, "updates").apply { mkdirs() }
+            val file = File(dir, "hugo-update.apk")
+            if (file.exists()) file.delete()
+            file.parentFile?.mkdirs()
+
+            step(UpdateStep.Downloading(0, -1))
+            val t0 = System.currentTimeMillis()
+            val conn = (URL(apkUrl).openConnection() as HttpURLConnection).apply {
+                connectTimeout = 15_000
+                readTimeout = 30_000
+                instanceFollowRedirects = true
+                requestMethod = "GET"
+            }
+            try {
+                if (conn.responseCode !in 200..299) {
+                    return@withContext "Falha ao baixar a atualização (HTTP ${conn.responseCode}). Tente de novo."
+                }
+                val total = conn.contentLengthLong
+                step(UpdateStep.Downloading(0, total))
+                conn.inputStream.use { input ->
+                    file.outputStream().use { output ->
+                        val buf = ByteArray(64 * 1024)
+                        var done = 0L
+                        var lastAt = 0L
+                        while (true) {
+                            val n = input.read(buf)
+                            if (n < 0) break
+                            output.write(buf, 0, n)
+                            done += n
+                            val now = System.currentTimeMillis()
+                            if (now - lastAt >= PROGRESS_EVERY_MS) { lastAt = now; step(UpdateStep.Downloading(done, total)) }
+                        }
+                        step(UpdateStep.Downloading(done, total))
+                        if (total > 0 && done < total) return@withContext "O download foi interrompido. Verifique a internet e tente de novo."
+                    }
+                }
+            } finally {
+                conn.disconnect()
+            }
+            Log.i(TAG, "apk ${file.length()} bytes em ${System.currentTimeMillis() - t0} ms")
+
+            if (!file.exists() || file.length() < 10_000) {
+                return@withContext "A atualização baixada veio incompleta. Tente de novo."
+            }
+
+            step(UpdateStep.Opening)
+            // a cópia para a sessão do PackageInstaller (~15 MB) roda aqui em IO, sem congelar a tela
+            val err = ApkInstall.install(context, file)
+            if (err == null) step(UpdateStep.Opened)
+            err
+        } catch (e: java.net.UnknownHostException) {
+            "Sem conexão com a internet. Conecte o aparelho e tente de novo."
+        } catch (e: java.net.SocketTimeoutException) {
+            "A internet está lenta ou caiu. Tente de novo."
+        } catch (e: java.io.IOException) {
+            "Falha ao baixar (${e.message ?: "rede"}). Verifique a internet e tente de novo."
+        } catch (e: Exception) {
+            Log.e(TAG, "install failed", e)
+            e.message ?: "Erro ao instalar."
         }
+    }
+
+    private const val PROGRESS_EVERY_MS = 250L
+}
+
+/** Etapa do "Baixar e instalar" (para a barra de progresso). */
+sealed interface UpdateStep {
+    data object Idle : UpdateStep
+    data object Checking : UpdateStep
+    /** total < 0 = servidor não informou o tamanho → barra sem % */
+    data class Downloading(val done: Long, val total: Long) : UpdateStep {
+        val percent: Int? get() = updatePercent(done, total)
+    }
+    data object Opening : UpdateStep
+    data object Opened : UpdateStep
+    data class Failed(val message: String) : UpdateStep
+}
+
+internal fun updatePercent(done: Long, total: Long): Int? =
+    if (total <= 0) null else (done * 100 / total).toInt().coerceIn(0, 100)
+
+internal fun formatMb(bytes: Long): String =
+    String.format(java.util.Locale("pt", "BR"), "%.1f MB", bytes / 1_048_576.0)
+
+/** Texto da etapa (o mesmo no popup e nas telas de atualização). */
+internal fun updateStepText(step: UpdateStep): String = when (step) {
+    UpdateStep.Idle -> ""
+    UpdateStep.Checking -> "Verificando a versão mais nova…"
+    is UpdateStep.Downloading -> {
+        val pct = step.percent
+        when {
+            pct != null -> "Baixando atualização… $pct% (${formatMb(step.done)} de ${formatMb(step.total)})"
+            step.done > 0 -> "Baixando atualização… ${formatMb(step.done)}"
+            else -> "Baixando atualização…"
+        }
+    }
+    UpdateStep.Opening -> "Abrindo instalador…"
+    UpdateStep.Opened -> "Instalador aberto. Confirme \"Atualizar\" na tela do Android."
+    is UpdateStep.Failed -> step.message
 }

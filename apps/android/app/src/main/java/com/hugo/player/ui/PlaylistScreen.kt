@@ -51,6 +51,7 @@ import com.hugo.player.data.CatalogRepository
 import com.hugo.player.data.ApiException
 import com.hugo.player.data.AppUpdate
 import com.hugo.player.data.ApkInstall
+import com.hugo.player.data.UpdateStep
 import com.hugo.player.data.isUpdateRequired
 import com.hugo.player.ui.components.FocusSurface
 import com.hugo.player.data.DeviceIdentity
@@ -667,11 +668,9 @@ fun PinDialog(title: String, message: String, onDismiss: () -> Unit, onConfirm: 
 private fun UpdateRequiredPanel(onRetry: () -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    var downloading by remember { mutableStateOf(false) }
-    var progress by remember { mutableStateOf<Int?>(null) }
-    var error by remember { mutableStateOf<String?>(null) }
+    var step by remember { mutableStateOf<UpdateStep>(UpdateStep.Idle) }
     val installError by ApkInstall.lastError.collectAsState()
-    LaunchedEffect(installError) { if (installError != null) error = installError }
+    LaunchedEffect(installError) { installError?.let { step = UpdateStep.Failed(it) } }
     val updateFocus = remember { FocusRequester() }
     LaunchedEffect(Unit) { kotlinx.coroutines.delay(100); runCatching { updateFocus.requestFocus() } }
 
@@ -695,14 +694,8 @@ private fun UpdateRequiredPanel(onRetry: () -> Unit) {
             Spacer(Modifier.height(22.dp))
             FocusSurface(
                 onClick = {
-                    if (downloading) return@FocusSurface
-                    downloading = true; error = null; progress = 0
-                    scope.launch {
-                        val url = AppUpdate.latestApkUrl(context)
-                        val err = AppUpdate.downloadAndInstall(context, url) { progress = it }
-                        downloading = false; progress = null
-                        if (err != null) error = err
-                    }
+                    if (step.busy) return@FocusSurface
+                    scope.launch { runAppUpdate(context, null, resolveUrl = true) { step = it } }
                 },
                 modifier = Modifier.fillMaxWidth().height(56.dp).focusRequester(updateFocus),
                 color = HugoColors.Accent,
@@ -713,24 +706,12 @@ private fun UpdateRequiredPanel(onRetry: () -> Unit) {
                 shape = RoundedCornerShape(14.dp),
             ) { _ ->
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text(
-                        when {
-                            downloading && (progress ?: 0) > 0 -> "Baixando… ${progress}%"
-                            downloading -> "Baixando…"
-                            error != null -> "Tentar de novo"
-                            else -> "Atualizar agora"
-                        },
-                        color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.SemiBold,
-                    )
+                    Text(updateButtonText(step, "Atualizar agora"), color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
                 }
             }
-            if (downloading && (progress ?: 0) > 0) {
-                Spacer(Modifier.height(10.dp))
-                LinearProgressIndicator(progress = { (progress ?: 0) / 100f }, modifier = Modifier.fillMaxWidth(), color = HugoColors.Accent)
-            }
-            error?.let {
-                Spacer(Modifier.height(10.dp))
-                Text(it, color = Color(0xFFF87171), fontSize = 13.sp, textAlign = TextAlign.Center)
+            if (step != UpdateStep.Idle) {
+                Spacer(Modifier.height(12.dp))
+                UpdateProgress(step)
             }
             Spacer(Modifier.height(12.dp))
             FocusSurface(
