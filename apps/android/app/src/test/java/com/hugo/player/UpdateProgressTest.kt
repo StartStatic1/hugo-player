@@ -25,7 +25,7 @@ class UpdateProgressTest {
         assertTrue(updateStepText(UpdateStep.Downloading(5 * mb, 10 * mb)).contains("de 10,0 MB"))
         assertEquals("Baixando atualização… 5,0 MB", updateStepText(UpdateStep.Downloading(5 * mb, -1)))
         assertEquals("Baixando atualização…", updateStepText(UpdateStep.Downloading(0, -1)))
-        assertEquals("Abrindo instalador…", updateStepText(UpdateStep.Opening))
+        assertEquals("Download concluído. Abrindo o instalador…", updateStepText(UpdateStep.Opening))
         assertEquals("Sem internet", updateStepText(UpdateStep.Failed("Sem internet")))
     }
 

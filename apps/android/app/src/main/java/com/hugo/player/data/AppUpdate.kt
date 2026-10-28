@@ -172,7 +172,7 @@ object AppUpdate {
                     ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                     context.startActivity(intent)
                 }
-                return@withContext "Permita instalar apps deste app e tente de novo."
+                return@withContext "Ative \"Permitir desta fonte\" para o Hugo Player na tela que abriu, volte e toque em Tentar de novo."
             }
 
             // armazenamento interno do app (sempre existe; o FileProvider tem files-path/updates)
@@ -272,7 +272,7 @@ internal fun updateStepText(step: UpdateStep): String = when (step) {
             else -> "Baixando atualização…"
         }
     }
-    UpdateStep.Opening -> "Abrindo instalador…"
-    UpdateStep.Opened -> "Instalador aberto. Confirme \"Atualizar\" na tela do Android."
+    UpdateStep.Opening -> "Download concluído. Abrindo o instalador…"
+    UpdateStep.Opened -> "Toque em \"Instalar\" (ou \"Atualizar\") na tela do Android para concluir."
     is UpdateStep.Failed -> step.message
 }

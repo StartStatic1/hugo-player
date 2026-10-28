@@ -35,12 +35,16 @@ object ApkInstall {
     fun install(context: Context, apk: File): String? {
         lastError.value = null
         val intent = runCatching { buildSystemInstallIntent(context, apk) }.getOrNull()
-        if (intent?.`package` != null) {
-            val opened = runCatching { context.startActivity(intent) }
-                .onFailure { Log.w(TAG, "system installer intent failed, fallback to session", it) }
-                .isSuccess
-            if (opened) return null
+        // 1) direto no instalador do sistema (sem escolher app)
+        if (intent?.`package` != null && tryStart(context, intent, "system installer")) return null
+        // 2) instalador sem fixar pacote (só apps instaladores atendem INSTALL_PACKAGE)
+        if (intent != null) {
+            intent.setPackage(null)
+            if (hasHandler(context, intent) && tryStart(context, intent, "install intent")) return null
         }
+        // 3) "Abrir com" (Instalador de pacotes etc.), como em outros apps; o usuário escolhe o instalador
+        runCatching { buildViewChooser(context, apk) }.getOrNull()?.let { if (tryStart(context, it, "view chooser")) return null }
+        // 4) reserva: sessão do PackageInstaller, sempre com tela de confirmação
         return runCatching { installWithSession(context, apk); null }
             .getOrElse { Log.e(TAG, "session install failed", it); "Não foi possível abrir o instalador do Android (${it.message})." }
     }
@@ -72,6 +76,22 @@ object ApkInstall {
             runCatching { installer.abandonSession(sessionId) }
             throw e
         }
+    }
+
+    private fun tryStart(context: Context, intent: Intent, what: String): Boolean =
+        runCatching { context.startActivity(intent) }.onFailure { Log.w(TAG, "$what failed", it) }.isSuccess
+
+    private fun hasHandler(context: Context, intent: Intent): Boolean =
+        runCatching { intent.resolveActivity(context.packageManager) != null }.getOrDefault(false)
+
+    /** ACTION_VIEW do APK dentro de um seletor "Abrir com" (nunca abre direto em app que só "salva arquivo"). */
+    fun buildViewChooser(context: Context, apk: File): Intent {
+        val uri: Uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", apk)
+        val view = Intent(Intent.ACTION_VIEW).apply {
+            setDataAndType(uri, MIME_APK)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        return Intent.createChooser(view, "Instalar atualização com").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION)
     }
 
     /** Intent de instalação explícita para o instalador do sistema (nunca para outro app que "abre arquivos"). */
