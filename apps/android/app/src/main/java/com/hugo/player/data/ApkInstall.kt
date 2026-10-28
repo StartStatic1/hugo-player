@@ -17,8 +17,11 @@ import java.io.File
 /**
  * Instala o APK baixado SEM depender de "abrir arquivo" (ACTION_VIEW), que em alguns
  * aparelhos cai em outro app (ex.: Termux "Save file in ~/downloads/") em vez do instalador.
- *  1) PackageInstaller (sessão do sistema) → abre a tela "Deseja atualizar este app?" do Android/Fire TV.
- *  2) Se a sessão falhar: intent de instalação apontando só para o instalador do sistema.
+ *  1) Intent de instalação apontando SÓ para o instalador do sistema → sobe na hora a tela
+ *     "Deseja atualizar este app?" com o botão Atualizar e, no fim, "Abrir" (fluxo que o dono aprovou).
+ *  2) Se não houver instalador do sistema que atenda: PackageInstaller (sessão), sempre pedindo
+ *     confirmação do usuário. Antes a sessão era o caminho principal e, no Android 12+, o sistema
+ *     podia instalar sozinho sem tela: o app ficava ~15 s parado e fechava sem aviso.
  */
 object ApkInstall {
     private const val TAG = "HugoInstall"
@@ -31,12 +34,15 @@ object ApkInstall {
     /** null = instalador aberto; senão mensagem de erro. */
     fun install(context: Context, apk: File): String? {
         lastError.value = null
-        val viaSession = runCatching { installWithSession(context, apk) }
-            .onFailure { Log.w(TAG, "session install failed, fallback", it) }
-            .isSuccess
-        if (viaSession) return null
-        return runCatching { installWithSystemIntent(context, apk); null }
-            .getOrElse { Log.e(TAG, "intent install failed", it); "Não foi possível abrir o instalador do Android (${it.message})." }
+        val intent = runCatching { buildSystemInstallIntent(context, apk) }.getOrNull()
+        if (intent?.`package` != null) {
+            val opened = runCatching { context.startActivity(intent) }
+                .onFailure { Log.w(TAG, "system installer intent failed, fallback to session", it) }
+                .isSuccess
+            if (opened) return null
+        }
+        return runCatching { installWithSession(context, apk); null }
+            .getOrElse { Log.e(TAG, "session install failed", it); "Não foi possível abrir o instalador do Android (${it.message})." }
     }
 
     private fun installWithSession(context: Context, apk: File) {
@@ -44,6 +50,8 @@ object ApkInstall {
         val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL).apply {
             setAppPackageName(context.packageName)
             setSize(apk.length())
+            // sempre mostrar a tela de confirmação do Android (nada de instalar "sozinho" e o app sumir)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) setRequireUserAction(PackageInstaller.SessionParams.USER_ACTION_REQUIRED)
         }
         val sessionId = installer.createSession(params)
         try {
@@ -78,10 +86,6 @@ object ApkInstall {
         }
         systemInstallerPackage(context, intent)?.let { intent.setPackage(it) }
         return intent
-    }
-
-    private fun installWithSystemIntent(context: Context, apk: File) {
-        context.startActivity(buildSystemInstallIntent(context, apk))
     }
 
     /** Pacote do instalador do sistema que atende a intent (ignora apps instalados pelo usuário). */
