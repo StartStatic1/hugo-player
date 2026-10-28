@@ -1,6 +1,7 @@
 package com.hugo.player.ui
 
 import com.hugo.player.data.AppSettings
+import com.hugo.player.data.LiveQuality
 import com.hugo.player.ui.components.lazyFocusRestore
 import android.view.KeyEvent as AndroidKeyEvent
 import androidx.activity.compose.BackHandler
@@ -91,12 +92,21 @@ fun LivePlayerScreen(request: LivePlayRequest, onBack: () -> Unit) {
     var index by remember { mutableIntStateOf(if (request.fixedList != null) (request.number - 1).coerceIn(0, (channels.size - 1).coerceAtLeast(0)) else 0) }
     val current = channels.getOrNull(index) ?: request.channel
     var previous by remember { mutableStateOf<Pair<Int, ChannelEntity>?>(null) }
+    // qualidades do mesmo canal (SD/HD/FHD/4K): a linha da lista é 1 só; aqui escolhe qual tocar
+    var variants by remember { mutableStateOf(listOf(request.channel)) }
+    var variantIdx by remember { mutableIntStateOf(0) }
+    var resolvedFor by remember { mutableStateOf<Long?>(null) }
+    val variantGroup = if (src.query.isNotBlank()) null else LiveFilters.group(src.filter)
+    val playCh = (if (resolvedFor == current.id) variants.getOrNull(variantIdx) else null) ?: current
+    val qualityLabels = remember(variants) { LiveQuality.labels(variants.map { it.name }) }
+    val hasQualities = resolvedFor == current.id && variants.size > 1
 
     var format by remember { mutableStateOf(LiveFormat.AUTO) }
     // tentativas do canal atual (.m3u8 <-> .ts etc.); attempt = qual está tocando
     var attempts by remember { mutableStateOf(liveAttempts(current.url, format)) }
     var attempt by remember { mutableIntStateOf(0) }
-    val playUrl = attempts.getOrNull(attempt)?.url ?: current.url
+    var attemptsBase by remember { mutableStateOf(current.url) }
+    val playUrl = attempts.getOrNull(attempt)?.url ?: playCh.url
     val forceHls = attempts.getOrNull(attempt)?.forceHls ?: false
     var screenMode by remember { mutableStateOf(LiveScreenMode.from(AppSettings.liveScreenMode)) }
     var videoAspect by remember { mutableFloatStateOf(0f) }
@@ -188,22 +198,48 @@ fun LivePlayerScreen(request: LivePlayRequest, onBack: () -> Unit) {
         scope.launch { if (loadWindowAround(n)) bannerNow() }
     }
 
-    // troca de canal / formato -> URL a tocar
-    LaunchedEffect(current.url, format) {
-        attempts = liveAttempts(current.url, format)
+    // troca de canal -> qual qualidade tocar (fora da tela principal; a lista já vem agrupada do banco)
+    LaunchedEffect(current.id) {
+        val list = if (AppSettings.groupLiveQualities) runCatching { repo.variantsOf(current, variantGroup) }.getOrNull() else null
+        val vs = list?.takeIf { l -> l.any { it.id == current.id } } ?: listOf(current)
+        variants = vs
+        variantIdx = if (vs.size > 1) LiveQuality.pick(
+            vs.map { it.name },
+            AppSettings.rememberedLiveQuality(src.playlistId, LiveQuality.parse(current.name).key),
+            AppSettings.preferredLiveQuality,
+        ) else 0
+        resolvedFor = current.id
+    }
+
+    fun chooseQuality(i: Int) {
+        if (i !in variants.indices) return
+        variantIdx = i
+        qualityLabels.getOrNull(i)?.let { AppSettings.rememberLiveQuality(src.playlistId, LiveQuality.parse(current.name).key, it) }
+    }
+
+    // troca de qualidade / formato -> URL a tocar
+    LaunchedEffect(playCh.url, format) {
+        attempts = liveAttempts(playCh.url, format)
+        attemptsBase = playCh.url
         attempt = 0
         retryCount = 0
         videoHeight = 0
+    }
+
+    // troca de canal -> EPG (qualquer qualidade com tvg-id; o principal do grupo já é o que tem) e recentes
+    LaunchedEffect(current.url) {
         epg = LiveEpg.cached(src.playlistId, current)
         LiveRecents.add(context, src.playlistId, current.url)
         LiveSession.lastPlayedUrl = current.url
         launch { epg = LiveEpg.nowNext(context, src.playlistId, listOf(current))[current.url] ?: epg }
     }
 
-    LaunchedEffect(playUrl, forceHls, foreground) {
+    LaunchedEffect(playUrl, forceHls, foreground, resolvedFor, attemptsBase) {
         errorMsg = null
         playing = null
         if (!foreground) { exoPlayer.stop(); return@LaunchedEffect }
+        // espera saber a qualidade (consulta rápida no banco) para não abrir o stream 2x
+        if (resolvedFor != current.id || attemptsBase != playCh.url) return@LaunchedEffect
         loading = true
         bufferingSince = System.currentTimeMillis()
         exoPlayer.setMediaItem(HugoPlayerFactory.mediaItem(playUrl, forceHls))
@@ -399,13 +435,16 @@ fun LivePlayerScreen(request: LivePlayRequest, onBack: () -> Unit) {
         }
 
         errorMsg?.let { msg ->
-            LiveError(msg, onRetry = { retryCount = 0; attempts = liveAttempts(current.url, format); if (attempt == 0) reconnect() else attempt = 0 }, onNext = { zap(+1) }, modifier = Modifier.align(Alignment.Center))
+            LiveError(msg, onRetry = { retryCount = 0; attempts = liveAttempts(playCh.url, format); if (attempt == 0) reconnect() else attempt = 0 }, onNext = { zap(+1) }, modifier = Modifier.align(Alignment.Center))
         }
 
         if (showBanner && !showList && !showSources) {
             InfoBanner(
-                offset + index + 1, current, epg, videoHeight, playing, src.title, Modifier.align(Alignment.BottomCenter),
+                offset + index + 1, playCh, epg, videoHeight, playing, src.title, Modifier.align(Alignment.BottomCenter),
                 onChannels = { showList = true }, onSources = { showSources = true },
+                title = if (hasQualities) LiveQuality.displayName(current.name) else current.name,
+                qualities = if (hasQualities) qualityLabels else emptyList(), qualityIdx = variantIdx,
+                onQuality = { chooseQuality(it); bannerNow() },
             )
         }
 
@@ -454,7 +493,7 @@ fun LivePlayerScreen(request: LivePlayRequest, onBack: () -> Unit) {
                                 ChannelLogo(c.logo, c.name, size = 36.dp)
                                 Spacer(Modifier.width(10.dp))
                                 Column(Modifier.weight(1f)) {
-                                    Text(c.name, color = Color.White, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    Text(liveRowName(c, variantGroup), color = Color.White, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                     (listEpg[c.url] ?: LiveEpg.cached(src.playlistId, c))?.now?.let { Text(it.title, color = HugoColors.TextMuted, fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis) }
                                 }
                                 if (fav) Icon(Icons.Default.Star, null, tint = Color(0xFFFACC15), modifier = Modifier.size(14.dp))
@@ -483,9 +522,16 @@ fun LivePlayerScreen(request: LivePlayRequest, onBack: () -> Unit) {
                     .padding(horizontal = 14.dp, vertical = 14.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
+                if (hasQualities) {
+                    Text("Qualidade", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                    qualityLabels.forEachIndexed { i, l ->
+                        PanelOption(l, selected = variantIdx == i, modifier = if (i == 0) Modifier.focusRequester(sourcesFocus) else Modifier) { chooseQuality(i) }
+                    }
+                    Spacer(Modifier.height(8.dp))
+                }
                 Text("Fonte", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold)
                 LiveFormat.entries.forEachIndexed { i, f ->
-                    PanelOption(f.label, selected = format == f, modifier = if (i == 0) Modifier.focusRequester(sourcesFocus) else Modifier) { format = f }
+                    PanelOption(f.label, selected = format == f, modifier = if (i == 0 && !hasQualities) Modifier.focusRequester(sourcesFocus) else Modifier) { format = f }
                 }
                 Text(
                     "Tocando: " + (playing ?: "conectando…") +
@@ -530,6 +576,7 @@ private fun PanelOption(label: String, selected: Boolean, modifier: Modifier = M
 private fun InfoBanner(
     number: Int, c: ChannelEntity, epg: EpgNowNext?, videoHeight: Int, playing: String?, listTitle: String, modifier: Modifier,
     onChannels: () -> Unit, onSources: () -> Unit,
+    title: String = c.name, qualities: List<String> = emptyList(), qualityIdx: Int = 0, onQuality: (Int) -> Unit = {},
 ) {
     Row(
         modifier.padding(24.dp).fillMaxWidth().background(Color(0xFF12141C), RoundedCornerShape(14.dp))
@@ -542,7 +589,7 @@ private fun InfoBanner(
         Spacer(Modifier.width(14.dp))
         Column(Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(c.name, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+                Text(title, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
                 Spacer(Modifier.width(10.dp))
                 qualityChips(c, videoHeight, playing).forEach {
                     Text(it, color = Color.White, fontSize = 10.sp, modifier = Modifier.padding(end = 4.dp).border(1.dp, HugoColors.Accent, RoundedCornerShape(4.dp)).padding(horizontal = 5.dp, vertical = 1.dp))
@@ -556,6 +603,21 @@ private fun InfoBanner(
             }
             epg?.next?.let { Text("A SEGUIR  ${formatHm(it.start)}  ${it.title}", color = HugoColors.TextMuted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis) }
             if (epg == null) Text(listTitle, color = HugoColors.TextMuted, fontSize = 12.sp)
+            if (qualities.size > 1) {
+                // toque escolhe aqui; no controle: → abre o painel com a Qualidade no topo
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 3.dp)) {
+                    Text("Qualidade:", color = HugoColors.TextMuted, fontSize = 11.sp)
+                    qualities.forEachIndexed { i, l ->
+                        Text(
+                            l, color = if (i == qualityIdx) Color.White else HugoColors.TextMuted, fontSize = 11.sp,
+                            fontWeight = if (i == qualityIdx) FontWeight.Bold else FontWeight.Normal,
+                            modifier = Modifier.padding(start = 6.dp)
+                                .then(if (i == qualityIdx) Modifier.background(HugoColors.Accent, RoundedCornerShape(4.dp)) else Modifier.border(1.dp, Color(0xFF2A3148), RoundedCornerShape(4.dp)))
+                                .clickable { onQuality(i) }.padding(horizontal = 6.dp, vertical = 1.dp),
+                        )
+                    }
+                }
+            }
             Text("● Ao vivo", color = Color(0xFF4ADE80), fontSize = 11.sp)
         }
         Spacer(Modifier.width(12.dp))
@@ -566,7 +628,7 @@ private fun InfoBanner(
                 BannerButton("Fonte/tela", onSources)
             }
             Spacer(Modifier.height(4.dp))
-            Text("▲▼ trocar canal · CH± · OK lista · → tela", color = HugoColors.TextDim, fontSize = 10.sp)
+            Text(if (qualities.size > 1) "▲▼ trocar canal · CH± · OK lista · → qualidade/tela" else "▲▼ trocar canal · CH± · OK lista · → tela", color = HugoColors.TextDim, fontSize = 10.sp)
         }
     }
 }

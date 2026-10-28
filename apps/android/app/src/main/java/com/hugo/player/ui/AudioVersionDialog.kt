@@ -1,6 +1,8 @@
 package com.hugo.player.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
@@ -46,6 +48,59 @@ private fun VersionButton(label: String, modifier: Modifier, onClick: () -> Unit
     FocusSurface(onClick = onClick, modifier = modifier.width(150.dp).height(48.dp), focusedColor = HugoColors.Accent, focusBorderWidth = 3.dp, shape = RoundedCornerShape(12.dp)) { _ ->
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Text(label, color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+        }
+    }
+}
+
+/**
+ * Escolha entre várias versões (qualidade do canal; Dublado / Legendado / 4K do filme).
+ * Lista vertical para o controle (▲▼ e OK; Voltar fecha). [selected] ganha o foco inicial.
+ */
+@Composable
+fun VersionPickerDialog(
+    title: String,
+    question: String,
+    options: List<String>,
+    selected: Int? = null,
+    extraLabel: String? = null,
+    onExtra: () -> Unit = {},
+    onPick: (Int) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val first = remember { FocusRequester() }
+    val focusIdx = (selected ?: 0).coerceIn(0, (options.size - 1).coerceAtLeast(0))
+    Dialog(onDismissRequest = onDismiss) {
+        Column(
+            Modifier.widthIn(max = 420.dp).background(HugoColors.Panel, RoundedCornerShape(16.dp)).padding(20.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Text(title, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center)
+            Text(question, color = HugoColors.TextMuted, fontSize = 13.sp, modifier = Modifier.padding(top = 4.dp, bottom = 14.dp))
+            Column(
+                Modifier.heightIn(max = 340.dp).verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                options.forEachIndexed { i, label ->
+                    PickerRow(
+                        if (i == selected) "$label  ✓" else label,
+                        if (i == focusIdx) Modifier.focusRequester(first) else Modifier,
+                    ) { onPick(i) }
+                }
+                if (extraLabel != null) PickerRow(extraLabel, Modifier, muted = true, onClick = onExtra)
+            }
+        }
+    }
+    LaunchedEffect(Unit) { kotlinx.coroutines.delay(80); runCatching { first.requestFocus() } }
+}
+
+@Composable
+private fun PickerRow(label: String, modifier: Modifier, muted: Boolean = false, onClick: () -> Unit) {
+    FocusSurface(
+        onClick = onClick, modifier = modifier.width(300.dp).height(46.dp), focusedColor = HugoColors.Accent,
+        color = if (muted) HugoColors.CardAlt else HugoColors.Card, focusBorderWidth = 3.dp, shape = RoundedCornerShape(12.dp),
+    ) { _ ->
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Text(label, color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
 }

@@ -1,5 +1,11 @@
 package com.hugo.player.ui
 
+import androidx.compose.runtime.rememberCoroutineScope
+
+import com.hugo.player.data.LiveQuality
+
+import com.hugo.player.data.AppSettings
+
 import androidx.compose.foundation.layout.heightIn
 import com.hugo.player.ui.components.tvTextInput
 import com.hugo.player.ui.components.rememberTvTextInput
@@ -146,8 +152,9 @@ class LiveTvViewModel(app: Application) : AndroidViewModel(app) {
         bound = true
         this.playlistId = playlistId
         viewModelScope.launch {
-            categories = repo.getCategories(playlistId, "live")
-            allCount = repo.count(playlistId, "live")
+            // com qualidades agrupadas: contagem já de canais (não de SD/HD/FHD)
+            categories = repo.getCategoriesMerged(playlistId, "live")
+            allCount = repo.mergedLiveCount(playlistId)
         }
         refreshCounts()
         reload()
@@ -161,9 +168,10 @@ class LiveTvViewModel(app: Application) : AndroidViewModel(app) {
     /** Contagens de Favoritos/Recentes (mudam ao voltar do player). */
     fun refreshCounts() {
         val ctx = getApplication<Application>()
+        favGroups = null
         viewModelScope.launch {
-            favCount = repo.liveByUrls(playlistId, favoriteUrls()).size
-            recCount = repo.liveByUrls(playlistId, LiveRecents.list(ctx, playlistId)).size
+            favCount = repo.liveRepresentatives(repo.liveByUrls(playlistId, favoriteUrls())).size
+            recCount = repo.liveRepresentatives(repo.liveByUrls(playlistId, LiveRecents.list(ctx, playlistId))).size
             if (filter == LiveFilters.REC || filter == LiveFilters.FAV) reloadKeepFocus()
         }
     }
@@ -207,7 +215,8 @@ class LiveTvViewModel(app: Application) : AndroidViewModel(app) {
             else -> return null
         }
         val q = query.trim()
-        return repo.liveByUrls(playlistId, urls).let { l -> if (q.isEmpty()) l else l.filter { it.name.contains(q, ignoreCase = true) } }
+        // várias qualidades do mesmo canal favoritadas/assistidas = 1 linha (o canal agrupado)
+        return repo.liveRepresentatives(repo.liveByUrls(playlistId, urls)).let { l -> if (q.isEmpty()) l else l.filter { it.name.contains(q, ignoreCase = true) } }
     }
 
     private fun reload() {
@@ -258,21 +267,51 @@ class LiveTvViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** Canal agrupado: o mesmo id para todas as qualidades (o principal em "Todos"). */
+    private fun groupId(c: ChannelEntity): Long = if (AppSettings.groupLiveQualities) c.dupOfAll ?: c.id else c.id
+    /** favoritos desta playlist já como canal agrupado (favoritar o FHD marca a linha do canal) */
+    private var favGroups: Set<Long>? = null
+    private suspend fun favoriteGroups(): Set<Long> =
+        favGroups ?: repo.liveByUrls(playlistId, favoriteUrls()).map { groupId(it) }.toHashSet().also { favGroups = it }
+
     private fun loadFavFlags(list: List<ChannelEntity>) {
-        val ctx = getApplication<Application>()
-        val keys = WatchHistory.favoriteKeys(ctx)
-        list.forEach { favorites[it.url] = keys.contains(WatchHistory.contentKey(playlistId, it.url)) }
+        viewModelScope.launch {
+            val groups = favoriteGroups()
+            list.forEach { favorites[it.url] = groups.contains(groupId(it)) }
+        }
     }
 
     fun toggleFavorite(c: ChannelEntity) {
         val ctx = getApplication<Application>()
-        val key = WatchHistory.contentKey(playlistId, c.url)
-        val now = WatchHistory.toggleFavorite(ctx, key)
-        if (now) WatchHistory.saveFavoriteMeta(ctx, key, c.name, c.url, c.logo, playlistId)
-        favorites[c.url] = now
-        favCount = (favCount + if (now) 1 else -1).coerceAtLeast(0)
-        if (filter == LiveFilters.FAV) reloadKeepFocus()
+        viewModelScope.launch {
+            val gid = groupId(c)
+            val favs = repo.liveByUrls(playlistId, favoriteUrls())
+            val inGroup = favs.filter { groupId(it) == gid }
+            val now = inGroup.isEmpty()
+            if (now) {
+                val key = WatchHistory.contentKey(playlistId, c.url)
+                if (!WatchHistory.isFavorite(ctx, key)) WatchHistory.toggleFavorite(ctx, key)
+                WatchHistory.saveFavoriteMeta(ctx, key, c.name, c.url, c.logo, playlistId)
+            } else {
+                // tira o canal inteiro (qualquer qualidade que estava favoritada)
+                inGroup.forEach { v -> val k = WatchHistory.contentKey(playlistId, v.url); if (WatchHistory.isFavorite(ctx, k)) WatchHistory.toggleFavorite(ctx, k) }
+            }
+            favGroups = null
+            favorites[c.url] = now
+            favCount = (favCount + if (now) 1 else -1).coerceAtLeast(0)
+            if (filter == LiveFilters.FAV) reloadKeepFocus()
+        }
     }
+
+    /** Escopo dos repetidos na tela: categoria aberta ou "Todos"/busca/favoritos. */
+    fun scopeGroup(): String? = if (query.isNotBlank()) null else LiveFilters.group(filter)
+
+    /** Qualidades do canal (para o "segurar OK"). Lista vazia/1 = canal sem outras qualidades. */
+    suspend fun variantsOf(c: ChannelEntity): List<ChannelEntity> =
+        if (!AppSettings.groupLiveQualities) listOf(c) else repo.variantsOf(c, scopeGroup())
+
+    fun rememberQuality(c: ChannelEntity, label: String) =
+        AppSettings.rememberLiveQuality(playlistId, LiveQuality.parse(c.name).key, label)
 
     fun setFocus(c: ChannelEntity?, index: Int) {
         if (c?.url == focused?.url && index == focusedIndex) return
@@ -380,11 +419,40 @@ fun LiveTvScreen(playlistId: String, onPlay: (LivePlayRequest) -> Unit, onBack: 
             }
     }
 
+    // segurar OK num canal agrupado: escolher a qualidade (ou favoritar)
+    var qualityFor by remember { mutableStateOf<Triple<ChannelEntity, Int, List<ChannelEntity>>?>(null) }
+    val scope = rememberCoroutineScope()
+
     fun play(c: ChannelEntity, index: Int) {
         // solta a prévia antes do player em tela cheia (dois decoders travam TV fraca)
         preview.value?.let { it.stop(); it.clearMediaItems() }
         LiveSession.lastPlayedUrl = c.url
         onPlay(vm.playRequest(c, index))
+    }
+
+    qualityFor?.let { (c, index, vs) ->
+        val labels = remember(vs) { LiveQuality.labels(vs.map { it.name }) }
+        val current = remember(vs) {
+            LiveQuality.pick(vs.map { it.name }, AppSettings.rememberedLiveQuality(playlistId, LiveQuality.parse(c.name).key), AppSettings.preferredLiveQuality)
+        }
+        VersionPickerDialog(
+            title = LiveQuality.displayName(c.name),
+            question = "Qual qualidade abrir?",
+            options = labels,
+            selected = current,
+            extraLabel = if (vm.favorites[c.url] == true) "Remover dos favoritos" else "Adicionar aos favoritos",
+            onExtra = { qualityFor = null; vm.toggleFavorite(c) },
+            onPick = { i -> qualityFor = null; vm.rememberQuality(c, labels[i]); play(c, index) },
+            onDismiss = { qualityFor = null },
+        )
+    }
+
+    fun longPress(c: ChannelEntity, index: Int) {
+        if (liveVariantTags(c, vm.scopeGroup()).isEmpty()) { vm.toggleFavorite(c); return }
+        scope.launch {
+            val vs = vm.variantsOf(c)
+            if (vs.size > 1) qualityFor = Triple(c, index, vs) else vm.toggleFavorite(c)
+        }
     }
 
     BoxWithConstraints(Modifier.fillMaxSize().background(HugoColors.Background)) {
@@ -508,6 +576,8 @@ fun LiveTvScreen(playlistId: String, onPlay: (LivePlayRequest) -> Unit, onBack: 
                                 compact = shortScreen,
                                 isFavorite = vm.favorites[c.url] == true,
                                 selected = vm.focused?.url == c.url,
+                                displayName = liveRowName(c, vm.scopeGroup()),
+                                qualityTags = liveVariantTags(c, vm.scopeGroup()),
                                 modifier = mod,
                                 onFocused = { vm.setFocus(c, index); CrashLog.step("TV ao vivo: canal ${index + 1}") },
                                 onClick = {
@@ -515,6 +585,7 @@ fun LiveTvScreen(playlistId: String, onPlay: (LivePlayRequest) -> Unit, onBack: 
                                     if (!showPreview || vm.focused?.url == c.url) play(c, index) else vm.setFocus(c, index)
                                 },
                                 onToggleFavorite = { vm.toggleFavorite(c) },
+                                onLongOk = { longPress(c, index) },
                             )
                         }
                     }
@@ -617,6 +688,9 @@ private fun LiveChannelRow(
     onFocused: () -> Unit,
     onClick: () -> Unit,
     onToggleFavorite: () -> Unit,
+    displayName: String = channel.name,
+    qualityTags: List<String> = emptyList(),
+    onLongOk: () -> Unit = onToggleFavorite,
 ) {
     var longPressed by remember { mutableStateOf(false) }
     FocusSurface(
@@ -628,13 +702,13 @@ private fun LiveChannelRow(
         shape = RoundedCornerShape(10.dp),
         modifier = modifier.fillMaxWidth().height(if (compact) 54.dp else 62.dp).onPreviewKeyEvent { ev ->
             val code = ev.key.nativeKeyCode
-            // segurar OK ou apertar MENU / ★ = favoritar
+            // segurar OK = qualidade (canal agrupado) ou favoritar; MENU / ★ = favoritar
             val longOk = (code == AndroidKeyEvent.KEYCODE_DPAD_CENTER || code == AndroidKeyEvent.KEYCODE_ENTER) &&
                 ev.type == KeyEventType.KeyDown && ev.nativeKeyEvent.repeatCount == 1
             val menu = (code == AndroidKeyEvent.KEYCODE_MENU || code == AndroidKeyEvent.KEYCODE_BOOKMARK) && ev.type == KeyEventType.KeyUp
             val ok = code == AndroidKeyEvent.KEYCODE_DPAD_CENTER || code == AndroidKeyEvent.KEYCODE_ENTER
             when {
-                longOk -> { longPressed = true; onToggleFavorite(); true }
+                longOk -> { longPressed = true; onLongOk(); true }
                 menu -> { onToggleFavorite(); true }
                 // soltar o OK depois de segurar não pode abrir o canal
                 ok && ev.type == KeyEventType.KeyUp && longPressed -> { longPressed = false; true }
@@ -652,7 +726,16 @@ private fun LiveChannelRow(
             ChannelLogo(channel.logo, channel.name, size = if (compact) 38.dp else 44.dp)
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
-                Text(channel.name, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(displayName, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+                    // selos pequenos das qualidades juntadas nesta linha
+                    qualityTags.forEach { t ->
+                        Text(
+                            t, color = if (focused) Color.White else HugoColors.TextMuted, fontSize = 9.sp, fontWeight = FontWeight.SemiBold, maxLines = 1,
+                            modifier = Modifier.padding(start = 5.dp).border(1.dp, if (focused) Color.White else Color(0xFF3A4260), RoundedCornerShape(4.dp)).padding(horizontal = 4.dp),
+                        )
+                    }
+                }
                 if (now != null) {
                     Text(now.title, color = HugoColors.TextMuted, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     Spacer(Modifier.height(3.dp))

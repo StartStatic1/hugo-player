@@ -71,6 +71,7 @@ class CatalogRepository(context: Context) {
     suspend fun clearLocalCatalog() = withContext(Dispatchers.IO) {
         db.clearAllTables()
         twinsReady.clear()
+        dedupReady.clear()
     }
 
     private val maxClientM3uBytes = 150L * 1024 * 1024
@@ -150,8 +151,10 @@ class CatalogRepository(context: Context) {
                 dao.deleteChannels(playlistId); invalidateSeriesTwins(playlistId)
                 dao.deleteCategories(playlistId)
                 val total = parseServerJson(conn.inputStream, playlistId, onProgress, onFraction)
+                invalidateSeriesTwins(playlistId)
+                onProgress("Juntando repetidos..."); ensureDedup(playlistId)
                 onFraction(1f)
-                invalidateSeriesTwins(playlistId); onProgress("Pronto! $total itens")
+                onProgress("Pronto! $total itens")
                 return@withContext
             }
 
@@ -186,8 +189,10 @@ class CatalogRepository(context: Context) {
         onProgress("Provedor bloqueou o servidor. Baixando no aparelho...")
         val total = importM3uFullyLocal(playlistId, playlistUrl, onProgress, onFraction)
         saveAccountLocal(playlistId, playlistUrl)
+        invalidateSeriesTwins(playlistId)
+        onProgress("Juntando repetidos..."); ensureDedup(playlistId)
         onFraction(1f)
-        invalidateSeriesTwins(playlistId); onProgress("Pronto! $total itens")
+        onProgress("Pronto! $total itens")
     }
 
     private suspend fun parseServerJson(
@@ -483,8 +488,9 @@ class CatalogRepository(context: Context) {
 
     suspend fun page(playlistId: String, type: String, group: String?, query: String?, page: Int, pageSize: Int = PAGE_SIZE): List<ChannelEntity> =
         withContext(Dispatchers.IO) {
-            // filmes: o "Nome [L] (Ano)" some quando o dublado igual está na mesma lista (vira opção no card)
-            dao.page(playlistId, type, group, query?.trim()?.takeIf { it.isNotEmpty() }, type == "live", pageSize, page * pageSize, type == "movie", hiddenGroups(playlistId, type, group))
+            // repetidos (cópias do filme / qualidades do canal) somem e viram opção no item principal
+            ensureDedup(playlistId)
+            dao.page(playlistId, type, group, query?.trim()?.takeIf { it.isNotEmpty() }, type == "live", pageSize, page * pageSize, dedupeFor(type), hiddenGroups(playlistId, type, group))
         }
 
     /** Categorias adultas escondidas de "Todos"/busca enquanto o bloqueio por PIN está ativo. */
@@ -496,11 +502,13 @@ class CatalogRepository(context: Context) {
     }
 
     suspend fun countFiltered(playlistId: String, type: String, group: String?, query: String?): Int =
-        withContext(Dispatchers.IO) { dao.countFiltered(playlistId, type, group, query?.trim()?.takeIf { it.isNotEmpty() }, type == "movie", hiddenGroups(playlistId, type, group)) }
+        withContext(Dispatchers.IO) { ensureDedup(playlistId); dao.countFiltered(playlistId, type, group, query?.trim()?.takeIf { it.isNotEmpty() }, dedupeFor(type), hiddenGroups(playlistId, type, group)) }
 
-    /** Filmes contando dublado+legendado como um só. */
-    suspend fun mergedMovieCount(playlistId: String): Int =
-        withContext(Dispatchers.IO) { dao.countFiltered(playlistId, "movie", null, null, true, hiddenGroups(playlistId, "movie", null)) }
+    /** Filmes contando as cópias (dublado/legendado/4K/repetido) como um só. */
+    suspend fun mergedMovieCount(playlistId: String): Int = countFiltered(playlistId, "movie", null, null)
+
+    /** Canais ao vivo contando as qualidades do mesmo canal como um só (quando agrupado). */
+    suspend fun mergedLiveCount(playlistId: String): Int = countFiltered(playlistId, "live", null, null)
 
     /** Para cada filme dublado da lista, a versão legendada exata ("Nome [L] (Ano)"), se existir. Chave = id do dublado. */
     suspend fun legendadoTwins(playlistId: String, movies: List<ChannelEntity>): Map<Long, ChannelEntity> = withContext(Dispatchers.IO) {
@@ -533,7 +541,76 @@ class CatalogRepository(context: Context) {
         }
     }
 
-    fun invalidateSeriesTwins(playlistId: String) { twinsReady.remove(playlistId) }
+    fun invalidateSeriesTwins(playlistId: String) {
+        twinsReady.remove(playlistId)
+        // a lista mudou: os repetidos são recalculados (as cópias novas do provedor entram no grupo certo)
+        dedupReady.remove(playlistId)
+        AppSettings.setDedupReady(playlistId, false)
+    }
+
+    // repetidos (qualidades do mesmo canal / cópias do mesmo filme): calculado 1x por lista baixada e guardado no banco
+    private val dedupReady = java.util.concurrent.ConcurrentHashMap<String, Boolean>()
+    private val dedupMutex = kotlinx.coroutines.sync.Mutex()
+
+    suspend fun ensureDedup(playlistId: String) = withContext(Dispatchers.IO) {
+        if (dedupReady[playlistId] == true) return@withContext
+        dedupMutex.withLock {
+            if (dedupReady[playlistId] == true) return@withLock
+            if (AppSettings.isDedupReady(playlistId)) { dedupReady[playlistId] = true; return@withLock }
+            runCatching {
+                val rows = dao.dedupSources(playlistId).map { DedupRow(it.id, it.name, it.group, it.type, it.epgId) }
+                val marks = ContentDedup.compute(rows) { AdultLock.isAdultCategory(it) }
+                db.runInTransaction {
+                    val w = db.openHelper.writableDatabase
+                    w.compileStatement("UPDATE channels SET dupOf = NULL, dupOfAll = NULL, variantTags = NULL, variantTagsAll = NULL WHERE playlistId = ?").use { st ->
+                        st.bindString(1, playlistId); st.executeUpdateDelete()
+                    }
+                    w.compileStatement("UPDATE channels SET dupOf = ?, dupOfAll = ?, variantTags = ?, variantTagsAll = ? WHERE id = ?").use { st ->
+                        marks.forEach { (id, m) ->
+                            st.clearBindings()
+                            m.dupOf?.let { st.bindLong(1, it) } ?: st.bindNull(1)
+                            m.dupOfAll?.let { st.bindLong(2, it) } ?: st.bindNull(2)
+                            m.tags?.let { st.bindString(3, it) } ?: st.bindNull(3)
+                            m.tagsAll?.let { st.bindString(4, it) } ?: st.bindNull(4)
+                            st.bindLong(5, id)
+                            st.executeUpdateDelete()
+                        }
+                    }
+                }
+                AppSettings.setDedupReady(playlistId, true)
+            }.onFailure { android.util.Log.w("Hugo", "dedup falhou", it) }
+            dedupReady[playlistId] = true
+        }
+    }
+
+    /** Ao vivo agrupa qualidades? (Configurações > Player) */
+    private fun liveGrouped() = AppSettings.groupLiveQualities
+    private fun dedupeFor(type: String) = type == "movie" || (type == "live" && liveGrouped())
+
+    /**
+     * Todas as versões de um item visível (ordem da lista), no mesmo escopo da tela:
+     * categoria aberta ([group] != null) usa dupOf; "Todos" usa dupOfAll.
+     */
+    suspend fun variantsOf(item: ChannelEntity, group: String?): List<ChannelEntity> = withContext(Dispatchers.IO) {
+        ensureDedup(item.playlistId)
+        val all = group == null
+        runCatching { dao.variantsOf(item.playlistId, item.type, item.id, all) }.getOrNull()?.takeIf { it.isNotEmpty() } ?: listOf(item)
+    }
+
+    /** Para favoritos/recentes: o item visível em "Todos" de cada canal (a cópia vira o principal do grupo). */
+    suspend fun liveRepresentatives(list: List<ChannelEntity>): List<ChannelEntity> = withContext(Dispatchers.IO) {
+        if (!liveGrouped() || list.isEmpty()) return@withContext list
+        list.firstOrNull()?.let { ensureDedup(it.playlistId) }
+        val fresh = list.map { it.id }.chunked(500).flatMap { dao.byIds(it) }.associateBy { it.id }
+        val repIds = list.mapNotNull { (fresh[it.id] ?: it).dupOfAll }.distinct()
+        val reps = repIds.chunked(500).flatMap { dao.byIds(it) }.associateBy { it.id }
+        val seen = HashSet<Long>()
+        list.mapNotNull { c ->
+            val f = fresh[c.id] ?: c
+            val r = f.dupOfAll?.let { reps[it] } ?: f
+            if (seen.add(r.id)) r else null
+        }
+    }
 
     /** Versão dublada/legendada da mesma série (null = só existe uma). */
     suspend fun seriesTwinOf(playlistId: String, name: String): SeriesTwinEntity? {
@@ -572,7 +649,9 @@ class CatalogRepository(context: Context) {
     /** Janela da lista ao vivo (mesma ordem da tela), para zapear no player. */
     suspend fun liveWindow(playlistId: String, group: String?, query: String?, offset: Int, limit: Int): List<ChannelEntity> =
         withContext(Dispatchers.IO) {
-            dao.page(playlistId, "live", group, query?.trim()?.takeIf { it.isNotEmpty() }, true, limit, offset.coerceAtLeast(0), false, hiddenGroups(playlistId, "live", group))
+            ensureDedup(playlistId)
+            // mesma lista da tela: com qualidades agrupadas, zapear pula de canal (não de qualidade)
+            dao.page(playlistId, "live", group, query?.trim()?.takeIf { it.isNotEmpty() }, true, limit, offset.coerceAtLeast(0), dedupeFor("live"), hiddenGroups(playlistId, "live", group))
         }
 
     suspend fun liveEpgKeys(playlistId: String) =
@@ -581,10 +660,11 @@ class CatalogRepository(context: Context) {
     suspend fun getCategories(playlistId: String, type: String) =
         withContext(Dispatchers.IO) { dao.getCategories(playlistId, type) }
 
-    /** Categorias de filmes com a contagem já juntando dublado+legendado. */
+    /** Categorias com a contagem já juntando os repetidos (filmes sempre; ao vivo quando agrupado). */
     suspend fun getCategoriesMerged(playlistId: String, type: String): List<com.hugo.player.data.db.CategoryEntity> = withContext(Dispatchers.IO) {
         val cats = dao.getCategories(playlistId, type)
-        if (type != "movie") return@withContext cats
+        if (!dedupeFor(type)) return@withContext cats
+        ensureDedup(playlistId)
         val counts = runCatching { dao.mergedGroupCounts(playlistId, type).associate { it.name to it.count } }.getOrNull() ?: return@withContext cats
         cats.map { c -> counts[c.name]?.let { c.copy(count = it) } ?: c }
     }

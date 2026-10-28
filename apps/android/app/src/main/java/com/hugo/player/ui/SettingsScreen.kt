@@ -97,6 +97,8 @@ fun SettingsScreen(deviceId: String, deviceKey: String, onBack: () -> Unit) {
     var subBg by remember { mutableStateOf(AppSettings.subtitleBackground) }
     var autoOpen by remember { mutableStateOf(AppSettings.autoOpenLastPlaylist) }
     var liveFormat by remember { mutableStateOf(AppSettings.liveFormat) }
+    var groupQualities by remember { mutableStateOf(AppSettings.groupLiveQualities) }
+    var preferredQuality by remember { mutableStateOf(AppSettings.preferredLiveQuality) }
     var ua by remember { mutableStateOf(AppSettings.userAgent) }
     var cacheSize by remember { mutableLongStateOf(0L) }
     var message by remember { mutableStateOf<String?>(null) }
@@ -229,8 +231,24 @@ fun SettingsScreen(deviceId: String, deviceKey: String, onBack: () -> Unit) {
                     SettingsCat.PLAYER -> Panel {
                         Label("Formato ao vivo")
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Chip("HLS", liveFormat == "hls") { liveFormat = "hls"; AppSettings.liveFormat = "hls"; message = "Formato: HLS" }
+                            // o valor guardado do HLS é "m3u8"
+                            Chip("HLS", liveFormat != "ts") { AppSettings.liveFormat = "m3u8"; liveFormat = AppSettings.liveFormat; message = "Formato: HLS" }
                             Chip("TS", liveFormat == "ts") { liveFormat = "ts"; AppSettings.liveFormat = "ts"; message = "Formato: MPEG-TS" }
+                        }
+                        Spacer(Modifier.height(16.dp))
+                        Label("Agrupar qualidades (SD/HD/FHD/4K do mesmo canal numa linha)")
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Chip("Ligado", groupQualities) { groupQualities = true; AppSettings.groupLiveQualities = true; message = "Qualidades agrupadas" }
+                            Chip("Desligado", !groupQualities) { groupQualities = false; AppSettings.groupLiveQualities = false; message = "Cada qualidade numa linha" }
+                        }
+                        if (groupQualities) {
+                            Spacer(Modifier.height(16.dp))
+                            Label("Qualidade preferida")
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                com.hugo.player.data.LiveQuality.PREFERRED.forEach { (key, label) ->
+                                    Chip(label, preferredQuality == key) { preferredQuality = key; AppSettings.preferredLiveQuality = key; message = "Qualidade preferida: $label" }
+                                }
+                            }
                         }
                         Spacer(Modifier.height(16.dp))
                         Label("User-Agent")

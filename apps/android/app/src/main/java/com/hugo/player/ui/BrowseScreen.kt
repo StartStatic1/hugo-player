@@ -1,5 +1,9 @@
 package com.hugo.player.ui
 
+import androidx.compose.runtime.rememberCoroutineScope
+
+import com.hugo.player.data.MovieDedup
+
 import com.hugo.player.ui.components.tvTextInput
 import com.hugo.player.ui.components.rememberTvTextInput
 import android.app.Application
@@ -77,8 +81,8 @@ data class BrowseItem(
     val url: String?,
     val seriesName: String? = null,
     val channel: ChannelEntity? = null,
-    /** Filme: versão legendada do mesmo título (o card vira "Dublado | Legendado"). */
-    val legendado: ChannelEntity? = null,
+    /** Filme com outras versões (Dublado / Legendado / 4K / cópia): ao abrir, pergunta qual. */
+    val hasVersions: Boolean = false,
 )
 
 class BrowseViewModel(app: Application) : AndroidViewModel(app) {
@@ -173,17 +177,24 @@ class BrowseViewModel(app: Application) : AndroidViewModel(app) {
             }
         }
         BrowseType.MOVIES -> {
-            val list = repo.page(playlistId, type.dbType, selectedGroup, query, p)
-            val twins = runCatching { repo.legendadoTwins(playlistId, list) }.getOrDefault(emptyMap())
-            list.map {
-                val l = twins[it.id]
-                BrowseItem(key = "c:${it.id}", title = it.name, image = it.logo ?: l?.logo, subtitle = if (l != null) "Dublado · Legendado" else null, url = it.url, channel = it, legendado = l)
+            // repetidos já saem juntos do banco (1 card por filme); as versões ficam nos selos do card
+            repo.page(playlistId, type.dbType, selectedGroup, query, p).map {
+                val tags = if (selectedGroup == null) it.variantTagsAll else it.variantTags
+                val info = MovieDedup.parse(it.name, it.group)
+                BrowseItem(
+                    key = "c:${it.id}", title = MovieDedup.displayTitle(it.name), image = it.logo,
+                    subtitle = tags ?: if (info.legendado) "Legendado" else null,
+                    url = it.url, channel = it, hasVersions = tags != null,
+                )
             }
         }
         else -> repo.page(playlistId, type.dbType, selectedGroup, query, p).map {
-            BrowseItem(key = "c:${it.id}", title = it.name, image = it.logo, subtitle = null, url = it.url, channel = it)
+            BrowseItem(key = "c:${it.id}", title = liveRowName(it, selectedGroup), image = it.logo, subtitle = null, url = it.url, channel = it)
         }
     }
+
+    /** Versões do filme (mesma ordem dos rótulos). */
+    suspend fun versionsOf(c: ChannelEntity): List<ChannelEntity> = repo.variantsOf(c, selectedGroup)
 }
 
 @Composable
@@ -204,8 +215,9 @@ fun BrowseScreen(
     val gridFocus = remember { FocusRequester() }
     var handledReset by rememberSaveable { mutableIntStateOf(-1) }
     val nf = remember { NumberFormat.getIntegerInstance(Locale("pt", "BR")) }
-    // filme com as duas versões: pergunta Dublado / Legendado antes de abrir
-    var audioChoice by remember { mutableStateOf<BrowseItem?>(null) }
+    // filme com várias versões: pergunta Dublado / Legendado / 4K… antes de abrir
+    var versionChoice by remember { mutableStateOf<Pair<BrowseItem, List<ChannelEntity>>?>(null) }
+    val scope = rememberCoroutineScope()
     // categoria adulta bloqueada: pede o PIN (uma vez por sessão)
     val context = androidx.compose.ui.platform.LocalContext.current
     var pinFor by remember { mutableStateOf<String?>(null) }
@@ -218,12 +230,14 @@ fun BrowseScreen(
             onDismiss = { pinFor = null },
         )
     }
-    audioChoice?.let { item ->
-        AudioVersionDialog(
+    versionChoice?.let { (item, versions) ->
+        val labels = remember(versions) { MovieDedup.versionLabels(versions.map { it.name to it.group }) }
+        VersionPickerDialog(
             title = item.title,
-            onDubbed = { audioChoice = null; item.channel?.let(onOpenMovie) },
-            onSubtitled = { audioChoice = null; item.legendado?.let(onOpenMovie) },
-            onDismiss = { audioChoice = null },
+            question = "Como quer assistir?",
+            options = labels,
+            onPick = { i -> versionChoice = null; versions.getOrNull(i)?.let(onOpenMovie) },
+            onDismiss = { versionChoice = null },
         )
     }
 
@@ -303,7 +317,13 @@ fun BrowseScreen(
                             val click = {
                                 when {
                                     item.seriesName != null -> onOpenSeries(item.seriesName)
-                                    type == BrowseType.MOVIES && item.channel != null && item.legendado != null -> audioChoice = item
+                                    type == BrowseType.MOVIES && item.channel != null && item.hasVersions -> scope.launch {
+                                        val c = item.channel
+                                        val vs = runCatching { vm.versionsOf(c) }.getOrDefault(listOf(c))
+                                        // todas iguais (cópia repetida): abre direto
+                                        val distinct = vs.map { MovieDedup.versionLabel(it.name, it.group) }.distinct()
+                                        if (vs.size > 1 && distinct.size > 1) versionChoice = item to vs else onOpenMovie(c)
+                                    }
                                     type == BrowseType.MOVIES && item.channel != null -> onOpenMovie(item.channel)
                                     else -> item.url?.let { onPlay(it, item.title) }
                                 }

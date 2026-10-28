@@ -9,6 +9,17 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
+/** Selos de qualidade do canal agrupado no escopo da tela ("SD,HD,FHD"); vazio = não agrupado. */
+fun liveVariantTags(c: ChannelEntity, group: String?): List<String> {
+    if (!com.hugo.player.data.AppSettings.groupLiveQualities) return emptyList()
+    val t = if (group == null) c.variantTagsAll else c.variantTags
+    return t?.split(',')?.filter { it.isNotBlank() } ?: emptyList()
+}
+
+/** Nome na lista: sem "FHD/HD/SD…" quando as qualidades viraram selos. */
+fun liveRowName(c: ChannelEntity, group: String?): String =
+    if (liveVariantTags(c, group).isNotEmpty()) com.hugo.player.data.LiveQuality.displayName(c.name) else c.name
+
 /** De onde veio a lista que o player usa para zapear (mesma ordem/numeração da tela). */
 data class LiveListSource(
     val playlistId: String,

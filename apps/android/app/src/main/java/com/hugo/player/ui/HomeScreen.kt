@@ -99,7 +99,7 @@ fun HomeScreen(playlistId: String, playlistName: String, onNavigate: (String) ->
     var opening by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(playlistId) {
-        counts = Triple(repo.count(playlistId, "live"), repo.mergedMovieCount(playlistId), repo.seriesCount(playlistId, null, null))
+        counts = Triple(repo.mergedLiveCount(playlistId), repo.mergedMovieCount(playlistId), repo.seriesCount(playlistId, null, null))
         continueItems = loadContinue()
     }
     LaunchedEffect(Unit) {

@@ -66,4 +66,29 @@ object AppSettings {
     var lastPlaylistUrl: String?
         get() = if (isReady) prefs.getString("lastPlaylistUrl", null) else null
         set(v) { prefs.edit().putString("lastPlaylistUrl", v).apply() }
+
+    /** Ao vivo: juntar o mesmo canal em SD/HD/FHD/4K numa linha só (padrão ligado). */
+    var groupLiveQualities: Boolean
+        get() = if (isReady) prefs.getBoolean("groupLiveQualities", true) else true
+        set(v) { prefs.edit().putBoolean("groupLiveQualities", v).apply() }
+
+    /** Qualidade que abre primeiro num canal agrupado: "best", "FHD", "HD" ou "SD". */
+    var preferredLiveQuality: String
+        get() = (if (isReady) prefs.getString("preferredLiveQuality", null) else null)?.takeIf { v -> LiveQuality.PREFERRED.any { it.first == v } } ?: "best"
+        set(v) { prefs.edit().putString("preferredLiveQuality", v).apply() }
+
+    /** Última qualidade escolhida para um canal agrupado (rótulo "FHD", "HD 2"…). */
+    fun rememberedLiveQuality(playlistId: String, channelKey: String): String? =
+        if (isReady) prefs.getString("liveQ:$playlistId:$channelKey", null) else null
+
+    fun rememberLiveQuality(playlistId: String, channelKey: String, label: String) {
+        if (isReady) prefs.edit().putString("liveQ:$playlistId:$channelKey", label).apply()
+    }
+
+    /** Marca de "repetidos já calculados" desta playlist (some a cada atualização da lista). */
+    fun isDedupReady(playlistId: String): Boolean = isReady && prefs.getBoolean("dedupV1:$playlistId", false)
+    fun setDedupReady(playlistId: String, ready: Boolean) {
+        if (!isReady) return
+        prefs.edit().apply { if (ready) putBoolean("dedupV1:$playlistId", true) else remove("dedupV1:$playlistId") }.apply()
+    }
 }

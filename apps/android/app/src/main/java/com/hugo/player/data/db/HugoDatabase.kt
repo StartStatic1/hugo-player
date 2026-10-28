@@ -25,7 +25,19 @@ data class ChannelEntity(
     val episode: Int? = null,
     /** Ao vivo: tvg-id / epg_channel_id (para casar com o EPG). */
     val epgId: String? = null,
+    /**
+     * Repetidos (calculado no aparelho depois de cada atualização da lista, ver ContentDedup):
+     * id do item visível do mesmo grupo na categoria (dupOf) e em "Todos"/busca (dupOfAll).
+     * null = este é o item que aparece. variantTags* = selos (SD,HD,FHD / Dublado · Legendado).
+     */
+    val dupOf: Long? = null,
+    val dupOfAll: Long? = null,
+    val variantTags: String? = null,
+    val variantTagsAll: String? = null,
 )
+
+/** Linha leve para o cálculo dos repetidos (sem URL/logo). */
+data class DedupSource(val id: Long, val name: String, val group: String, val type: String, val epgId: String?)
 
 /** Categoria por playlist + tipo (o mesmo nome pode existir em live e filmes). */
 @Entity(tableName = "categories", primaryKeys = ["playlistId", "type", "name"], indices = [Index(value = ["playlistId", "type"])])
@@ -68,11 +80,10 @@ interface ChannelDao {
         """SELECT * FROM channels WHERE playlistId = :playlistId AND type = :type
            AND (:group IS NULL OR `group` = :group)
            AND (:query IS NULL OR name LIKE '%' || :query || '%')
-           AND (:dedupe = 0 OR instr(name, ' [L]') = 0 OR NOT EXISTS (
-               SELECT 1 FROM channels d WHERE d.playlistId = channels.playlistId AND d.type = channels.type
-               AND d.name = replace(channels.name, ' [L]', '')
-               AND (:group IS NULL OR d.`group` = :group)
-               AND (:query IS NULL OR d.name LIKE '%' || :query || '%')))
+           AND (:dedupe = 0 OR (CASE WHEN :group IS NULL THEN dupOfAll ELSE dupOf END) IS NULL
+               OR (:query IS NOT NULL AND NOT EXISTS (SELECT 1 FROM channels r WHERE r.id = (CASE WHEN :group IS NULL THEN channels.dupOfAll ELSE channels.dupOf END)
+                   AND r.name LIKE '%' || :query || '%'))
+               OR EXISTS (SELECT 1 FROM channels r WHERE r.id = (CASE WHEN :group IS NULL THEN channels.dupOfAll ELSE channels.dupOf END) AND r.`group` IN (:hidden)))
            AND `group` NOT IN (:hidden)
            ORDER BY CASE WHEN :keepOrder THEN id END, name COLLATE NOCASE, id
            LIMIT :limit OFFSET :offset"""
@@ -83,11 +94,10 @@ interface ChannelDao {
         """SELECT COUNT(*) FROM channels WHERE playlistId = :playlistId AND type = :type
            AND (:group IS NULL OR `group` = :group)
            AND (:query IS NULL OR name LIKE '%' || :query || '%')
-           AND (:dedupe = 0 OR instr(name, ' [L]') = 0 OR NOT EXISTS (
-               SELECT 1 FROM channels d WHERE d.playlistId = channels.playlistId AND d.type = channels.type
-               AND d.name = replace(channels.name, ' [L]', '')
-               AND (:group IS NULL OR d.`group` = :group)
-               AND (:query IS NULL OR d.name LIKE '%' || :query || '%')))
+           AND (:dedupe = 0 OR (CASE WHEN :group IS NULL THEN dupOfAll ELSE dupOf END) IS NULL
+               OR (:query IS NOT NULL AND NOT EXISTS (SELECT 1 FROM channels r WHERE r.id = (CASE WHEN :group IS NULL THEN channels.dupOfAll ELSE channels.dupOf END)
+                   AND r.name LIKE '%' || :query || '%'))
+               OR EXISTS (SELECT 1 FROM channels r WHERE r.id = (CASE WHEN :group IS NULL THEN channels.dupOfAll ELSE channels.dupOf END) AND r.`group` IN (:hidden)))
            AND `group` NOT IN (:hidden)"""
     )
     suspend fun countFiltered(playlistId: String, type: String, group: String?, query: String?, dedupe: Boolean, hidden: List<String>): Int
@@ -96,13 +106,8 @@ interface ChannelDao {
     @Query("SELECT * FROM channels WHERE playlistId = :playlistId AND type = :type AND name IN (:names)")
     suspend fun byNames(playlistId: String, type: String, names: List<String>): List<ChannelEntity>
 
-    /** Contagem por categoria já sem o legendado que tem gêmeo dublado na mesma categoria. */
-    @Query(
-        """SELECT `group` AS name, COUNT(*) AS count FROM channels c WHERE c.playlistId = :playlistId AND c.type = :type
-           AND (instr(c.name, ' [L]') = 0 OR NOT EXISTS (SELECT 1 FROM channels d WHERE d.playlistId = c.playlistId AND d.type = c.type
-               AND d.name = replace(c.name, ' [L]', '') AND d.`group` = c.`group`))
-           GROUP BY `group`"""
-    )
+    /** Contagem por categoria já sem os repetidos (1 por grupo de cópias/qualidades). */
+    @Query("SELECT `group` AS name, COUNT(*) AS count FROM channels WHERE playlistId = :playlistId AND type = :type AND dupOf IS NULL GROUP BY `group`")
     suspend fun mergedGroupCounts(playlistId: String, type: String): List<GroupCount>
 
     @Query(
@@ -161,6 +166,26 @@ interface ChannelDao {
     @Query("SELECT name, epgId FROM channels WHERE playlistId = :playlistId AND type = 'live'")
     suspend fun liveEpgKeys(playlistId: String): List<LiveEpgKey>
 
+    /** O item visível e todas as cópias dele (no escopo da categoria ou de "Todos"). */
+    @Query(
+        """SELECT * FROM channels WHERE playlistId = :playlistId AND type = :type
+           AND (id = :rep OR (CASE WHEN :allScope THEN dupOfAll ELSE dupOf END) = :rep) ORDER BY id"""
+    )
+    suspend fun variantsOf(playlistId: String, type: String, rep: Long, allScope: Boolean): List<ChannelEntity>
+
+    /** Visível em "Todos" para um item (ele mesmo ou o principal do grupo). */
+    @Query("SELECT * FROM channels WHERE id IN (:ids)")
+    suspend fun byIds(ids: List<Long>): List<ChannelEntity>
+
+    @Query("SELECT id, name, `group`, type, epgId FROM channels WHERE playlistId = :playlistId AND type IN ('live', 'movie')")
+    suspend fun dedupSources(playlistId: String): List<DedupSource>
+
+    @Query("UPDATE channels SET dupOf = NULL, dupOfAll = NULL, variantTags = NULL, variantTagsAll = NULL WHERE playlistId = :playlistId")
+    suspend fun clearDedup(playlistId: String)
+
+    @Query("UPDATE channels SET dupOf = :dupOf, dupOfAll = :dupOfAll, variantTags = :tags, variantTagsAll = :tagsAll WHERE id = :id")
+    suspend fun setDedup(id: Long, dupOf: Long?, dupOfAll: Long?, tags: String?, tagsAll: String?)
+
     @Query("SELECT * FROM categories WHERE playlistId = :playlistId AND type = :type ORDER BY position, name")
     suspend fun getCategories(playlistId: String, type: String): List<CategoryEntity>
 
@@ -177,7 +202,7 @@ interface ChannelDao {
     suspend fun deleteCategories(playlistId: String)
 }
 
-@Database(entities = [ChannelEntity::class, CategoryEntity::class, SeriesTwinEntity::class], version = 5, exportSchema = false)
+@Database(entities = [ChannelEntity::class, CategoryEntity::class, SeriesTwinEntity::class], version = 6, exportSchema = false)
 abstract class HugoDatabase : RoomDatabase() {
     abstract fun channelDao(): ChannelDao
 
@@ -199,11 +224,19 @@ abstract class HugoDatabase : RoomDatabase() {
                 db.execSQL("CREATE TABLE IF NOT EXISTS `series_twins` (`playlistId` TEXT NOT NULL, `legName` TEXT NOT NULL, `dubName` TEXT NOT NULL, PRIMARY KEY(`playlistId`, `legName`))")
             }
         }
+        val MIGRATION_5_6 = object : androidx.room.migration.Migration(5, 6) {
+            override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE channels ADD COLUMN dupOf INTEGER")
+                db.execSQL("ALTER TABLE channels ADD COLUMN dupOfAll INTEGER")
+                db.execSQL("ALTER TABLE channels ADD COLUMN variantTags TEXT")
+                db.execSQL("ALTER TABLE channels ADD COLUMN variantTagsAll TEXT")
+            }
+        }
         fun get(context: android.content.Context): HugoDatabase =
             INSTANCE ?: synchronized(this) {
                 INSTANCE ?: Room.databaseBuilder(context.applicationContext, HugoDatabase::class.java, FILE_NAME)
                     // 2 -> 3 só acrescenta a coluna do EPG: listas já baixadas continuam (sem reimportar)
-                    .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+                    .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
                     .fallbackToDestructiveMigration()
                     .build().also { INSTANCE = it }
             }
