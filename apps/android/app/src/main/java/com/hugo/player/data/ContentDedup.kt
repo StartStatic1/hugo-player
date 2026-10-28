@@ -8,17 +8,27 @@ data class DedupRow(val id: Long, val name: String, val group: String, val type:
 /** Resultado por id: a quem ele pertence (null = é o item visível) e os selos do grupo (só no item visível). */
 data class DedupMark(val dupOf: Long?, val dupOfAll: Long?, val tags: String?, val tagsAll: String?)
 
-private val combining = Regex("\\p{Mn}+")
-private val nonAlnum = Regex("[^\\p{L}\\p{N}]+")
-private val spaces = Regex("\\s+")
-private val tokenSep = Regex("[ ._-]")
+/**
+ * Regex que nunca derruba o app: o Android usa o motor ICU, mais rígido que o do Java
+ * (ex.: "]" e "}" soltos precisam de "\\"). Se um padrão falhar, vira um que não casa com nada.
+ */
+internal fun rx(pattern: String): Regex =
+    try { Regex(pattern) } catch (t: Throwable) {
+        runCatching { android.util.Log.w("Hugo", "regex inválida: $pattern", t) }
+        Regex("(?!)")
+    }
+
+private val combining = rx("\\p{Mn}+")
+private val nonAlnum = rx("[^\\p{L}\\p{N}]+")
+private val spaces = rx("\\s+")
+private val tokenSep = rx("[ ._-]")
 /** minúsculas, sem acento, só letras/números separados por 1 espaço */
 internal fun foldKey(s: String): String =
     Normalizer.normalize(s, Normalizer.Form.NFD).replace(combining, "").lowercase()
         .replace(nonAlnum, " ").trim()
 
 /** emoji/símbolos decorativos (⭐ ✔ ❤ ♦ ☠ …) e marcas invisíveis */
-private val decor = Regex("[\\p{So}\\p{Sk}\\p{Cs}\\p{Co}\\uFE0E\\uFE0F\\u200B-\\u200D\\u2060]")
+private val decor = rx("[\\p{So}\\p{Sk}\\p{Cs}\\p{Co}\\uFE0E\\uFE0F\\u200B-\\u200D\\u2060]")
 
 /**
  * Canais ao vivo: o mesmo canal em várias qualidades vira 1 só.
@@ -42,13 +52,13 @@ object LiveQuality {
     val PREFERRED = listOf("best" to "Melhor disponível", "FHD" to "FHD", "HD" to "HD", "SD" to "SD")
 
     private val supers = listOf("ᶠᴴᴰ" to " FHD ", "ᵁᴴᴰ" to " UHD ", "ᴴᴰ" to " HD ", "ˢᴰ" to " SD ", "⁴ᴷ" to " 4K ")
-    private val superAlt = Regex("(?i)(hd|fhd|sd|4k|uhd)\\s*[²³¹]")
+    private val superAlt = rx("(?i)(hd|fhd|sd|4k|uhd)\\s*[²³¹]")
     private val superDigit = mapOf('¹' to " 1", '²' to " 2", '³' to " 3")
-    private val token = Regex(
+    private val token = rx(
         "(?i)(?<![\\p{L}\\p{N}])(full[ ._-]?hd|fhdr|uhd|fhd|hdr|hd|sd|hq|4k|8k|2160p?|1080[pi]?|720p?|576p?|480p?|" +
             "h[ ._-]?26[45]|hevc|x26[45]|alt(?:ernativo)?[ ._-]?\\d?|backup|reserva|\\d{2}[ ]?fps)(?![\\p{L}\\p{N}])"
     )
-    private val emptyBrackets = Regex("\\[\\s*]|\\(\\s*\\)|\\{\\s*}|<\\s*>")
+    private val emptyBrackets = rx("\\[\\s*\\]|\\(\\s*\\)|\\{\\s*\\}|<\\s*>")
 
     private fun prep(name: String): String {
         var s = name
@@ -58,7 +68,14 @@ object LiveQuality {
         return decor.replace(s, " ")
     }
 
-    fun parse(name: String): Info {
+    /** Nunca lança: se algo der errado, o canal fica com o nome original e sem agrupar. */
+    fun parse(name: String): Info =
+        try { parseImpl(name) } catch (t: Throwable) {
+            val n = name.trim()
+            Info(n.lowercase(), n, 0, false, false, false)
+        }
+
+    private fun parseImpl(name: String): Info {
         val s = prep(name)
         var rank = 0; var hevc = false; var hdr = false; var alt = false
         token.findAll(s).forEach { m ->
@@ -89,7 +106,9 @@ object LiveQuality {
         names.map { parse(it).rank }.filter { it > 0 }.distinct().sorted().joinToString(",") { RANK_LABEL[it] }
 
     /** Rótulos das variantes (sem repetir: "HD", "HD 2"). Mesma ordem da lista. */
-    fun labels(names: List<String>): List<String> {
+    fun labels(names: List<String>): List<String> = try { labelsImpl(names) } catch (t: Throwable) { names }
+
+    private fun labelsImpl(names: List<String>): List<String> {
         val seen = HashMap<String, Int>()
         return names.map { n ->
             val l = parse(n).label
@@ -106,7 +125,10 @@ object LiveQuality {
      * Qual variante tocar: a última escolhida (pelo rótulo), senão a preferida, senão a melhor.
      * [names] na ordem da lista; devolve o índice.
      */
-    fun pick(names: List<String>, remembered: String?, preferred: String): Int {
+    fun pick(names: List<String>, remembered: String?, preferred: String): Int =
+        try { pickImpl(names, remembered, preferred) } catch (t: Throwable) { 0 }
+
+    private fun pickImpl(names: List<String>, remembered: String?, preferred: String): Int {
         if (names.isEmpty()) return 0
         val labels = labels(names)
         remembered?.let { r -> labels.indexOf(r).takeIf { it >= 0 }?.let { return it } }
@@ -129,15 +151,22 @@ object LiveQuality {
 object MovieDedup {
     data class Info(val key: String, val year: Int?, val legendado: Boolean, val uhd: Boolean, val hdr: Boolean, val clean: String)
 
-    private val yearRx = Regex("[\\(\\[]\\s*((?:19|20)\\d{2})\\s*[\\)\\]]")
-    private val legRx = Regex("(?i)\\[\\s*l\\s*]|\\(\\s*l\\s*\\)|(?<![\\p{L}\\p{N}])(leg|legendado|legendada)(?![\\p{L}\\p{N}])")
-    private val dubRx = Regex("(?i)\\[\\s*d\\s*]|\\(\\s*d\\s*\\)|(?<![\\p{L}\\p{N}])(dub|dublado|dublada|dual[ ._-]?(?:audio|áudio))(?![\\p{L}\\p{N}])")
-    private val qRx = Regex("(?i)(?<![\\p{L}\\p{N}])(4k|uhd|hdr10\\+?|hdr|dolby[ ._-]?vision|fhd|full[ ._-]?hd|hd|1080p?|720p?|2160p?|h[ ._-]?26[45]|x26[45]|hevc|web[ ._-]?dl|webrip|bluray|brrip|remux)(?![\\p{L}\\p{N}])")
-    private val uhdRx = Regex("(?i)(?<![\\p{L}\\p{N}])(4k|uhd|2160p?)(?![\\p{L}\\p{N}])")
-    private val hdrRx = Regex("(?i)(?<![\\p{L}\\p{N}])(hdr10\\+?|hdr|dolby[ ._-]?vision)(?![\\p{L}\\p{N}])")
-    private val emptyBrackets = Regex("\\[\\s*]|\\(\\s*\\)|\\{\\s*}")
+    private val yearRx = rx("[\\(\\[]\\s*((?:19|20)\\d{2})\\s*[\\)\\]]")
+    private val legRx = rx("(?i)\\[\\s*l\\s*\\]|\\(\\s*l\\s*\\)|(?<![\\p{L}\\p{N}])(leg|legendado|legendada)(?![\\p{L}\\p{N}])")
+    private val dubRx = rx("(?i)\\[\\s*d\\s*\\]|\\(\\s*d\\s*\\)|(?<![\\p{L}\\p{N}])(dub|dublado|dublada|dual[ ._-]?(?:audio|áudio))(?![\\p{L}\\p{N}])")
+    private val qRx = rx("(?i)(?<![\\p{L}\\p{N}])(4k|uhd|hdr10\\+?|hdr|dolby[ ._-]?vision|fhd|full[ ._-]?hd|hd|1080p?|720p?|2160p?|h[ ._-]?26[45]|x26[45]|hevc|web[ ._-]?dl|webrip|bluray|brrip|remux)(?![\\p{L}\\p{N}])")
+    private val uhdRx = rx("(?i)(?<![\\p{L}\\p{N}])(4k|uhd|2160p?)(?![\\p{L}\\p{N}])")
+    private val hdrRx = rx("(?i)(?<![\\p{L}\\p{N}])(hdr10\\+?|hdr|dolby[ ._-]?vision)(?![\\p{L}\\p{N}])")
+    private val emptyBrackets = rx("\\[\\s*\\]|\\(\\s*\\)|\\{\\s*\\}")
 
-    fun parse(name: String, group: String = ""): Info {
+    /** Nunca lança: se algo der errado, o filme fica com o nome original (sem juntar). */
+    fun parse(name: String, group: String = ""): Info =
+        try { parseImpl(name, group) } catch (t: Throwable) {
+            val n = name.trim()
+            Info(n.lowercase(), null, false, false, false, n)
+        }
+
+    private fun parseImpl(name: String, group: String): Info {
         val s = decor.replace(name, " ")
         val year = yearRx.find(s)?.groupValues?.get(1)?.toIntOrNull()
         val legendado = legRx.containsMatchIn(s) || foldKey(group).contains("legendad")
@@ -162,7 +191,10 @@ object MovieDedup {
     }
 
     /** Rótulos das versões sem repetir ("Dublado", "Dublado · opção 2"). */
-    fun versionLabels(items: List<Pair<String, String>>): List<String> {
+    fun versionLabels(items: List<Pair<String, String>>): List<String> =
+        try { versionLabelsImpl(items) } catch (t: Throwable) { items.map { it.first } }
+
+    private fun versionLabelsImpl(items: List<Pair<String, String>>): List<String> {
         val seen = HashMap<String, Int>()
         return items.map { (n, g) ->
             val l = versionLabel(n, g)
@@ -217,7 +249,13 @@ object ContentDedup {
      * Calcula as marcas de toda a playlist: por categoria (dupOf/tags) e em "Todos"/busca (dupOfAll/tagsAll).
      * Só devolve ids que mudam (o resto continua null).
      */
-    fun compute(rows: List<DedupRow>, adult: (String) -> Boolean = { false }): Map<Long, DedupMark> {
+    fun compute(rows: List<DedupRow>, adult: (String) -> Boolean = { false }): Map<Long, DedupMark> =
+        try { computeImpl(rows, adult) } catch (t: Throwable) {
+            runCatching { android.util.Log.w("Hugo", "agrupamento falhou; lista fica sem agrupar", t) }
+            emptyMap()
+        }
+
+    private fun computeImpl(rows: List<DedupRow>, adult: (String) -> Boolean): Map<Long, DedupMark> {
         val dupOf = HashMap<Long, Long>(); val dupOfAll = HashMap<Long, Long>()
         val tags = HashMap<Long, String>(); val tagsAll = HashMap<Long, String>()
         val liveInfos = HashMap<Long, LiveQuality.Info>(); val movieInfos = HashMap<Long, MovieDedup.Info>()

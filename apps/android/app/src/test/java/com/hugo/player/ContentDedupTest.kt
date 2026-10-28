@@ -111,4 +111,42 @@ class ContentDedupTest {
         assertNull(m[rj.id])
         assertEquals("SD,HD,FHD", m[fhd.id]?.tags)
     }
+
+    /**
+     * O Android compila regex com o ICU, que recusa "]" e "}" soltos fora de [...]/{n}
+     * (o Java aceita; foi o que derrubou a 0.5.57). Confere todos os padrões do arquivo.
+     */
+    @Test
+    fun padroesValidosNoAndroidIcu() {
+        val src = listOf("src/main/java/com/hugo/player/data/ContentDedup.kt", "app/src/main/java/com/hugo/player/data/ContentDedup.kt")
+            .map { java.io.File(it) }.first { it.exists() }.readText()
+        val pats = Regex("rx\\(\\s*((?:\"(?:[^\"\\\\]|\\\\.)*\"\\s*\\+?\\s*)+)\\)").findAll(src).map { m ->
+            Regex("\"((?:[^\"\\\\]|\\\\.)*)\"").findAll(m.groupValues[1]).joinToString("") { it.groupValues[1] }
+                .replace("\\\\", "\\")
+        }.filter { it != "(?!)" }.toList()
+        assertTrue("achou padrões: ${pats.size}", pats.size >= 12)
+        pats.forEach { p ->
+            Regex(p) // compila no Java
+            var i = 0; var inClass = false; var inBrace = false
+            while (i < p.length) {
+                val c = p[i]
+                when {
+                    c == '\\' -> { i++; if ((p.getOrNull(i) == 'p' || p.getOrNull(i) == 'P') && p.getOrNull(i + 1) == '{') i = p.indexOf('}', i) }
+                    inClass -> if (c == ']') inClass = false
+                    c == '[' -> { inClass = true; if (p.getOrNull(i + 1) == '^') i++; if (p.getOrNull(i + 1) == ']') i++ }
+                    c == '{' -> { val close = p.indexOf('}', i); assertTrue("'{' solto em: $p", close > i && p.substring(i + 1, close).matches(Regex("\\d+(,\\d*)?"))); i = close }
+                    c == ']' || c == '}' -> throw AssertionError("'$c' sem \\ (ICU/Android recusa) em: $p")
+                }
+                i++
+            }
+            assertTrue(!inBrace)
+        }
+    }
+
+    @Test
+    fun colchetesVaziosSaemDoNome() {
+        assertEquals("Telecine Pipoca", LiveQuality.displayName("Telecine Pipoca [HD]"))
+        assertEquals("Telecine Pipoca", LiveQuality.displayName("Telecine Pipoca {FHD}"))
+        assertEquals("A Estação do Terror", MovieDedup.parse("A Estação do Terror [L]").clean)
+    }
 }
