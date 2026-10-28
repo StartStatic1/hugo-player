@@ -115,6 +115,7 @@ fun PlaylistScreen(
     var pinTarget by remember { mutableStateOf<PendingAction?>(null) }
     var showAdd by remember { mutableStateOf(false) }
     var toast by remember { mutableStateOf<String?>(null) }
+    var reloading by remember { mutableStateOf(false) }
     val firstCardFocus = remember { FocusRequester() }
 
     suspend fun reload() {
@@ -138,6 +139,16 @@ fun PlaylistScreen(
             else e.message ?: "Não foi possível carregar as playlists."
             if (playlists == null) playlists = emptyList()
         }
+    }
+
+    /** botão Atualizar: mostra que está buscando e o resultado (antes não dava retorno nenhum) */
+    suspend fun manualReload() {
+        if (reloading) return
+        reloading = true
+        toast = "Atualizando playlists…"
+        try { reload() } finally { reloading = false }
+        toast = if (listError != null) null
+            else playlists?.size?.let { n -> if (n == 0) "Nenhuma playlist neste ID ainda" else "Playlists atualizadas · $n" }
     }
 
     var autoHandled by rememberSaveable { mutableStateOf(false) }
@@ -230,7 +241,7 @@ fun PlaylistScreen(
             }
             HugoIconButton(Icons.Default.Add, "Adicionar playlist", onClick = { showAdd = true }, label = "Adicionar")
             Spacer(Modifier.width(8.dp))
-            HugoIconButton(Icons.Default.Refresh, "Atualizar lista", onClick = { scope.launch { reload() } })
+            HugoIconButton(Icons.Default.Refresh, "Atualizar lista", onClick = { scope.launch { manualReload() } }, label = if (reloading) "Atualizando…" else null)
             Spacer(Modifier.width(8.dp))
             HugoIconButton(Icons.Default.Settings, "Configurações", onClick = onSettings)
         }

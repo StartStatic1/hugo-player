@@ -94,9 +94,29 @@ object HugoApi {
                 throw ApiException(code, friendlyApiError(code, apiErr), apiErr)
             }
             conn.inputStream.bufferedReader().use { it.readText() }
+        } catch (e: java.io.IOException) {
+            // erro de rede/TLS: mensagem clara em vez do texto técnico (ex.: CertPathValidatorException)
+            throw ApiException(0, friendlyNetworkError(e), if (isTlsError(e)) "tls_error" else "network_error")
         } finally {
             conn.disconnect()
         }
+    }
+
+    fun isTlsError(e: Throwable): Boolean {
+        var c: Throwable? = e
+        while (c != null) {
+            if (c is javax.net.ssl.SSLException || c is java.security.cert.CertificateException ||
+                c is java.security.cert.CertPathValidatorException) return true
+            c = c.cause
+        }
+        return false
+    }
+
+    fun friendlyNetworkError(e: Throwable): String = when {
+        isTlsError(e) -> "Não foi possível conectar com segurança ao servidor do Hugo Player. " +
+            "Confira se a data e a hora do aparelho estão certas e tente de novo."
+        e is java.net.SocketTimeoutException -> "O servidor do Hugo Player demorou para responder. Tente de novo."
+        else -> "Não foi possível conectar ao servidor do Hugo Player. Verifique a internet do aparelho e tente de novo."
     }
 
     private fun friendlyApiError(code: Int, apiErr: String?): String = when {
