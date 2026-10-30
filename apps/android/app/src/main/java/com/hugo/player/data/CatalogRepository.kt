@@ -124,11 +124,16 @@ class CatalogRepository(context: Context) {
         return "live"
     }
 
+    /** itens salvos por vez no banco (cada lote = 1 transação do Room) */
+    private val BATCH = 5000
+
     suspend fun syncPlaylist(
         playlistId: String,
         playlistUrl: String,
         onProgress: (String) -> Unit = {},
         onFraction: (Float?) -> Unit = {},
+        /** chamado uma vez, assim que o 1º lote de itens está salvo (dá para abrir a lista já) */
+        onFirstBatch: () -> Unit = {},
     ) = withContext(Dispatchers.IO) {
         onProgress("Conectando ao servidor...")
         onFraction(null)
@@ -150,7 +155,9 @@ class CatalogRepository(context: Context) {
                 onFraction(0.05f)
                 dao.deleteChannels(playlistId); invalidateSeriesTwins(playlistId)
                 dao.deleteCategories(playlistId)
-                val total = parseServerJson(conn.inputStream, playlistId, onProgress, onFraction)
+                // total real (servidor novo manda no cabeçalho e antes da lista no JSON)
+                val headerTotal = conn.getHeaderField("X-Hugo-Total")?.trim()?.toIntOrNull()?.takeIf { it > 0 }
+                val total = parseServerJson(conn.inputStream, playlistId, onProgress, onFraction, headerTotal, onFirstBatch)
                 invalidateSeriesTwins(playlistId)
                 onProgress("Juntando repetidos..."); ensureDedup(playlistId)
                 onFraction(1f)
@@ -186,7 +193,7 @@ class CatalogRepository(context: Context) {
             try { conn.disconnect() } catch (_: Exception) {}
         }
 
-        onProgress("Provedor bloqueou o servidor. Baixando no aparelho...")
+        onProgress("O provedor bloqueou nosso servidor. Baixando a lista direto no aparelho — pode demorar mais...")
         val total = importM3uFullyLocal(playlistId, playlistUrl, onProgress, onFraction)
         saveAccountLocal(playlistId, playlistUrl)
         invalidateSeriesTwins(playlistId)
@@ -200,17 +207,25 @@ class CatalogRepository(context: Context) {
         playlistId: String,
         onProgress: (String) -> Unit,
         onFraction: (Float?) -> Unit,
+        knownTotal: Int? = null,
+        onFirstBatch: () -> Unit = {},
     ): Int {
         val reader = JsonReader(input.bufferedReader())
         reader.isLenient = true
-        val channels = ArrayList<ChannelEntity>(800)
+        val channels = ArrayList<ChannelEntity>(BATCH)
         var total = 0
-        var estimated = 50000
+        var realTotal: Int? = knownTotal
+        var firstBatchDone = false
+        var estimated = knownTotal ?: 50000
         var account: Pair<Long?, Boolean>? = null
         try {
             reader.beginObject()
             while (reader.hasNext()) {
                 when (reader.nextName()) {
+                    "total" -> {
+                        val t = reader.nextIntOrNull()
+                        if (realTotal == null && t != null && t > 0) { realTotal = t; estimated = t }
+                    }
                     "channels" -> {
                         reader.beginArray()
                         while (reader.hasNext()) {
@@ -257,13 +272,21 @@ class CatalogRepository(context: Context) {
                             )
                             total++
                             if (total % 1000 == 0) {
-                                val pct = ((total.toFloat() / estimated).coerceIn(0.05f, 0.95f) * 100).toInt()
-                                onProgress("Lendo lista... $pct% ($total itens)")
-                                onFraction((total.toFloat() / estimated).coerceIn(0.05f, 0.95f))
+                                val rt = realTotal
+                                if (rt != null) {
+                                    val f = (total.toFloat() / rt).coerceIn(0.05f, 0.99f)
+                                    onProgress("Carregando lista... ${(f * 100).toInt()}% ($total de $rt itens)")
+                                    onFraction(f)
+                                } else {
+                                    val pct = ((total.toFloat() / estimated).coerceIn(0.05f, 0.95f) * 100).toInt()
+                                    onProgress("Lendo lista... $pct% ($total itens)")
+                                    onFraction((total.toFloat() / estimated).coerceIn(0.05f, 0.95f))
+                                }
                             }
-                            if (channels.size >= 800) {
+                            if (channels.size >= BATCH) {
                                 dao.insertChannels(channels.toList())
                                 channels.clear()
+                                if (!firstBatchDone) { firstBatchDone = true; runCatching { onFirstBatch() } }
                             }
                         }
                         reader.endArray()
@@ -318,6 +341,7 @@ class CatalogRepository(context: Context) {
             try { input.close() } catch (_: Exception) {}
         }
         if (channels.isNotEmpty()) dao.insertChannels(channels)
+        if (!firstBatchDone && total > 0) runCatching { onFirstBatch() }
         // sem "account" (M3U ou servidor antigo): não marca nada; a conferência leve (ListExpiry.refreshIfStale) resolve
         account?.let { a -> ListExpiry.save(appContext, playlistId, a.first, a.second) }
         return total

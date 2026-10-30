@@ -151,6 +151,8 @@ fun PlaylistScreen(
             else playlists?.size?.let { n -> if (n == 0) "Nenhuma playlist neste ID ainda" else "Playlists atualizadas · $n" }
     }
 
+    val screenAlive = remember { java.util.concurrent.atomic.AtomicBoolean(true) }
+    androidx.compose.runtime.DisposableEffect(Unit) { onDispose { screenAlive.set(false) } }
     var autoHandled by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(Unit) { reload() }
     LaunchedEffect(playlists?.size) {
@@ -162,19 +164,35 @@ fun PlaylistScreen(
 
     fun sync(pl: RemotePlaylist, url: String, navigateAfter: Boolean) {
         if (loads[pl.id]?.let { !it.error } == true) return
+        // já está salvando em segundo plano (aberta no 1º lote): não apaga e baixa de novo; só entra
+        if (pl.id in ActiveSyncs) {
+            if (navigateAfter) enterPlaylist(context, pl, url, onOpen) else toast = "\"${pl.name}\" ainda está terminando de carregar"
+            return
+        }
+        ActiveSyncs.add(pl.id)
         if (navigateAfter) openingId = pl.id
         loads[pl.id] = CardLoad("Conectando...", null)
-        scope.launch {
+        // escopo do app (não da tela): ao abrir a lista no 1º lote, o resto continua salvando em segundo plano
+        SyncScope.launch(kotlinx.coroutines.Dispatchers.Main) {
             try {
                 repo.syncPlaylist(
                     pl.id, url,
                     onProgress = { msg -> loads[pl.id] = (loads[pl.id] ?: CardLoad(msg, null)).copy(status = msg) },
                     onFraction = { f -> loads[pl.id] = (loads[pl.id] ?: CardLoad("", f)).copy(fraction = f) },
+                    onFirstBatch = {
+                        // 1º lote (+ categorias) já salvo: abre a lista agora, sem esperar o resto
+                        if (navigateAfter) SyncScope.launch(kotlinx.coroutines.Dispatchers.Main) {
+                            if (openingId == pl.id && screenAlive.get()) {
+                                openingId = null
+                                enterPlaylist(context, pl, url, onOpen)
+                            }
+                        }
+                    },
                 )
                 PlaylistRepository.markSynced(context, pl.id)
                 summaries[pl.id] = PlaylistRepository.localSummary(context, pl.id)
                 loads.remove(pl.id)
-                if (navigateAfter && openingId == pl.id) {
+                if (navigateAfter && openingId == pl.id && screenAlive.get()) {
                     openingId = null
                     enterPlaylist(context, pl, url, onOpen)
                 } else if (!navigateAfter) {
@@ -183,6 +201,8 @@ fun PlaylistScreen(
             } catch (e: Exception) {
                 loads[pl.id] = CardLoad("Erro: ${e.message ?: "falha ao carregar"}", null, error = true)
                 if (openingId == pl.id) openingId = null
+            } finally {
+                ActiveSyncs.remove(pl.id)
             }
         }
     }
@@ -746,3 +766,7 @@ private fun UpdateRequiredPanel(onRetry: () -> Unit) {
         }
     }
 }
+
+/** Sincronizações de playlist sobrevivem à saída da tela de playlists (o resto da lista continua salvando). */
+private val ActiveSyncs: MutableSet<String> = java.util.Collections.synchronizedSet(mutableSetOf())
+private val SyncScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Main.immediate)
