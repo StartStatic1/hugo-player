@@ -5,6 +5,7 @@ import { classifyEntry, parseEpisode } from "./content/classify.js";
 import { parseXtreamUrl, buildCatalogFromXtream, fetchSeriesInfo, apiUrl, parseXtreamAccount } from "./content/xtream.js";
 import { blockKey, isBlocked, markBlocked } from "./content/blocked-hosts.js";
 import { rememberChannels } from "./content/known-channels.js";
+import { cacheKey, statCatalogCache, readCatalogCache, writeCatalogCache, CATALOG_FRESH_MS, CATALOG_STALE_MS, CATALOG_FALLBACK_MS } from "./content/catalog-cache.js";
 import { isRegisteredUrl, noteDeprecated, playlistUrlFor, type StoredPlaylist } from "./playlist-access.js";
 
 export const channelsRouter = Router();
@@ -50,8 +51,6 @@ const sourceGate: import("express").RequestHandler = (req, res, next) => {
   next();
 };
 
-const playlistCache = new Map<string, { channels: any[]; categories: any[]; stats: any; timestamp: number }>();
-const CACHE_TTL = 10 * 60 * 1000;
 const BLOCKED_HINT =
   "Provedor bloqueou o IP do servidor (comum em VPS). O app no celular funciona; o painel barre data center.";
 
@@ -227,163 +226,185 @@ channelsRouter.post("/from-m3u", async (req, res) => {
   }
 });
 
+class UpstreamHttpError extends Error {
+  constructor(public status: number, public body: any) {
+    super(String(body?.error || "upstream_error"));
+  }
+}
+
+type Catalog = { channels: any[]; categories: any[]; stats?: any; account?: any; source?: string; timestamp: number };
+
+/** Baixa e converte a playlist do provedor (Xtream API → get.php M3U → M3U puro). Lança UpstreamHttpError. */
+async function buildCatalog(playlistUrl: string): Promise<Catalog> {
+  const ua = "VLC/3.0.20 LibVLC/3.0.20";
+  const xt = parseXtreamUrl(playlistUrl);
+  if (xt) {
+    let data: Catalog | null = null;
+    const hostKey = blockKey(xt.baseUrl, xt.username);
+    if (isBlocked(hostKey)) throw new UpstreamHttpError(502, { error: "upstream_403", hint: BLOCKED_HINT });
+    let forbidden = false;
+    try {
+      const fetchJson = async (url: string) => {
+        const r = await fetch(url, { headers: { "User-Agent": ua, Accept: "*/*" } });
+        if (r.status === 403) forbidden = true;
+        if (!r.ok) throw new Error("upstream_" + r.status);
+        return r.json();
+      };
+      const catalog = await buildCatalogFromXtream(xt, fetchJson);
+      if (catalog.stats.live + catalog.stats.movies + catalog.stats.series > 0) {
+        const channels: any[] = [];
+        for (const it of catalog.live.items)
+          channels.push({ name: it.name, url: it.url, logo: it.logo, group: it.group, type: "live", epgId: it.epgId ?? undefined });
+        for (const it of catalog.movies.items)
+          channels.push({ name: it.name, url: it.url, logo: it.poster, group: it.group, type: "movie" });
+        for (const it of catalog.series.items)
+          channels.push({
+            name: it.name,
+            url: `xtream://series/${it.seriesId}`,
+            logo: it.cover,
+            group: it.group,
+            type: "series",
+            seriesName: it.name,
+            seriesId: it.seriesId,
+            episodeCount: it.episodeCount,
+            plot: it.plot,
+          });
+        const categories = [
+          ...catalog.live.categories.map((c, i) => ({ name: c.name, count: c.count, type: "live", position: i })),
+          ...catalog.movies.categories.map((c, i) => ({ name: c.name, count: c.count, type: "movie", position: i })),
+          ...catalog.series.categories.map((c, i) => ({ name: c.name, count: c.count, type: "series", position: i })),
+        ];
+        data = { channels, categories, stats: catalog.stats, timestamp: Date.now(), account: catalog.account ?? null, source: "xtream" };
+      }
+    } catch (e: any) {
+      if (forbidden || e?.message === "upstream_403") {
+        markBlocked(hostKey);
+        console.warn("xtream api 403 (VPS IP blocked), skipping get.php:", blockKey(xt.baseUrl));
+        throw new UpstreamHttpError(502, { error: "upstream_403", hint: BLOCKED_HINT });
+      }
+      console.warn("xtream api failed, trying get.php M3U:", e?.message);
+    }
+    if (data) return data;
+    const m3uUrl =
+      `${xt.baseUrl}/get.php?username=${encodeURIComponent(xt.username)}` +
+      `&password=${encodeURIComponent(xt.password)}&type=m3u_plus&output=ts`;
+    const parsed = await fetchM3U(m3uUrl, ua, () => markBlocked(hostKey));
+    return { ...parsed, account: null, source: "m3u_fallback", timestamp: Date.now() };
+  }
+  const parsed = await fetchM3U(playlistUrl, ua, () => {});
+  return { ...parsed, source: "m3u", timestamp: Date.now() };
+}
+
+async function fetchM3U(url: string, ua: string, on403: () => void) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 180000);
+  try {
+    const response = await fetch(url, { signal: controller.signal, redirect: "follow", headers: { "User-Agent": ua, Accept: "*/*" } });
+    if (!response.ok) {
+      if (response.status === 403) on403();
+      throw new UpstreamHttpError(502, { error: `upstream_${response.status}`, hint: response.status === 403 ? BLOCKED_HINT : undefined });
+    }
+    const text = await response.text();
+    if (!text || !text.includes("#EXTINF")) throw new UpstreamHttpError(422, { error: "empty_playlist" });
+    return parseM3U(text);
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+/** Uma busca por playlist de cada vez (vários aparelhos abrindo juntos esperam a mesma). */
+const inflight = new Map<string, Promise<Catalog>>();
+/** No máximo 3 listas sendo baixadas/convertidas ao mesmo tempo (cada uma pode ocupar ~100 MB de RAM). */
+let building = 0;
+const waiters: (() => void)[] = [];
+async function withBuildSlot<T>(fn: () => Promise<T>): Promise<T> {
+  while (building >= 3) await new Promise<void>((r) => waiters.push(r));
+  building++;
+  try {
+    return await fn();
+  } finally {
+    building--;
+    waiters.shift()?.();
+  }
+}
+function refreshCatalog(playlistUrl: string): Promise<Catalog> {
+  const key = cacheKey(playlistUrl);
+  let p = inflight.get(key);
+  if (!p) {
+    p = withBuildSlot(() => buildCatalog(playlistUrl))
+      .then(async (data) => {
+        rememberChannels(playlistUrl, data.channels.filter((c: any) => c.type === "live"));
+        await writeCatalogCache(playlistUrl, data).catch((e) => console.warn("catalog cache write failed:", e?.message));
+        return data;
+      })
+      .finally(() => inflight.delete(key));
+    inflight.set(key, p);
+  }
+  return p;
+}
+
+/**
+ * Cache em disco (JSON gzip) por playlist:
+ *  - < CATALOG_FRESH_MS: responde do cache (≈ instantâneo), sem ir ao provedor;
+ *  - até CATALOG_STALE_MS: responde do cache e atualiza em segundo plano;
+ *  - provedor falhou (403/530/fora do ar) e existe cópia de até CATALOG_FALLBACK_MS: responde a cópia
+ *    (o app não precisa baixar 100 MB no aparelho).
+ */
+async function loadCatalog(playlistUrl: string, forceFresh: boolean): Promise<{ data: Catalog; cache: string; file?: string }> {
+  const meta = forceFresh ? null : await statCatalogCache(playlistUrl);
+  const age = meta ? Date.now() - meta.mtimeMs : Infinity;
+  if (meta && age < CATALOG_FRESH_MS) return { data: await readCatalogCache(meta.file), cache: "hit", file: meta.file };
+  if (meta && age < CATALOG_STALE_MS) {
+    refreshCatalog(playlistUrl).catch((e) => console.warn("background refresh failed:", e?.message));
+    return { data: await readCatalogCache(meta.file), cache: "stale", file: meta.file };
+  }
+  try {
+    return { data: await refreshCatalog(playlistUrl), cache: "miss" };
+  } catch (e) {
+    const old = await statCatalogCache(playlistUrl);
+    if (old && Date.now() - old.mtimeMs < CATALOG_FALLBACK_MS) {
+      console.warn("provider failed, serving cached copy:", (e as any)?.message);
+      return { data: await readCatalogCache(old.file), cache: "fallback", file: old.file };
+    }
+    throw e;
+  }
+}
+
 channelsRouter.get("/", sourceGate, async (req, res) => {
   const playlistUrl = (res.locals.playlistUrl ?? req.query.url) as string;
   const page = parseInt(String(req.query.page || "0"), 10) || 0;
   const rawLimit = parseInt(String(req.query.limit || "50"), 10) || 50;
-  const limit = Math.min(Math.max(rawLimit, 1), 100_000);
+  // apps pedem limit=80000 querendo "a lista inteira": a partir disso não corta (777mmega tem 80.383)
+  const limit = rawLimit >= 80_000 ? 500_000 : Math.min(Math.max(rawLimit, 1), 100_000);
   const type = req.query.type as string | undefined;
   const group = req.query.group as string | undefined;
   if (!playlistUrl) return res.status(400).json({ error: "missing_playlist" });
 
   try {
-    const xt = parseXtreamUrl(playlistUrl);
-    if (xt) {
-      const ua = "VLC/3.0.20 LibVLC/3.0.20";
-      let usedSource = "xtream";
-      let data: { channels: any[]; categories: any[]; stats: any; timestamp: number; account?: any } | null = null;
-      const hostKey = blockKey(xt.baseUrl, xt.username);
-      if (isBlocked(hostKey)) {
-        // 403 recente deste provedor: não insiste da VPS, o app baixa no aparelho.
-        return res.status(502).json({ error: "upstream_403", hint: BLOCKED_HINT });
-      }
-      let forbidden = false;
-      try {
-        const fetchJson = async (url: string) => {
-          const r = await fetch(url, { headers: { "User-Agent": ua, Accept: "*/*" } });
-          if (r.status === 403) forbidden = true;
-          if (!r.ok) throw new Error("upstream_" + r.status);
-          return r.json();
-        };
-        const catalog = await buildCatalogFromXtream(xt, fetchJson);
-        if (catalog.stats.live + catalog.stats.movies + catalog.stats.series > 0) {
-          const channels: any[] = [];
-          for (const it of catalog.live.items)
-            channels.push({ name: it.name, url: it.url, logo: it.logo, group: it.group, type: "live", epgId: it.epgId ?? undefined });
-          for (const it of catalog.movies.items)
-            channels.push({ name: it.name, url: it.url, logo: it.poster, group: it.group, type: "movie" });
-          for (const it of catalog.series.items)
-            channels.push({
-              name: it.name,
-              url: `xtream://series/${it.seriesId}`,
-              logo: it.cover,
-              group: it.group,
-              type: "series",
-              seriesName: it.name,
-              seriesId: it.seriesId,
-              episodeCount: it.episodeCount,
-              plot: it.plot,
-            });
-          const categories = [
-            ...catalog.live.categories.map((c, i) => ({ name: c.name, count: c.count, type: "live", position: i })),
-            ...catalog.movies.categories.map((c, i) => ({ name: c.name, count: c.count, type: "movie", position: i })),
-            ...catalog.series.categories.map((c, i) => ({ name: c.name, count: c.count, type: "series", position: i })),
-          ];
-          data = { channels, categories, stats: catalog.stats, timestamp: Date.now(), account: catalog.account ?? null };
-        }
-      } catch (e: any) {
-        if (forbidden || e?.message === "upstream_403") {
-          // IP da VPS bloqueado: get.php do mesmo servidor também seria recusado.
-          markBlocked(hostKey);
-          console.warn("xtream api 403 (VPS IP blocked), skipping get.php:", blockKey(xt.baseUrl));
-          return res.status(502).json({ error: "upstream_403", hint: BLOCKED_HINT });
-        }
-        console.warn("xtream api failed, trying get.php M3U:", e?.message);
-      }
-      if (!data) {
-        const m3uUrl =
-          `${xt.baseUrl}/get.php?username=${encodeURIComponent(xt.username)}` +
-          `&password=${encodeURIComponent(xt.password)}&type=m3u_plus&output=ts`;
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 180000);
-        try {
-          const response = await fetch(m3uUrl, {
-            signal: controller.signal,
-            redirect: "follow",
-            headers: { "User-Agent": ua, Accept: "*/*" },
-          });
-          if (!response.ok) {
-            if (response.status === 403) markBlocked(hostKey);
-            return res.status(502).json({
-              error: `upstream_${response.status}`,
-              hint: response.status === 403 ? BLOCKED_HINT : undefined,
-            });
-          }
-          const text = await response.text();
-          if (!text || !text.includes("#EXTINF")) {
-            return res.status(422).json({ error: "empty_playlist" });
-          }
-          const parsed = parseM3U(text);
-          data = { ...parsed, timestamp: Date.now() };
-          usedSource = "m3u_fallback";
-        } finally {
-          clearTimeout(timeout);
-        }
-      }
-      playlistCache.set(playlistUrl, data);
-      rememberChannels(playlistUrl, data.channels.filter((c: any) => c.type === "live"));
-      let filtered = data.channels;
-      if (type && type !== "all") filtered = filtered.filter((c: any) => c.type === type);
-      if (group) filtered = filtered.filter((c: any) => c.group === group);
-      const start = page * limit;
-      return res.json({
-        channels: filtered.slice(start, start + limit),
-        categories: data.categories,
-        total: filtered.length,
-        page,
-        limit,
-        hasMore: start + limit < filtered.length,
-        source: usedSource,
-        // vencimento da conta Xtream (null quando veio pelo M3U)
-        account: data.account ?? null,
-      });
-    }
-
-    const cached = playlistCache.get(playlistUrl);
-    let data;
-    if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
-      data = cached;
-    } else {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 180000);
-      let response: Response;
-      try {
-        response = await fetch(playlistUrl, {
-          signal: controller.signal,
-          headers: { "User-Agent": "VLC/3.0.20 LibVLC/3.0.20" },
-        });
-      } finally {
-        clearTimeout(timeout);
-      }
-      if (!response.ok) return res.status(502).json({ error: `upstream_${response.status}` });
-      const text = await response.text();
-      if (!text || text.length < 10) return res.status(422).json({ error: "empty_playlist" });
-      data = parseM3U(text);
-      playlistCache.set(playlistUrl, { ...data, timestamp: Date.now() });
-      rememberChannels(playlistUrl, data.channels.filter((c: any) => c.type === "live"));
-    }
-
+    const { data, cache } = await loadCatalog(playlistUrl, req.query.fresh === "1");
+    res.setHeader("X-Hugo-Cache", cache);
+    res.setHeader("X-Hugo-Total", String(data.channels.length));
     let filtered = data.channels;
     if (type && type !== "all") filtered = filtered.filter((c: any) => c.type === type);
     if (group) filtered = filtered.filter((c: any) => c.group === group);
-
     const start = page * limit;
-    const channels = filtered.slice(start, start + limit);
-    const hasMore = start + limit < filtered.length;
-
-    res.json({
-      channels,
-      categories: data.categories,
+    // "total" vem ANTES de "channels": o app já sabe o tamanho real e mostra progresso de verdade
+    return res.json({
       total: filtered.length,
       page,
       limit,
-      hasMore,
+      hasMore: start + limit < filtered.length,
+      source: data.source ?? "m3u",
+      // vencimento da conta Xtream (null quando veio pelo M3U)
+      account: data.account ?? null,
       stats: data.stats,
+      categories: data.categories,
+      channels: filtered.slice(start, start + limit),
     });
   } catch (e: any) {
+    if (e instanceof UpstreamHttpError) return res.status(e.status).json(e.body);
     if (e.name === "AbortError") return res.status(504).json({ error: "timeout" });
     // provedor inalcançável da VPS (DNS, conexão recusada/caída, TLS): 502 → o app baixa a lista no próprio aparelho.
-    // Antes isso virava 500 "fetch failed" e o app só mostrava "Erro: HTTP 500".
     if (isUpstreamNetworkError(e)) {
       console.warn("upstream unreachable from server:", networkErrorCode(e));
       return res.status(502).json({ error: "upstream_unreachable", hint: BLOCKED_HINT });
