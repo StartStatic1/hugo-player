@@ -108,12 +108,37 @@ object WatchHistory {
         if (positionMs < 15_000) { removeProgress(ctx, key); return }
         val p = prefs(ctx)
         val root = JSONObject(p.getString(KEY_PROGRESS, "{}"))
+        dropOtherEpisodes(root, key, playlistId, title, subtitle)
         root.put(key, JSONObject().put("title", title).put("url", url).put("positionMs", positionMs).put("durationMs", durationMs).put("playlistId", playlistId).put("updatedAt", System.currentTimeMillis()).put("logo", logo ?: "").put("subtitle", subtitle ?: ""))
         if (root.length() > MAX_CONTINUE) {
             val sorted = root.keys().asSequence().map { k -> k to root.getJSONObject(k).optLong("updatedAt") }.sortedBy { it.second }.map { it.first }.toList()
             val drop = sorted.size - MAX_CONTINUE
             for (i in 0 until drop) root.remove(sorted[i])
         }
+        p.edit().putString(KEY_PROGRESS, root.toString()).apply()
+    }
+
+    private val EP_RX = Regex("""^(T\d+ · E\d+|Temporada \d+)""")
+
+    /** Série: guarda só o episódio mais recente (senão um episódio antigo pela metade, ex. fim da T1, volta para a Home). */
+    private fun dropOtherEpisodes(root: JSONObject, key: String, playlistId: String, title: String, subtitle: String?) {
+        if (subtitle == null || !EP_RX.containsMatchIn(subtitle)) return
+        val drop = root.keys().asSequence().filter { k ->
+            if (k == key) return@filter false
+            val o = root.optJSONObject(k) ?: return@filter false
+            o.optString("playlistId") == playlistId && o.optString("title") == title && EP_RX.containsMatchIn(o.optString("subtitle"))
+        }.toList()
+        drop.forEach { root.remove(it) }
+    }
+
+    /** Episódio terminou: o cartão da série passa a ser o próximo episódio (ex. T2 · E01), do começo. */
+    fun saveUpNext(ctx: Context, key: String, title: String, url: String, playlistId: String, logo: String?, subtitle: String?) {
+        if (subtitle == null || !EP_RX.containsMatchIn(subtitle)) return
+        val p = prefs(ctx)
+        val root = JSONObject(p.getString(KEY_PROGRESS, "{}"))
+        dropOtherEpisodes(root, key, playlistId, title, subtitle)
+        if (root.optJSONObject(key)?.optLong("positionMs", 0L)?.let { it > 0 } == true) { p.edit().putString(KEY_PROGRESS, root.toString()).apply(); return }
+        root.put(key, JSONObject().put("title", title).put("url", url).put("positionMs", 0L).put("durationMs", 0L).put("playlistId", playlistId).put("updatedAt", System.currentTimeMillis()).put("logo", logo ?: "").put("subtitle", subtitle).put("upNext", true))
         p.edit().putString(KEY_PROGRESS, root.toString()).apply()
     }
 

@@ -213,6 +213,7 @@ fun PlayerScreen(request: PlaybackRequest, onBack: () -> Unit) {
                     // terminou: marca assistido e, se tem próximo, conta 10 s (dá para cancelar)
                     WatchHistory.markWatched(context, progressKeyFor(current))
                     WatchHistory.removeProgress(context, progressKeyFor(current))
+                    queue.firstOrNull()?.let { n -> WatchHistory.saveUpNext(context, progressKeyFor(n), n.title, n.url, n.playlistId ?: "", n.logo, n.subtitle) }
                     if (sleep == SleepOption.END_OF_EPISODE) { onBack(); return }
                     if (queue.isNotEmpty()) { showControls = false; nextCountdown = NEXT_COUNTDOWN_S }
                 }
@@ -234,7 +235,7 @@ fun PlayerScreen(request: PlaybackRequest, onBack: () -> Unit) {
         }
         exoPlayer.addListener(listener)
         onDispose {
-            saveProgressOf(context, current, exoPlayer.currentPosition, exoPlayer.duration, exoPlayer.playbackState == Player.STATE_ENDED)
+            saveProgressOf(context, current, exoPlayer.currentPosition, exoPlayer.duration, exoPlayer.playbackState == Player.STATE_ENDED, queue.firstOrNull())
             exoPlayer.removeListener(listener)
             exoPlayer.release()
         }
@@ -252,11 +253,11 @@ fun PlayerScreen(request: PlaybackRequest, onBack: () -> Unit) {
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
                 // app saiu da tela (Home, recentes, tela desligou): grava o ponto já, antes que o sistema feche o app
-                Lifecycle.Event.ON_PAUSE -> saveProgressOf(context, current, exoPlayer.currentPosition, exoPlayer.duration, exoPlayer.playbackState == Player.STATE_ENDED)
+                Lifecycle.Event.ON_PAUSE -> saveProgressOf(context, current, exoPlayer.currentPosition, exoPlayer.duration, exoPlayer.playbackState == Player.STATE_ENDED, queue.firstOrNull())
                 Lifecycle.Event.ON_STOP -> {
                     wasPlaying = exoPlayer.playWhenReady
                     exoPlayer.pause()
-                    saveProgressOf(context, current, exoPlayer.currentPosition, exoPlayer.duration, exoPlayer.playbackState == Player.STATE_ENDED)
+                    saveProgressOf(context, current, exoPlayer.currentPosition, exoPlayer.duration, exoPlayer.playbackState == Player.STATE_ENDED, queue.firstOrNull())
                 }
                 Lifecycle.Event.ON_START -> if (wasPlaying) {
                     if (exoPlayer.isCurrentMediaItemLive) exoPlayer.seekToDefaultPosition()
@@ -279,7 +280,7 @@ fun PlayerScreen(request: PlaybackRequest, onBack: () -> Unit) {
             // fechar o app pelos recentes, atualizar ou o sistema matar o app perdia o ponto)
             if (exoPlayer.isPlaying && nowMs - lastSave >= PROGRESS_SAVE_EVERY_MS) {
                 lastSave = nowMs
-                saveProgressOf(context, current, exoPlayer.currentPosition, exoPlayer.duration, false)
+                saveProgressOf(context, current, exoPlayer.currentPosition, exoPlayer.duration, false, queue.firstOrNull())
             }
             delay(500)
         }
@@ -306,7 +307,7 @@ fun PlayerScreen(request: PlaybackRequest, onBack: () -> Unit) {
     /** Vai para o próximo da fila, guardando onde parou no atual. */
     fun goNext() {
         val next = queue.firstOrNull() ?: return
-        saveProgressOf(context, current, exoPlayer.currentPosition, exoPlayer.duration, exoPlayer.playbackState == Player.STATE_ENDED)
+        saveProgressOf(context, current, exoPlayer.currentPosition, exoPlayer.duration, exoPlayer.playbackState == Player.STATE_ENDED, queue.firstOrNull())
         nextCountdown = null
         queue = queue.drop(1)
         forceHls = false
@@ -519,7 +520,7 @@ fun PlayerScreen(request: PlaybackRequest, onBack: () -> Unit) {
     fun togglePlay() {
         if (exoPlayer.isPlaying) {
             exoPlayer.pause()
-            saveProgressOf(context, current, exoPlayer.currentPosition, exoPlayer.duration, false)
+            saveProgressOf(context, current, exoPlayer.currentPosition, exoPlayer.duration, false, queue.firstOrNull())
         } else {
             if (exoPlayer.playbackState == Player.STATE_IDLE) exoPlayer.prepare()
             exoPlayer.play()
@@ -847,10 +848,11 @@ internal fun applySubtitleStyle(view: PlayerView) {
 internal fun progressKeyFor(r: PlaybackRequest): String = WatchHistory.contentKey(r.playlistId ?: "_", r.url)
 
 /** Guarda o ponto (ou marca assistido) do item que está saindo da tela. */
-private fun saveProgressOf(context: Context, r: PlaybackRequest, pos: Long, dur: Long, ended: Boolean) {
+private fun saveProgressOf(context: Context, r: PlaybackRequest, pos: Long, dur: Long, ended: Boolean, next: PlaybackRequest? = null) {
     if (r.isLive == true) return
     val key = progressKeyFor(r)
-    if (ended) { WatchHistory.markWatched(context, key); WatchHistory.removeProgress(context, key); return }
+    if (ended) { WatchHistory.markWatched(context, key); WatchHistory.removeProgress(context, key); (next ?: r.queue.firstOrNull())?.let { n -> WatchHistory.saveUpNext(context, progressKeyFor(n), n.title, n.url, n.playlistId ?: "", n.logo, n.subtitle) }; return }
+    if (dur > 0 && pos.toFloat() / dur >= WatchHistory.WATCHED_FRACTION) (next ?: r.queue.firstOrNull())?.let { n -> WatchHistory.saveUpNext(context, progressKeyFor(n), n.title, n.url, n.playlistId ?: "", n.logo, n.subtitle) }
     if (pos > 15_000) {
         WatchHistory.saveProgress(context, key, r.title, r.url, pos, if (dur > 0) dur else 0L, r.playlistId ?: "", logo = r.logo, subtitle = r.subtitle)
     }
