@@ -75,7 +75,6 @@ private const val SITE_URL = "https://hugo.streamflixvip.online"
 private enum class SettingsCat(val label: String, val hint: String, val icon: ImageVector) {
     INFO("Informação geral", "Aparelho, licença e lista em uso", Icons.Rounded.Info),
     PLAYER("Player de vídeo", "Formato ao vivo e User-Agent", Icons.Rounded.PlayCircle),
-    LANGUAGE("Idioma", "Português ou English", Icons.Rounded.Language),
     SUBS("Legendas", "Aparência da legenda", Icons.Rounded.Subtitles),
     PARENTAL("Controle dos pais", "PIN para conteúdo adulto", Icons.Rounded.Lock),
     CACHE("Cache e histórico", "Lista salva no aparelho e histórico", Icons.Rounded.Storage),
@@ -264,28 +263,6 @@ fun SettingsScreen(deviceId: String, deviceKey: String, onBack: () -> Unit) {
                             Button(onClick = { AppSettings.userAgent = ua.trim(); message = "User-Agent salvo" }, colors = ButtonDefaults.buttonColors(containerColor = HugoColors.Accent), contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)) { Text("Salvar", fontSize = 13.sp) }
                             OutlinedButton(onClick = { ua = StreamTypes.DEFAULT_USER_AGENT; AppSettings.userAgent = StreamTypes.DEFAULT_USER_AGENT; message = "User-Agent padrão" }, contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)) { Text("Padrão", fontSize = 13.sp) }
                         }
-                    }
-
-                    SettingsCat.LANGUAGE -> Panel {
-                        Label("Idioma da interface")
-                        var lang by remember { mutableStateOf(AppSettings.language) }
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Chip("Português", lang == "pt") {
-                                lang = "pt"
-                                AppSettings.language = "pt"
-                                message = "Idioma: Português (reinicie o app para aplicar em toda a interface)"
-                            }
-                            Chip("English", lang == "en") {
-                                lang = "en"
-                                AppSettings.language = "en"
-                                message = "Language: English (restart the app to apply everywhere)"
-                            }
-                        }
-                        Spacer(Modifier.height(12.dp))
-                        Text(
-                            "A preferência é salva. Para mudar todos os textos da interface, reinicie o aplicativo.",
-                            color = HugoColors.TextMuted, fontSize = 12.sp
-                        )
                     }
 
                     SettingsCat.SUBS -> Panel {
