@@ -368,15 +368,23 @@ class CatalogRepository(context: Context) {
             conn.readTimeout = 300_000
             conn.setRequestProperty("User-Agent", "VLC/3.0.20 LibVLC/3.0.20")
             conn.setRequestProperty("Accept", "*/*")
+            // pede compactado e descompacta aqui (assim o contador mostra o que passa de verdade pela internet)
+            conn.setRequestProperty("Accept-Encoding", "gzip")
             try {
                 val code = conn.responseCode
                 if (code !in 200..299) throw Exception("provedor recusou no aparelho ($code)")
                 val len = conn.contentLengthLong
-                if (len > maxClientM3uBytes) throw Exception("lista muito grande (${len / 1_000_000} MB)")
+                if (len > maxClientM3uBytes && conn.contentEncoding.isNullOrBlank()) throw Exception("lista muito grande (${len / 1_000_000} MB)")
                 var written = 0L
                 onProgress("Baixando... 0%")
                 onFraction(0f)
-                conn.inputStream.use { input ->
+                var wire = 0L
+                val raw = object : java.io.FilterInputStream(conn.inputStream) {
+                    override fun read(): Int = super.read().also { if (it >= 0) wire++ }
+                    override fun read(b: ByteArray, off: Int, l: Int): Int = super.read(b, off, l).also { if (it > 0) wire += it }
+                }
+                val gz = conn.contentEncoding?.contains("gzip", ignoreCase = true) == true
+                (if (gz) java.util.zip.GZIPInputStream(raw, 64 * 1024) else raw).use { input ->
                     tmp.outputStream().buffered().use { out ->
                         val buf = ByteArray(64 * 1024)
                         while (true) {
@@ -386,11 +394,11 @@ class CatalogRepository(context: Context) {
                             if (written > maxClientM3uBytes) throw Exception("lista muito grande para o aparelho")
                             out.write(buf, 0, n)
                             if (len > 0 && written % (512 * 1024) < 64 * 1024) {
-                                val pct = ((written.toFloat() / len) * 100).toInt().coerceIn(0, 99)
+                                val pct = ((wire.toFloat() / len) * 100).toInt().coerceIn(0, 99)
                                 onProgress("Baixando... $pct%")
-                                onFraction((written.toFloat() / len).coerceIn(0f, 0.85f))
+                                onFraction((wire.toFloat() / len).coerceIn(0f, 0.85f))
                             } else if (len <= 0 && written % (2 * 1024 * 1024) < 64 * 1024) {
-                                onProgress("Baixando... ${written / 1_000_000} MB")
+                                onProgress("Baixando... ${wire / 1_000_000} MB" + if (gz) " (compactado)" else "")
                             }
                         }
                     }
