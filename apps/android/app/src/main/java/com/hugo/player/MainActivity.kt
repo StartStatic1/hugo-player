@@ -20,6 +20,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         CrashLog.install(this, BuildConfig.VERSION_NAME)
         AppSettings.init(this)
+        com.hugo.player.ui.I18n.init()
         LiveTvCache.load(this)
         setContent {
             MaterialTheme(colorScheme = darkColorScheme(background = Color(0xFF07080F))) {

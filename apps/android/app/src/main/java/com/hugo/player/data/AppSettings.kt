@@ -55,6 +55,11 @@ object AppSettings {
         get() = if (isReady) prefs.getBoolean("autoOpenLastV2", false) else false
         set(v) { prefs.edit().putBoolean("autoOpenLastV2", v).apply() }
 
+    /** Idioma do app: "pt" (padrão), "en" ou "es". */
+    var language: String
+        get() = (if (isReady) prefs.getString("appLanguage", null) else null)?.takeIf { it in listOf("pt", "en", "es") } ?: "pt"
+        set(v) { prefs.edit().putString("appLanguage", if (v in listOf("pt", "en", "es")) v else "pt").apply() }
+
     var lastPlaylistId: String?
         get() = if (isReady) prefs.getString("lastPlaylistId", null) else null
         set(v) { prefs.edit().putString("lastPlaylistId", v).apply() }

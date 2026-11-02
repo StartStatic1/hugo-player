@@ -330,6 +330,16 @@ fun SettingsScreen(deviceId: String, deviceKey: String, onBack: () -> Unit) {
                             Switch(checked = autoOpen, onCheckedChange = { autoOpen = it; AppSettings.autoOpenLastPlaylist = it }, colors = SwitchDefaults.colors(checkedTrackColor = HugoColors.Accent))
                         }
                         Spacer(Modifier.height(10.dp))
+                        Text("Idioma do app", color = Color.White, fontSize = 14.sp)
+                        Spacer(Modifier.height(6.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            I18n.LANGS.forEach { (code, name) ->
+                                val on = I18n.lang == code
+                                if (on) Button(onClick = { }, colors = ButtonDefaults.buttonColors(containerColor = HugoColors.Accent), contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)) { androidx.compose.material3.Text("✓ " + name, fontSize = 13.sp) }
+                                else OutlinedButton(onClick = { I18n.set(code) }, contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)) { androidx.compose.material3.Text(name, fontSize = 13.sp) }
+                            }
+                        }
+                        Spacer(Modifier.height(10.dp))
                         OutlinedButton(onClick = { WatchHistory.clearContinue(context); message = "Continuar assistindo limpo" }, modifier = Modifier.fillMaxWidth(), contentPadding = PaddingValues(vertical = 6.dp)) { Text("Limpar continuar assistindo", fontSize = 13.sp) }
                     }
 
