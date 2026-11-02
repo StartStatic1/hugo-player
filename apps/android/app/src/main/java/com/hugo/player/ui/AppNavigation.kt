@@ -89,6 +89,23 @@ private fun AppNavigationContent() {
         if (DeviceIdentity.isActivationDone(context) && AppSettings.autoOpenLastPlaylist) AppSettings.lastPlaylistId?.takeIf { it.isNotBlank() } else null
     }
 
+    // Abertura rápida: a última lista já está guardada no aparelho e dentro da validade → vai direto para a Home
+    // (sem esperar o servidor responder a lista de playlists). A tela de Playlists fica por baixo, carregando sozinha.
+    val fastHomeId = remember {
+        startOpenId?.takeIf { id ->
+            val url = AppSettings.lastPlaylistUrl
+            !url.isNullOrBlank() && AppSettings.isCatalogFresh(1, com.hugo.player.data.PlaylistRepository.syncedAt(context, id), System.currentTimeMillis(), AppSettings.catalogTtlHours)
+        }
+    }
+    LaunchedEffect(fastHomeId) {
+        val id = fastHomeId ?: return@LaunchedEffect
+        LiveTvCache.playlistId = id
+        LiveTvCache.playlistName = AppSettings.lastPlaylistName ?: "Playlist"
+        LiveTvCache.playlistUrl = AppSettings.lastPlaylistUrl
+        runCatching { LiveTvCache.save(context) }
+        runCatching { nav.navigate("home") { launchSingleTop = true } }
+    }
+
     NavHost(navController = nav, startDestination = startDest) {
         composable("activation") {
             ActivationScreen(onActivated = { _, _ ->
@@ -98,7 +115,7 @@ private fun AppNavigationContent() {
         composable(
             "playlists?open={open}&refresh={refresh}",
             arguments = listOf(
-                navArgument("open") { type = NavType.StringType; nullable = true; defaultValue = startOpenId },
+                navArgument("open") { type = NavType.StringType; nullable = true; defaultValue = if (fastHomeId != null) null else startOpenId },
                 navArgument("refresh") { type = NavType.StringType; nullable = true; defaultValue = null },
             ),
         ) { backStack ->
