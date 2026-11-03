@@ -399,6 +399,43 @@ class CatalogRepository(context: Context) {
         else ListExpiry.fromProvider(appContext, playlistId, playlistUrl)
     }
 
+    class NotAListException : Exception("o provedor respondeu uma página em vez da lista")
+
+    private fun looksLikeM3u(f: java.io.File): Boolean {
+        val head = f.inputStream().use { val b = ByteArray(2048); val n = it.read(b); if (n <= 0) "" else String(b, 0, n, Charsets.UTF_8) }
+        val t = head.trimStart('\uFEFF', ' ', '\n', '\r', '\t')
+        return t.startsWith("#EXTM3U", ignoreCase = true) || t.contains("#EXTINF", ignoreCase = true)
+    }
+
+    private fun relayWorthy(e: Throwable): Boolean =
+        e is NotAListException || com.hugo.player.net.SecureNet.isDnsBlock(e) || e is java.io.IOException ||
+            e.message == com.hugo.player.net.SecureNet.BLOCKED_MSG ||
+            Regex("\\((403|451|5\\d\\d)\\)").containsMatchIn(e.message.orEmpty())
+
+    data class Relay(val url: String, val key: String)
+
+    /** Rotas alternativas da lista (Cloudflare Worker), entregues pelo nosso servidor só para aparelhos autenticados. */
+    private fun listRelays(): List<Relay> {
+        val id = DeviceIdentity.get(appContext)
+        val c = URL("${HugoApi.baseUrl}/channels/relay").openConnection() as java.net.HttpURLConnection
+        c.connectTimeout = 8000; c.readTimeout = 8000
+        c.setRequestProperty("x-device-id", id.deviceId); c.setRequestProperty("x-device-key", id.deviceKey)
+        try {
+            if (c.responseCode !in 200..299) return emptyList()
+            val arr = org.json.JSONObject(c.inputStream.bufferedReader().use { it.readText() }).optJSONArray("relays") ?: return emptyList()
+            return (0 until arr.length()).mapNotNull { i -> arr.optJSONObject(i)?.let { o -> Relay(o.optString("url"), o.optString("key")).takeIf { it.url.startsWith("https://") && it.key.isNotEmpty() } } }
+        } finally { c.disconnect() }
+    }
+
+    private fun relayRequest(r: Relay, target: String): okhttp3.Request =
+        okhttp3.Request.Builder().url(r.url)
+            .header("x-hugo-relay", r.key)
+            // o link (com usuário/senha) vai num cabeçalho, nunca na URL
+            .header("x-hugo-target", android.util.Base64.encodeToString(target.toByteArray(), android.util.Base64.NO_WRAP))
+            .header("x-hugo-ua", "VLC/3.0.20 LibVLC/3.0.20")
+            .header("Accept-Encoding", "gzip")
+            .build()
+
     private suspend fun importM3uFullyLocal(
         playlistId: String,
         playlistUrl: String,
@@ -407,63 +444,81 @@ class CatalogRepository(context: Context) {
     ): Int {
         val tmp = java.io.File.createTempFile("hugo_m3u_", ".m3u")
         try {
-            // DNS seguro (SecureNet): se a operadora bloquear o endereço, resolve pelo Cloudflare/Google
-            val call = com.hugo.player.net.SecureNet.client.newBuilder()
-                .connectTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
-                .readTimeout(300, java.util.concurrent.TimeUnit.SECONDS).build()
-                .newCall(
-                    okhttp3.Request.Builder().url(playlistUrl)
-                        .header("User-Agent", "VLC/3.0.20 LibVLC/3.0.20")
-                        .header("Accept", "*/*")
-                        // pede compactado e descompacta aqui (assim o contador mostra o que passa de verdade pela internet)
-                        .header("Accept-Encoding", "gzip")
-                        .build(),
-                )
-            val resp = try { call.execute() } catch (e: Exception) {
-                if (com.hugo.player.net.SecureNet.isDnsBlock(e)) throw Exception(com.hugo.player.net.SecureNet.BLOCKED_MSG)
-                throw e
-            }
-            val conn = object {
-                val contentLengthLong = resp.body?.contentLength() ?: -1L
-                val contentEncoding: String? = resp.header("Content-Encoding")
-                val inputStream: java.io.InputStream get() = resp.body!!.byteStream()
-                fun disconnect() { resp.close() }
-            }
-            try {
-                val code = resp.code
-                if (code !in 200..299) throw Exception("provedor recusou no aparelho ($code)")
-                val len = conn.contentLengthLong
-                if (len > maxClientM3uBytes && conn.contentEncoding.isNullOrBlank()) throw Exception("lista muito grande (${len / 1_000_000} MB)")
-                var written = 0L
-                onProgress("Baixando... 0%")
-                onFraction(0f)
-                var wire = 0L
-                val raw = object : java.io.FilterInputStream(conn.inputStream) {
-                    override fun read(): Int = super.read().also { if (it >= 0) wire++ }
-                    override fun read(b: ByteArray, off: Int, l: Int): Int = super.read(b, off, l).also { if (it > 0) wire += it }
+            fun download(req: okhttp3.Request) {
+                // DNS seguro (SecureNet): se a operadora bloquear o endereço, resolve pelo Cloudflare/Google
+                val call = com.hugo.player.net.SecureNet.client.newBuilder()
+                    .connectTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
+                    .readTimeout(300, java.util.concurrent.TimeUnit.SECONDS).build()
+                    .newCall(req)
+                val resp = try { call.execute() } catch (e: Exception) {
+                    if (com.hugo.player.net.SecureNet.isDnsBlock(e)) throw Exception(com.hugo.player.net.SecureNet.BLOCKED_MSG)
+                    throw e
                 }
-                val gz = conn.contentEncoding?.contains("gzip", ignoreCase = true) == true
-                (if (gz) java.util.zip.GZIPInputStream(raw, 64 * 1024) else raw).use { input ->
-                    tmp.outputStream().buffered().use { out ->
-                        val buf = ByteArray(64 * 1024)
-                        while (true) {
-                            val n = input.read(buf)
-                            if (n <= 0) break
-                            written += n
-                            if (written > maxClientM3uBytes) throw Exception("lista muito grande para o aparelho")
-                            out.write(buf, 0, n)
-                            if (len > 0 && written % (512 * 1024) < 64 * 1024) {
-                                val pct = ((wire.toFloat() / len) * 100).toInt().coerceIn(0, 99)
-                                onProgress("Baixando... $pct%")
-                                onFraction((wire.toFloat() / len).coerceIn(0f, 0.85f))
-                            } else if (len <= 0 && written % (2 * 1024 * 1024) < 64 * 1024) {
-                                onProgress("Baixando... ${wire / 1_000_000} MB" + if (gz) " (compactado)" else "")
+                val conn = object {
+                    val contentLengthLong = resp.body?.contentLength() ?: -1L
+                    val contentEncoding: String? = resp.header("Content-Encoding")
+                    val inputStream: java.io.InputStream get() = resp.body!!.byteStream()
+                    fun disconnect() { resp.close() }
+                }
+                try {
+                    val code = resp.code
+                    if (code !in 200..299) throw Exception("provedor recusou no aparelho ($code)")
+                    val len = conn.contentLengthLong
+                    if (len > maxClientM3uBytes && conn.contentEncoding.isNullOrBlank()) throw Exception("lista muito grande (${len / 1_000_000} MB)")
+                    var written = 0L
+                    onProgress("Baixando... 0%")
+                    onFraction(0f)
+                    var wire = 0L
+                    val raw = object : java.io.FilterInputStream(conn.inputStream) {
+                        override fun read(): Int = super.read().also { if (it >= 0) wire++ }
+                        override fun read(b: ByteArray, off: Int, l: Int): Int = super.read(b, off, l).also { if (it > 0) wire += it }
+                    }
+                    val gz = conn.contentEncoding?.contains("gzip", ignoreCase = true) == true
+                    (if (gz) java.util.zip.GZIPInputStream(raw, 64 * 1024) else raw).use { input ->
+                        tmp.outputStream().buffered().use { out ->
+                            val buf = ByteArray(64 * 1024)
+                            while (true) {
+                                val n = input.read(buf)
+                                if (n <= 0) break
+                                written += n
+                                if (written > maxClientM3uBytes) throw Exception("lista muito grande para o aparelho")
+                                out.write(buf, 0, n)
+                                if (len > 0 && written % (512 * 1024) < 64 * 1024) {
+                                    val pct = ((wire.toFloat() / len) * 100).toInt().coerceIn(0, 99)
+                                    onProgress("Baixando... $pct%")
+                                    onFraction((wire.toFloat() / len).coerceIn(0f, 0.85f))
+                                } else if (len <= 0 && written % (2 * 1024 * 1024) < 64 * 1024) {
+                                    onProgress("Baixando... ${wire / 1_000_000} MB" + if (gz) " (compactado)" else "")
+                                }
                             }
                         }
                     }
+                } finally {
+                    conn.disconnect()
                 }
-            } finally {
-                conn.disconnect()
+                // tem que ser lista de verdade (provedor que bloqueia costuma mandar a página "Welcome to nginx")
+                if (!looksLikeM3u(tmp)) throw NotAListException()
+            }
+            fun direct() = okhttp3.Request.Builder().url(playlistUrl)
+                .header("User-Agent", "VLC/3.0.20 LibVLC/3.0.20")
+                .header("Accept", "*/*")
+                // pede compactado e descompacta aqui (assim o contador mostra o que passa de verdade pela internet)
+                .header("Accept-Encoding", "gzip")
+                .build()
+            try {
+                download(direct())
+            } catch (e: Exception) {
+                // bloqueou no aparelho (DNS, tempo, conexão, página de bloqueio): tenta a rota alternativa só da lista
+                if (!relayWorthy(e)) throw e
+                val relays = runCatching { listRelays() }.getOrDefault(emptyList())
+                if (relays.isEmpty()) throw e
+                onProgress("O provedor bloqueou esta internet. Baixando a lista pela rota alternativa...")
+                var ok = false
+                for (r in relays) {
+                    try { download(relayRequest(r, playlistUrl)); ok = true; break }
+                    catch (re: Exception) { android.util.Log.w("Hugo", "rota alternativa falhou: ${re.javaClass.simpleName}") }
+                }
+                if (!ok) throw if (e is NotAListException) Exception("o provedor bloqueou esta internet (respondeu uma página em vez da lista)") else e
             }
             // o banco ocupa ~1,5x o arquivo da lista: sem espaço o SQLite falha no meio
             val free = appContext.getDatabasePath(HugoDatabase.FILE_NAME).parentFile?.usableSpace ?: Long.MAX_VALUE
