@@ -200,6 +200,13 @@ interface ChannelDao {
 
     @Query("DELETE FROM categories WHERE playlistId = :playlistId")
     suspend fun deleteCategories(playlistId: String)
+
+    @Query("SELECT EXISTS(SELECT 1 FROM channels WHERE playlistId = :playlistId LIMIT 1)")
+    suspend fun hasChannels(playlistId: String): Boolean
+
+    /** séries sem juntar dublado/legendado (rápido, para o resumo do card) */
+    @Query("SELECT COUNT(DISTINCT seriesName) FROM channels WHERE playlistId = :playlistId AND type = 'series'")
+    suspend fun rawSeriesCount(playlistId: String): Int
 }
 
 @Database(entities = [ChannelEntity::class, CategoryEntity::class, SeriesTwinEntity::class], version = 6, exportSchema = false)

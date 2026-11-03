@@ -49,6 +49,10 @@ class CatalogRepository(context: Context) {
 
     companion object {
         const val PAGE_SIZE = 100
+        // compiladas 1x (antes eram 3 Regex novas por linha: ~240 mil numa lista grande, deixava "Organizando" lento)
+        private val RX_GROUP = Regex("group-title=\"([^\"]*)\"", RegexOption.IGNORE_CASE)
+        private val RX_LOGO = Regex("tvg-logo=\"([^\"]*)\"", RegexOption.IGNORE_CASE)
+        private val RX_TVGID = Regex("tvg-id=\"([^\"]*)\"", RegexOption.IGNORE_CASE)
         /** valor que nunca é nome de categoria (a lista NOT IN nunca fica vazia) */
         private const val NO_GROUP = "\u0001__hugo_none__"
 
@@ -73,6 +77,27 @@ class CatalogRepository(context: Context) {
         twinsReady.clear()
         dedupReady.clear()
     }
+
+    /**
+     * Atualizar uma lista que já está no aparelho: a nova é gravada à parte (id + STAGE) e só no fim troca
+     * pela antiga numa transação. Se o app fechar/travar/faltar espaço no meio, a lista antiga continua inteira
+     * (antes apagava tudo primeiro e uma queda em "Organizando" deixava a lista vazia: "Ainda não carregada").
+     */
+    private val STAGE = "\u0001staging"
+
+    private fun commitStaging(stage: String, playlistId: String) {
+        db.runInTransaction {
+            val w = db.openHelper.writableDatabase
+            listOf("channels", "categories", "series_twins").forEach { t ->
+                w.compileStatement("DELETE FROM $t WHERE playlistId = ?").use { it.bindString(1, playlistId); it.executeUpdateDelete() }
+            }
+            listOf("channels", "categories").forEach { t ->
+                w.compileStatement("UPDATE $t SET playlistId = ? WHERE playlistId = ?").use { it.bindString(1, playlistId); it.bindString(2, stage); it.executeUpdateDelete() }
+            }
+        }
+    }
+
+    private suspend fun dropStaging(stage: String) = runCatching { dao.deleteChannels(stage); dao.deleteCategories(stage) }
 
     private val maxClientM3uBytes = 150L * 1024 * 1024
 
@@ -137,6 +162,31 @@ class CatalogRepository(context: Context) {
     ) = withContext(Dispatchers.IO) {
         onProgress("Conectando ao servidor...")
         onFraction(null)
+        val stage = playlistId + STAGE
+        dropStaging(stage) // sobra de uma atualização interrompida
+        val target = if (dao.hasChannels(playlistId)) stage else playlistId
+        try {
+            syncInto(playlistId, target, playlistUrl, onProgress, onFraction, onFirstBatch)
+            if (target == stage) commitStaging(stage, playlistId)
+        } catch (e: Throwable) {
+            if (target == stage) dropStaging(stage)
+            if (e is OutOfMemoryError) throw Exception("pouca memória no aparelho para organizar esta lista")
+            if (e is android.database.sqlite.SQLiteFullException) throw Exception("pouco espaço livre no aparelho para guardar esta lista")
+            throw e
+        }
+        invalidateSeriesTwins(playlistId)
+        onProgress("Juntando repetidos..."); ensureDedup(playlistId)
+        onFraction(1f)
+    }
+
+    private suspend fun syncInto(
+        playlistId: String,
+        target: String,
+        playlistUrl: String,
+        onProgress: (String) -> Unit,
+        onFraction: (Float?) -> Unit,
+        onFirstBatch: () -> Unit,
+    ) {
 
         // Xtream via VPS first (more organized). Local download only on 403.
         // só o id da playlist + aparelho: o servidor usa o link guardado (sem usuário/senha na URL)
@@ -153,16 +203,13 @@ class CatalogRepository(context: Context) {
             if (code in 200..299) {
                 onProgress("Lendo lista do servidor...")
                 onFraction(0.05f)
-                dao.deleteChannels(playlistId); invalidateSeriesTwins(playlistId)
-                dao.deleteCategories(playlistId)
+                dao.deleteChannels(target); dao.deleteCategories(target)
+                if (target == playlistId) invalidateSeriesTwins(playlistId)
                 // total real (servidor novo manda no cabeçalho e antes da lista no JSON)
                 val headerTotal = conn.getHeaderField("X-Hugo-Total")?.trim()?.toIntOrNull()?.takeIf { it > 0 }
-                val total = parseServerJson(conn.inputStream, playlistId, onProgress, onFraction, headerTotal, onFirstBatch)
-                invalidateSeriesTwins(playlistId)
-                onProgress("Juntando repetidos..."); ensureDedup(playlistId)
-                onFraction(1f)
+                val total = parseServerJson(conn.inputStream, target, onProgress, onFraction, headerTotal, onFirstBatch, accountId = playlistId)
                 onProgress("Pronto! $total itens")
-                return@withContext
+                return
             }
 
             val err = conn.errorStream?.bufferedReader()?.use { it.readText() }.orEmpty()
@@ -194,11 +241,8 @@ class CatalogRepository(context: Context) {
         }
 
         onProgress("O provedor bloqueou nosso servidor. Baixando a lista direto no aparelho — pode demorar mais...")
-        val total = importM3uFullyLocal(playlistId, playlistUrl, onProgress, onFraction)
+        val total = importM3uFullyLocal(target, playlistUrl, onProgress, onFraction)
         saveAccountLocal(playlistId, playlistUrl)
-        invalidateSeriesTwins(playlistId)
-        onProgress("Juntando repetidos..."); ensureDedup(playlistId)
-        onFraction(1f)
         onProgress("Pronto! $total itens")
     }
 
@@ -209,6 +253,7 @@ class CatalogRepository(context: Context) {
         onFraction: (Float?) -> Unit,
         knownTotal: Int? = null,
         onFirstBatch: () -> Unit = {},
+        accountId: String = playlistId,
     ): Int {
         val reader = JsonReader(input.bufferedReader())
         reader.isLenient = true
@@ -343,7 +388,7 @@ class CatalogRepository(context: Context) {
         if (channels.isNotEmpty()) dao.insertChannels(channels)
         if (!firstBatchDone && total > 0) runCatching { onFirstBatch() }
         // sem "account" (M3U ou servidor antigo): não marca nada; a conferência leve (ListExpiry.refreshIfStale) resolve
-        account?.let { a -> ListExpiry.save(appContext, playlistId, a.first, a.second) }
+        account?.let { a -> ListExpiry.save(appContext, accountId, a.first, a.second) }
         return total
     }
 
@@ -420,6 +465,9 @@ class CatalogRepository(context: Context) {
             } finally {
                 conn.disconnect()
             }
+            // o banco ocupa ~1,5x o arquivo da lista: sem espaço o SQLite falha no meio
+            val free = appContext.getDatabasePath(HugoDatabase.FILE_NAME).parentFile?.usableSpace ?: Long.MAX_VALUE
+            if (free < tmp.length() * 3 / 2 + 30_000_000L) throw Exception("pouco espaço livre no aparelho para guardar esta lista (${free / 1_000_000} MB livres)")
             onProgress("Organizando... 0%")
             onFraction(0.85f)
             return importM3uFullyLocalStreaming(playlistId, tmp, onProgress, onFraction)
@@ -434,8 +482,8 @@ class CatalogRepository(context: Context) {
         onProgress: (String) -> Unit,
         onFraction: (Float?) -> Unit,
     ): Int {
-        dao.deleteChannels(playlistId); invalidateSeriesTwins(playlistId)
-        dao.deleteCategories(playlistId)
+        dao.deleteChannels(playlistId); dao.deleteCategories(playlistId)
+        if (!playlistId.endsWith(STAGE)) invalidateSeriesTwins(playlistId)
         val batch = ArrayList<ChannelEntity>(500)
         val catCount = LinkedHashMap<String, Int>()
         var total = 0
@@ -454,12 +502,9 @@ class CatalogRepository(context: Context) {
                 val t = line!!.trim()
                 if (t.startsWith("#EXTINF", ignoreCase = true)) {
                     pendingName = extractExtinfName(t)
-                    pendingGroup = Regex("group-title=\"([^\"]*)\"", RegexOption.IGNORE_CASE)
-                        .find(t)?.groupValues?.get(1)?.trim()?.ifBlank { "Outros" } ?: "Outros"
-                    pendingLogo = Regex("tvg-logo=\"([^\"]*)\"", RegexOption.IGNORE_CASE)
-                        .find(t)?.groupValues?.get(1)?.trim()?.takeIf { it.isNotEmpty() }
-                    pendingTvgId = Regex("tvg-id=\"([^\"]*)\"", RegexOption.IGNORE_CASE)
-                        .find(t)?.groupValues?.get(1)?.trim()?.takeIf { it.isNotEmpty() }
+                    pendingGroup = RX_GROUP.find(t)?.groupValues?.get(1)?.trim()?.ifBlank { "Outros" } ?: "Outros"
+                    pendingLogo = RX_LOGO.find(t)?.groupValues?.get(1)?.trim()?.takeIf { it.isNotEmpty() }
+                    pendingTvgId = RX_TVGID.find(t)?.groupValues?.get(1)?.trim()?.takeIf { it.isNotEmpty() }
                 } else if (t.isNotEmpty() && !t.startsWith("#")) {
                     val type = classifyType(pendingName, pendingGroup, t)
                     var seriesName: String? = null
@@ -523,6 +568,7 @@ class CatalogRepository(context: Context) {
 
     suspend fun deletePlaylist(playlistId: String) = withContext(Dispatchers.IO) {
         dao.deleteChannels(playlistId); invalidateSeriesTwins(playlistId)
+        dropStaging(playlistId + STAGE)
         dao.deleteCategories(playlistId)
     }
 
