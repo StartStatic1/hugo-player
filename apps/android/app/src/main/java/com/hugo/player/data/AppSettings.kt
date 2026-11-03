@@ -55,6 +55,11 @@ object AppSettings {
         get() = if (isReady) prefs.getBoolean("autoOpenLastV2", false) else false
         set(v) { prefs.edit().putBoolean("autoOpenLastV2", v).apply() }
 
+    /** DNS seguro: "auto" (padrão: só quando a operadora não acha o endereço), "on" (sempre) ou "off". */
+    var secureDns: String
+        get() = (if (isReady) prefs.getString("secureDns", null) else null)?.takeIf { it in listOf("auto", "on", "off") } ?: "auto"
+        set(v) { val m = if (v in listOf("auto", "on", "off")) v else "auto"; prefs.edit().putString("secureDns", m).apply(); com.hugo.player.net.SecureDns.mode = m; com.hugo.player.net.SecureDns.clearCache() }
+
     /** Idioma do app: "pt" (padrão), "en" ou "es". */
     var language: String
         get() = (if (isReady) prefs.getString("appLanguage", null) else null)?.takeIf { it in listOf("pt", "en", "es") } ?: "pt"

@@ -21,6 +21,7 @@ class MainActivity : ComponentActivity() {
         CrashLog.install(this, BuildConfig.VERSION_NAME)
         AppSettings.init(this)
         com.hugo.player.ui.I18n.init()
+        com.hugo.player.net.SecureDns.mode = AppSettings.secureDns
         LiveTvCache.load(this)
         setContent {
             MaterialTheme(colorScheme = darkColorScheme(background = Color(0xFF07080F))) {
