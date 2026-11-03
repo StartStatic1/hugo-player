@@ -201,8 +201,12 @@ fun PlaylistScreen(
                     },
                 )
                 PlaylistRepository.markSynced(context, pl.id)
-                runCatching { PlaylistRepository.localSummary(context, pl.id) }.onSuccess { summaries[pl.id] = it }
+                // volta o card ao normal já (data nova); as contagens chegam logo depois
+                summaries[pl.id]?.let { summaries[pl.id] = it.copy(syncedAt = PlaylistRepository.syncedAt(context, pl.id)) }
                 loads.remove(pl.id)
+                SyncScope.launch(kotlinx.coroutines.Dispatchers.Main) {
+                    runCatching { PlaylistRepository.localSummary(context, pl.id) }.onSuccess { summaries[pl.id] = it }
+                }
                 if (navigateAfter && openingId == pl.id && screenAlive.get()) {
                     openingId = null
                     enterPlaylist(context, pl, url, onOpen)
