@@ -128,7 +128,18 @@ fun PlaylistScreen(
             playlists = list
             updateBlocked = false
             if (DeviceIdentity.isTrialDenied(context)) DeviceIdentity.clearTrialDenied(context)
-            list.forEach { summaries[it.id] = PlaylistRepository.localSummary(context, it.id) }
+            // mostra o último resumo guardado já; recalcula cada lista separada (uma lista grande lenta
+            // ou com erro não deixa mais as outras como "Ainda não carregada")
+            list.forEach { pl -> if (summaries[pl.id] == null) PlaylistRepository.cachedSummary(context, pl.id)?.let { summaries[pl.id] = it } }
+            kotlinx.coroutines.coroutineScope {
+                list.forEach { pl ->
+                    launch {
+                        runCatching { PlaylistRepository.localSummary(context, pl.id) }
+                            .onSuccess { summaries[pl.id] = it }
+                            .onFailure { android.util.Log.w("Hugo", "resumo da lista falhou", it) }
+                    }
+                }
+            }
         } catch (e: Exception) {
             if (isUpdateRequired(e)) {
                 updateBlocked = true
@@ -190,7 +201,7 @@ fun PlaylistScreen(
                     },
                 )
                 PlaylistRepository.markSynced(context, pl.id)
-                summaries[pl.id] = PlaylistRepository.localSummary(context, pl.id)
+                runCatching { PlaylistRepository.localSummary(context, pl.id) }.onSuccess { summaries[pl.id] = it }
                 loads.remove(pl.id)
                 if (navigateAfter && openingId == pl.id && screenAlive.get()) {
                     openingId = null
@@ -215,7 +226,7 @@ fun PlaylistScreen(
             is PendingAction.Open -> scope.launch {
                 // o resumo local pode ainda não ter sido lido (ex.: abrir pela Home logo ao entrar):
                 // lê do banco do aparelho antes de decidir, para não baixar de novo uma lista que já está guardada
-                val s = summaries[pl.id] ?: runCatching { PlaylistRepository.localSummary(context, pl.id) }.getOrNull()?.also { summaries[pl.id] = it }
+                val s = runCatching { PlaylistRepository.localSummary(context, pl.id) }.getOrNull()?.also { summaries[pl.id] = it } ?: summaries[pl.id]
                 val fresh = s != null && AppSettings.isCatalogFresh(s.total, s.syncedAt, System.currentTimeMillis(), AppSettings.catalogTtlHours)
                 if (fresh) enterPlaylist(context, pl, url, onOpen) else sync(pl, url, navigateAfter = true)
             }

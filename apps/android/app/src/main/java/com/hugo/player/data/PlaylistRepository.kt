@@ -109,7 +109,14 @@ object PlaylistRepository {
             movies = repo.count(playlistId, "movie"),
             series = repo.seriesCount(playlistId, null, null),
             syncedAt = syncedAt(context, playlistId),
-        )
+        ).also { s -> prefs(context).edit().putString("sum_$playlistId", "${s.live},${s.movies},${s.series}").apply() }
+    }
+
+    /** Último resumo lido do banco: o card mostra na hora, sem esperar contar ~80 mil itens de novo. */
+    fun cachedSummary(context: Context, playlistId: String): LocalSummary? {
+        val p = prefs(context).getString("sum_$playlistId", null)?.split(",")?.mapNotNull { it.toIntOrNull() } ?: return null
+        if (p.size != 3) return null
+        return LocalSummary(p[0], p[1], p[2], syncedAt(context, playlistId))
     }
 
     private fun prefs(context: Context) = context.applicationContext.getSharedPreferences("hugo_sync", Context.MODE_PRIVATE)
