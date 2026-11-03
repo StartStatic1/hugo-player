@@ -51,6 +51,19 @@ const sourceGate: import("express").RequestHandler = (req, res, next) => {
   next();
 };
 
+/**
+ * Rota alternativa só para BAIXAR A LISTA (Cloudflare Worker), quando o provedor bloqueia o aparelho e o servidor.
+ * Só para aparelhos autenticados; a chave fica no .env (HUGO_RELAY_URL / HUGO_RELAY_KEY), nunca no APK.
+ */
+channelsRouter.get("/relay", (req, res) => {
+  if (!access) return res.status(503).json({ error: "unavailable" });
+  if (!access.authenticate(req.header("x-device-id"), req.header("x-device-key"))) return res.status(401).json({ error: "invalid_credentials" });
+  const url = process.env.HUGO_RELAY_URL || "";
+  const key = process.env.HUGO_RELAY_KEY || "";
+  res.setHeader("Cache-Control", "no-store");
+  res.json({ relays: url && key ? [{ url, key }] : [] });
+});
+
 const BLOCKED_HINT =
   "Provedor bloqueou o IP do servidor (comum em VPS). O app no celular funciona; o painel barre data center.";
 
