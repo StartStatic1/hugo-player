@@ -59,6 +59,11 @@ jobs:
           chmod +x gradlew
           ./gradlew assembleRelease --no-daemon
 
+      - name: Teste DNS seguro (DoH)
+        continue-on-error: true
+        working-directory: apps/android
+        run: ./gradlew testReleaseUnitTest --no-daemon --tests 'com.hugo.player.net.SecureDnsTest'
+
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
