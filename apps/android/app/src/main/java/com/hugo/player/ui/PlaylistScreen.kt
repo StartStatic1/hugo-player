@@ -199,7 +199,7 @@ fun PlaylistScreen(
                     toast = "\"${pl.name}\" atualizada"
                 }
             } catch (e: Exception) {
-                loads[pl.id] = CardLoad("Erro: ${e.message ?: "falha ao carregar"}", null, error = true)
+                loads[pl.id] = CardLoad(if (com.hugo.player.net.SecureNet.isDnsBlock(e)) com.hugo.player.net.SecureNet.BLOCKED_MSG else "Erro: ${e.message ?: "falha ao carregar"}", null, error = true)
                 if (openingId == pl.id) openingId = null
             } finally {
                 ActiveSyncs.remove(pl.id)

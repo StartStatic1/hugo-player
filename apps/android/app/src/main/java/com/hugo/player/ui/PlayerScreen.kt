@@ -1016,7 +1016,7 @@ internal fun isRetryable(e: PlaybackException): Boolean = when (e.errorCode) {
 internal fun httpStatus(e: PlaybackException): Int? =
     (e.cause as? HttpDataSource.InvalidResponseCodeException)?.responseCode
 
-internal fun friendlyError(e: PlaybackException): String = when (e.errorCode) {
+internal fun friendlyError(e: PlaybackException): String = if (com.hugo.player.net.SecureNet.isDnsBlock(e)) com.hugo.player.net.SecureNet.BLOCKED_MSG else when (e.errorCode) {
     PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS -> when (val code = httpStatus(e)) {
         401, 403 -> "Acesso negado pelo servidor (HTTP $code). Verifique se sua lista está ativa."
         404 -> "Canal ou arquivo não encontrado no servidor (HTTP 404)."

@@ -7,7 +7,6 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.MimeTypes
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultDataSource
-import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
@@ -19,11 +18,14 @@ import androidx.media3.extractor.ts.DefaultTsPayloadReaderFactory
 object HugoPlayerFactory {
     @OptIn(UnstableApi::class)
     fun create(context: Context, userAgent: String, lowLatencyPreview: Boolean = false, decoderFallback: Boolean = false): ExoPlayer {
-        val http = DefaultHttpDataSource.Factory()
+        // OkHttp com DNS seguro: canais/filmes de provedores bloqueados pela operadora tocam sem VPN
+        val client = com.hugo.player.net.SecureNet.client.newBuilder()
+            .connectTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
+            .readTimeout(20, java.util.concurrent.TimeUnit.SECONDS)
+            .followSslRedirects(true)
+            .build()
+        val http = androidx.media3.datasource.okhttp.OkHttpDataSource.Factory(client)
             .setUserAgent(userAgent)
-            .setAllowCrossProtocolRedirects(true)
-            .setConnectTimeoutMs(15_000)
-            .setReadTimeoutMs(20_000)
         val dataSource = DefaultDataSource.Factory(context, http)
         val extractors = DefaultExtractorsFactory()
             .setConstantBitrateSeekingEnabled(true)
