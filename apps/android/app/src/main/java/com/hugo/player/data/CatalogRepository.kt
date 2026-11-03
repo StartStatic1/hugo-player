@@ -7,6 +7,7 @@ import com.hugo.player.data.db.ChannelEntity
 import com.hugo.player.data.db.HugoDatabase
 import com.hugo.player.data.db.SeriesSummary
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.sync.withLock
 import android.util.JsonReader
@@ -74,30 +75,50 @@ class CatalogRepository(context: Context) {
     /** "Limpar" das Configurações: apaga a lista guardada (canais, filmes, séries); baixa de novo ao abrir a playlist. */
     suspend fun clearLocalCatalog() = withContext(Dispatchers.IO) {
         db.clearAllTables()
+        genPrefs.edit().clear().commit()
         twinsReady.clear()
         dedupReady.clear()
     }
 
     /**
-     * Atualizar uma lista que já está no aparelho: a nova é gravada à parte (id + STAGE) e só no fim troca
-     * pela antiga numa transação. Se o app fechar/travar/faltar espaço no meio, a lista antiga continua inteira
-     * (antes apagava tudo primeiro e uma queda em "Organizando" deixava a lista vazia: "Ainda não carregada").
+     * Atualizar uma lista que já está no aparelho: a nova é gravada com outra chave ("id\u0001g<hora>") e,
+     * no fim, só troca o ponteiro (prefs) para ela — instantâneo, mesmo com 400 mil itens. A antiga é apagada
+     * depois, aos poucos, em segundo plano. (0.5.62 regravava todas as linhas numa transação só: numa lista enorme
+     * a TV ficava minutos parada em "Pronto!".) Se cair no meio, a lista antiga continua inteira.
      */
-    private val STAGE = "\u0001staging"
+    private val genPrefs = context.applicationContext.getSharedPreferences("hugo_catalog_gen", Context.MODE_PRIVATE)
+    /** chave real das linhas da lista no banco */
+    private fun k(playlistId: String): String = genPrefs.getString(playlistId, null) ?: playlistId
+    private fun realId(key: String) = key.substringBefore('\u0001')
+    private fun List<ChannelEntity>.r(): List<ChannelEntity> = map { if ('\u0001' in it.playlistId) it.copy(playlistId = realId(it.playlistId)) else it }
+    private fun List<CategoryEntity>.rc(): List<CategoryEntity> = map { if ('\u0001' in it.playlistId) it.copy(playlistId = realId(it.playlistId)) else it }
 
-    private fun commitStaging(stage: String, playlistId: String) {
-        db.runInTransaction {
-            val w = db.openHelper.writableDatabase
-            listOf("channels", "categories", "series_twins").forEach { t ->
-                w.compileStatement("DELETE FROM $t WHERE playlistId = ?").use { it.bindString(1, playlistId); it.executeUpdateDelete() }
-            }
-            listOf("channels", "categories").forEach { t ->
-                w.compileStatement("UPDATE $t SET playlistId = ? WHERE playlistId = ?").use { it.bindString(1, playlistId); it.bindString(2, stage); it.executeUpdateDelete() }
+    /** apaga as linhas de uma chave em pedaços pequenos (não trava o banco nem a tela) */
+    private fun deleteKeyChunked(key: String) {
+        val w = db.openHelper.writableDatabase
+        listOf("channels", "categories", "series_twins").forEach { t ->
+            while (true) {
+                val n = w.compileStatement("DELETE FROM $t WHERE rowid IN (SELECT rowid FROM $t WHERE playlistId = ? LIMIT 5000)")
+                    .use { it.bindString(1, key); it.executeUpdateDelete() }
+                if (n <= 0) break
             }
         }
     }
 
-    private suspend fun dropStaging(stage: String) = runCatching { dao.deleteChannels(stage); dao.deleteCategories(stage) }
+    /** sobras (lista antiga já trocada ou atualização interrompida) desta playlist, em segundo plano */
+    private fun cleanupOld(playlistId: String, keep: Set<String>) {
+        cleanupScope.launch {
+            cleanupLock.withLock {
+                runCatching {
+                    val current = k(playlistId)
+                    dao.playlistKeys().filter { realId(it) == playlistId && it != current && it !in keep }
+                        .forEach { deleteKeyChunked(it) }
+                }.onFailure { android.util.Log.w("Hugo", "limpeza da lista antiga falhou", it) }
+            }
+        }
+    }
+    private val cleanupScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + Dispatchers.IO)
+    private val cleanupLock = kotlinx.coroutines.sync.Mutex()
 
     private val maxClientM3uBytes = 150L * 1024 * 1024
 
@@ -162,14 +183,19 @@ class CatalogRepository(context: Context) {
     ) = withContext(Dispatchers.IO) {
         onProgress("Conectando ao servidor...")
         onFraction(null)
-        val stage = playlistId + STAGE
-        dropStaging(stage) // sobra de uma atualização interrompida
-        val target = if (dao.hasChannels(playlistId)) stage else playlistId
+        val cur = k(playlistId)
+        val fresh = dao.hasChannels(cur)
+        val target = if (fresh) playlistId + "\u0001g" + System.currentTimeMillis() else cur
         try {
             syncInto(playlistId, target, playlistUrl, onProgress, onFraction, onFirstBatch)
-            if (target == stage) commitStaging(stage, playlistId)
+            if (target != cur) {
+                onProgress("Finalizando...")
+                // troca instantânea: só o ponteiro (commit síncrono antes de seguir)
+                genPrefs.edit().putString(playlistId, target).commit()
+                cleanupOld(playlistId, setOf(target))
+            }
         } catch (e: Throwable) {
-            if (target == stage) dropStaging(stage)
+            if (target != cur) cleanupOld(playlistId, emptySet())
             if (e is OutOfMemoryError) throw Exception("pouca memória no aparelho para organizar esta lista")
             if (e is android.database.sqlite.SQLiteFullException) throw Exception("pouco espaço livre no aparelho para guardar esta lista")
             throw e
@@ -204,7 +230,7 @@ class CatalogRepository(context: Context) {
                 onProgress("Lendo lista do servidor...")
                 onFraction(0.05f)
                 dao.deleteChannels(target); dao.deleteCategories(target)
-                if (target == playlistId) invalidateSeriesTwins(playlistId)
+                if ('\u0001' !in target) invalidateSeriesTwins(playlistId)
                 // total real (servidor novo manda no cabeçalho e antes da lista no JSON)
                 val headerTotal = conn.getHeaderField("X-Hugo-Total")?.trim()?.toIntOrNull()?.takeIf { it > 0 }
                 val total = parseServerJson(conn.inputStream, target, onProgress, onFraction, headerTotal, onFirstBatch, accountId = playlistId)
@@ -538,7 +564,7 @@ class CatalogRepository(context: Context) {
         onFraction: (Float?) -> Unit,
     ): Int {
         dao.deleteChannels(playlistId); dao.deleteCategories(playlistId)
-        if (!playlistId.endsWith(STAGE)) invalidateSeriesTwins(playlistId)
+        if ('\u0001' !in playlistId) invalidateSeriesTwins(playlistId)
         val batch = ArrayList<ChannelEntity>(500)
         val catCount = LinkedHashMap<String, Int>()
         var total = 0
@@ -622,22 +648,24 @@ class CatalogRepository(context: Context) {
     }
 
     suspend fun deletePlaylist(playlistId: String) = withContext(Dispatchers.IO) {
-        dao.deleteChannels(playlistId); invalidateSeriesTwins(playlistId)
-        dropStaging(playlistId + STAGE)
-        dao.deleteCategories(playlistId)
+        val key = k(playlistId)
+        dao.deleteChannels(key); dao.deleteCategories(key); invalidateSeriesTwins(playlistId)
+        dao.deleteChannels(playlistId); dao.deleteCategories(playlistId)
+        genPrefs.edit().remove(playlistId).commit()
+        cleanupOld(playlistId, emptySet())
     }
 
     suspend fun getChannels(playlistId: String, type: String, group: String? = null, page: Int = 0, pageSize: Int = PAGE_SIZE) =
         withContext(Dispatchers.IO) {
-            if (group != null) dao.getByTypeAndGroup(playlistId, type, group, pageSize, page * pageSize)
-            else dao.getByType(playlistId, type, pageSize, page * pageSize)
+            if (group != null) dao.getByTypeAndGroup(k(playlistId), type, group, pageSize, page * pageSize).r()
+            else dao.getByType(k(playlistId), type, pageSize, page * pageSize).r()
         }
 
     suspend fun page(playlistId: String, type: String, group: String?, query: String?, page: Int, pageSize: Int = PAGE_SIZE): List<ChannelEntity> =
         withContext(Dispatchers.IO) {
             // repetidos (cópias do filme / qualidades do canal) somem e viram opção no item principal
             ensureDedup(playlistId)
-            dao.page(playlistId, type, group, query?.trim()?.takeIf { it.isNotEmpty() }, type == "live", pageSize, page * pageSize, dedupeFor(type), hiddenGroups(playlistId, type, group))
+            dao.page(k(playlistId), type, group, query?.trim()?.takeIf { it.isNotEmpty() }, type == "live", pageSize, page * pageSize, dedupeFor(type), hiddenGroups(playlistId, type, group)).r()
         }
 
     /** Categorias adultas escondidas de "Todos"/busca enquanto o bloqueio por PIN está ativo. */
@@ -645,11 +673,11 @@ class CatalogRepository(context: Context) {
     private suspend fun hiddenGroups(playlistId: String, type: String, group: String?): List<String> {
         val none = listOf(NO_GROUP)
         if (group != null || !AdultLock.isLocked(appContext)) return none
-        return none + dao.getCategories(playlistId, type).map { it.name }.filter { AdultLock.isAdultCategory(it) }
+        return none + dao.getCategories(k(playlistId), type).rc().map { it.name }.filter { AdultLock.isAdultCategory(it) }
     }
 
     suspend fun countFiltered(playlistId: String, type: String, group: String?, query: String?): Int =
-        withContext(Dispatchers.IO) { ensureDedup(playlistId); dao.countFiltered(playlistId, type, group, query?.trim()?.takeIf { it.isNotEmpty() }, dedupeFor(type), hiddenGroups(playlistId, type, group)) }
+        withContext(Dispatchers.IO) { ensureDedup(playlistId); dao.countFiltered(k(playlistId), type, group, query?.trim()?.takeIf { it.isNotEmpty() }, dedupeFor(type), hiddenGroups(playlistId, type, group)) }
 
     /** Filmes contando as cópias (dublado/legendado/4K/repetido) como um só. */
     suspend fun mergedMovieCount(playlistId: String): Int = countFiltered(playlistId, "movie", null, null)
@@ -666,7 +694,7 @@ class CatalogRepository(context: Context) {
         if (wanted.isEmpty()) return@withContext emptyMap()
         val out = HashMap<Long, ChannelEntity>()
         wanted.keys.toList().chunked(400).forEach { chunk ->
-            dao.byNames(playlistId, "movie", chunk).forEach { l -> wanted[l.name]?.let { out.putIfAbsent(it, l) } }
+            dao.byNames(k(playlistId), "movie", chunk).r().forEach { l -> wanted[l.name]?.let { out.putIfAbsent(it, l) } }
         }
         out
     }
@@ -680,9 +708,9 @@ class CatalogRepository(context: Context) {
         twinsMutex.withLock {
             if (twinsReady[playlistId] == true) return@withLock
             runCatching {
-                val pairs = SeriesTwins.pairs(dao.seriesNames(playlistId))
-                dao.deleteSeriesTwins(playlistId)
-                if (pairs.isNotEmpty()) pairs.entries.chunked(500).forEach { ch -> dao.insertSeriesTwins(ch.map { SeriesTwinEntity(playlistId, it.key, it.value) }) }
+                val pairs = SeriesTwins.pairs(dao.seriesNames(k(playlistId)))
+                dao.deleteSeriesTwins(k(playlistId))
+                if (pairs.isNotEmpty()) pairs.entries.chunked(500).forEach { ch -> dao.insertSeriesTwins(ch.map { SeriesTwinEntity(k(playlistId), it.key, it.value) }) }
             }
             twinsReady[playlistId] = true
         }
@@ -705,12 +733,12 @@ class CatalogRepository(context: Context) {
             if (dedupReady[playlistId] == true) return@withLock
             if (AppSettings.isDedupReady(playlistId)) { dedupReady[playlistId] = true; return@withLock }
             runCatching {
-                val rows = dao.dedupSources(playlistId).map { DedupRow(it.id, it.name, it.group, it.type, it.epgId) }
+                val rows = dao.dedupSources(k(playlistId)).map { DedupRow(it.id, it.name, it.group, it.type, it.epgId) }
                 val marks = ContentDedup.compute(rows) { AdultLock.isAdultCategory(it) }
                 db.runInTransaction {
                     val w = db.openHelper.writableDatabase
                     w.compileStatement("UPDATE channels SET dupOf = NULL, dupOfAll = NULL, variantTags = NULL, variantTagsAll = NULL WHERE playlistId = ?").use { st ->
-                        st.bindString(1, playlistId); st.executeUpdateDelete()
+                        st.bindString(1, k(playlistId)); st.executeUpdateDelete()
                     }
                     w.compileStatement("UPDATE channels SET dupOf = ?, dupOfAll = ?, variantTags = ?, variantTagsAll = ? WHERE id = ?").use { st ->
                         marks.forEach { (id, m) ->
@@ -741,16 +769,16 @@ class CatalogRepository(context: Context) {
     suspend fun variantsOf(item: ChannelEntity, group: String?): List<ChannelEntity> = withContext(Dispatchers.IO) {
         ensureDedup(item.playlistId)
         val all = group == null
-        runCatching { dao.variantsOf(item.playlistId, item.type, item.id, all) }.getOrNull()?.takeIf { it.isNotEmpty() } ?: listOf(item)
+        runCatching { dao.variantsOf(k(item.playlistId), item.type, item.id, all).r() }.getOrNull()?.takeIf { it.isNotEmpty() } ?: listOf(item)
     }
 
     /** Para favoritos/recentes: o item visível em "Todos" de cada canal (a cópia vira o principal do grupo). */
     suspend fun liveRepresentatives(list: List<ChannelEntity>): List<ChannelEntity> = withContext(Dispatchers.IO) {
         if (!liveGrouped() || list.isEmpty()) return@withContext list
         list.firstOrNull()?.let { ensureDedup(it.playlistId) }
-        val fresh = list.map { it.id }.chunked(500).flatMap { dao.byIds(it) }.associateBy { it.id }
+        val fresh = list.map { it.id }.chunked(500).flatMap { dao.byIds(it).r() }.associateBy { it.id }
         val repIds = list.mapNotNull { (fresh[it.id] ?: it).dupOfAll }.distinct()
-        val reps = repIds.chunked(500).flatMap { dao.byIds(it) }.associateBy { it.id }
+        val reps = repIds.chunked(500).flatMap { dao.byIds(it).r() }.associateBy { it.id }
         val seen = HashSet<Long>()
         list.mapNotNull { c ->
             val f = fresh[c.id] ?: c
@@ -762,35 +790,35 @@ class CatalogRepository(context: Context) {
     /** Versão dublada/legendada da mesma série (null = só existe uma). */
     suspend fun seriesTwinOf(playlistId: String, name: String): SeriesTwinEntity? {
         ensureSeriesTwins(playlistId)
-        return withContext(Dispatchers.IO) { dao.seriesTwinOf(playlistId, name) }
+        return withContext(Dispatchers.IO) { dao.seriesTwinOf(k(playlistId), name) }
     }
 
     /** dublada -> legendada para os nomes da página. */
     suspend fun seriesTwinsForDubs(playlistId: String, names: List<String>): Map<String, String> = withContext(Dispatchers.IO) {
-        if (names.isEmpty()) emptyMap() else dao.seriesTwinsForDubs(playlistId, names.take(900)).associate { it.dubName to it.legName }
+        if (names.isEmpty()) emptyMap() else dao.seriesTwinsForDubs(k(playlistId), names.take(900)).associate { it.dubName to it.legName }
     }
 
     suspend fun seriesPage(playlistId: String, group: String?, query: String?, page: Int, pageSize: Int = PAGE_SIZE): List<SeriesSummary> =
-        withContext(Dispatchers.IO) { ensureSeriesTwins(playlistId); dao.seriesPage(playlistId, group, query?.trim()?.takeIf { it.isNotEmpty() }, pageSize, page * pageSize, hiddenGroups(playlistId, "series", group)) }
+        withContext(Dispatchers.IO) { ensureSeriesTwins(playlistId); dao.seriesPage(k(playlistId), group, query?.trim()?.takeIf { it.isNotEmpty() }, pageSize, page * pageSize, hiddenGroups(playlistId, "series", group)) }
 
     suspend fun seriesCount(playlistId: String, group: String?, query: String?): Int =
-        withContext(Dispatchers.IO) { ensureSeriesTwins(playlistId); dao.seriesCount(playlistId, group, query?.trim()?.takeIf { it.isNotEmpty() }, hiddenGroups(playlistId, "series", group)) }
+        withContext(Dispatchers.IO) { ensureSeriesTwins(playlistId); dao.seriesCount(k(playlistId), group, query?.trim()?.takeIf { it.isNotEmpty() }, hiddenGroups(playlistId, "series", group)) }
 
     suspend fun episodes(playlistId: String, seriesName: String): List<ChannelEntity> =
-        withContext(Dispatchers.IO) { dao.episodes(playlistId, seriesName) }
+        withContext(Dispatchers.IO) { dao.episodes(k(playlistId), seriesName).r() }
 
     /** Canais ao vivo pelas URLs, na mesma ordem pedida (favoritos / recentes). */
     suspend fun liveByUrls(playlistId: String, urls: List<String>): List<ChannelEntity> = withContext(Dispatchers.IO) {
         if (urls.isEmpty()) return@withContext emptyList()
         val found = HashMap<String, ChannelEntity>()
-        urls.distinct().chunked(500).forEach { chunk -> dao.liveByUrls(playlistId, chunk).forEach { found.putIfAbsent(it.url, it) } }
+        urls.distinct().chunked(500).forEach { chunk -> dao.liveByUrls(k(playlistId), chunk).r().forEach { found.putIfAbsent(it.url, it) } }
         urls.mapNotNull { found[it] }
     }
 
     /** Itens (qualquer tipo) pelas URLs — favoritos. */
     suspend fun byUrls(playlistId: String, urls: List<String>): List<ChannelEntity> = withContext(Dispatchers.IO) {
         if (urls.isEmpty()) return@withContext emptyList()
-        urls.distinct().chunked(500).flatMap { dao.byUrls(playlistId, it) }
+        urls.distinct().chunked(500).flatMap { dao.byUrls(k(playlistId), it).r() }
     }
 
     /** Janela da lista ao vivo (mesma ordem da tela), para zapear no player. */
@@ -798,24 +826,24 @@ class CatalogRepository(context: Context) {
         withContext(Dispatchers.IO) {
             ensureDedup(playlistId)
             // mesma lista da tela: com qualidades agrupadas, zapear pula de canal (não de qualidade)
-            dao.page(playlistId, "live", group, query?.trim()?.takeIf { it.isNotEmpty() }, true, limit, offset.coerceAtLeast(0), dedupeFor("live"), hiddenGroups(playlistId, "live", group))
+            dao.page(k(playlistId), "live", group, query?.trim()?.takeIf { it.isNotEmpty() }, true, limit, offset.coerceAtLeast(0), dedupeFor("live"), hiddenGroups(playlistId, "live", group)).r()
         }
 
     suspend fun liveEpgKeys(playlistId: String) =
-        withContext(Dispatchers.IO) { dao.liveEpgKeys(playlistId) }
+        withContext(Dispatchers.IO) { dao.liveEpgKeys(k(playlistId)) }
 
     suspend fun getCategories(playlistId: String, type: String) =
-        withContext(Dispatchers.IO) { dao.getCategories(playlistId, type) }
+        withContext(Dispatchers.IO) { dao.getCategories(k(playlistId), type).rc() }
 
     /** Categorias com a contagem já juntando os repetidos (filmes sempre; ao vivo quando agrupado). */
     suspend fun getCategoriesMerged(playlistId: String, type: String): List<com.hugo.player.data.db.CategoryEntity> = withContext(Dispatchers.IO) {
-        val cats = dao.getCategories(playlistId, type)
+        val cats = dao.getCategories(k(playlistId), type).rc()
         if (!dedupeFor(type)) return@withContext cats
         ensureDedup(playlistId)
-        val counts = runCatching { dao.mergedGroupCounts(playlistId, type).associate { it.name to it.count } }.getOrNull() ?: return@withContext cats
+        val counts = runCatching { dao.mergedGroupCounts(k(playlistId), type).associate { it.name to it.count } }.getOrNull() ?: return@withContext cats
         cats.map { c -> counts[c.name]?.let { c.copy(count = it) } ?: c }
     }
 
     suspend fun count(playlistId: String, type: String) =
-        withContext(Dispatchers.IO) { dao.countByType(playlistId, type) }
+        withContext(Dispatchers.IO) { dao.countByType(k(playlistId), type) }
 }

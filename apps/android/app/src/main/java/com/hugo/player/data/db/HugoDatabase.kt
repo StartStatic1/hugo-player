@@ -201,6 +201,9 @@ interface ChannelDao {
     @Query("DELETE FROM categories WHERE playlistId = :playlistId")
     suspend fun deleteCategories(playlistId: String)
 
+    @Query("SELECT DISTINCT playlistId FROM channels")
+    suspend fun playlistKeys(): List<String>
+
     @Query("SELECT EXISTS(SELECT 1 FROM channels WHERE playlistId = :playlistId LIMIT 1)")
     suspend fun hasChannels(playlistId: String): Boolean
 
