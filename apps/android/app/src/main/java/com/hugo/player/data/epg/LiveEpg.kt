@@ -272,19 +272,18 @@ object LiveEpg {
     }
 
     private fun download(context: Context, src: String, ids: Set<String>, names: Set<String>, lowRam: Boolean): DeviceEpg? {
-        var conn: HttpURLConnection? = null
+        var resp: okhttp3.Response? = null
         return try {
-            conn = URL(src).openConnection() as HttpURLConnection
-            conn.connectTimeout = 15_000
-            conn.readTimeout = 60_000
-            conn.instanceFollowRedirects = true
-            conn.setRequestProperty("User-Agent", "VLC/3.0.20 LibVLC/3.0.20")
-            conn.setRequestProperty("Accept", "*/*")
-            if (conn.responseCode !in 200..299) {
-                Log.w(TAG, "EPG no aparelho: HTTP ${conn.responseCode}")
+            // DNS seguro (o host do EPG costuma ser o mesmo do provedor bloqueado pela operadora)
+            resp = com.hugo.player.net.SecureNet.client.newBuilder()
+                .connectTimeout(15, java.util.concurrent.TimeUnit.SECONDS).readTimeout(60, java.util.concurrent.TimeUnit.SECONDS).build()
+                .newCall(okhttp3.Request.Builder().url(src).header("User-Agent", "VLC/3.0.20 LibVLC/3.0.20").header("Accept", "*/*").build())
+                .execute()
+            if (resp.code !in 200..299) {
+                Log.w(TAG, "EPG no aparelho: HTTP ${resp.code}")
                 return null
             }
-            val raw = BufferedInputStream(conn.inputStream, 64 * 1024)
+            val raw = BufferedInputStream(resp.body!!.byteStream(), 64 * 1024)
             raw.mark(2)
             val b0 = raw.read(); val b1 = raw.read()
             raw.reset()
@@ -294,7 +293,7 @@ object LiveEpg {
             Log.w(TAG, "EPG no aparelho falhou: ${e.message}")
             null
         } finally {
-            conn?.disconnect()
+            resp?.close()
         }
     }
 

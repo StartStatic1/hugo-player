@@ -150,15 +150,14 @@ object ListExpiry {
             val pass = u.getQueryParameter("password") ?: return@runCatching
             val api = android.net.Uri.Builder().scheme(u.scheme).encodedAuthority(u.encodedAuthority).path("/player_api.php")
                 .appendQueryParameter("username", user).appendQueryParameter("password", pass).build().toString()
-            val conn = URL(api).openConnection() as java.net.HttpURLConnection
-            conn.connectTimeout = 8000; conn.readTimeout = 8000
-            conn.setRequestProperty("User-Agent", AppSettings.userAgent)
-            try {
-                if (conn.responseCode !in 200..299) return@runCatching
-                val ui = org.json.JSONObject(conn.inputStream.bufferedReader().use { it.readText() }).optJSONObject("user_info") ?: return@runCatching
+            val client = com.hugo.player.net.SecureNet.client.newBuilder()
+                .connectTimeout(8, java.util.concurrent.TimeUnit.SECONDS).readTimeout(8, java.util.concurrent.TimeUnit.SECONDS).build()
+            client.newCall(okhttp3.Request.Builder().url(api).header("User-Agent", AppSettings.userAgent).build()).execute().use { resp ->
+                if (resp.code !in 200..299) return@runCatching
+                val ui = org.json.JSONObject(resp.body?.string().orEmpty()).optJSONObject("user_info") ?: return@runCatching
                 val exp = parseExpDate(if (ui.isNull("exp_date")) null else ui.opt("exp_date"))
                 save(c, playlistId, exp, unlimited = exp == null)
-            } finally { conn.disconnect() }
+            }
         }
     }
 }

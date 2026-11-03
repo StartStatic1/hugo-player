@@ -362,16 +362,30 @@ class CatalogRepository(context: Context) {
     ): Int {
         val tmp = java.io.File.createTempFile("hugo_m3u_", ".m3u")
         try {
-            val conn = URL(playlistUrl).openConnection() as java.net.HttpURLConnection
-            conn.instanceFollowRedirects = true
-            conn.connectTimeout = 30_000
-            conn.readTimeout = 300_000
-            conn.setRequestProperty("User-Agent", "VLC/3.0.20 LibVLC/3.0.20")
-            conn.setRequestProperty("Accept", "*/*")
-            // pede compactado e descompacta aqui (assim o contador mostra o que passa de verdade pela internet)
-            conn.setRequestProperty("Accept-Encoding", "gzip")
+            // DNS seguro (SecureNet): se a operadora bloquear o endereço, resolve pelo Cloudflare/Google
+            val call = com.hugo.player.net.SecureNet.client.newBuilder()
+                .connectTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
+                .readTimeout(300, java.util.concurrent.TimeUnit.SECONDS).build()
+                .newCall(
+                    okhttp3.Request.Builder().url(playlistUrl)
+                        .header("User-Agent", "VLC/3.0.20 LibVLC/3.0.20")
+                        .header("Accept", "*/*")
+                        // pede compactado e descompacta aqui (assim o contador mostra o que passa de verdade pela internet)
+                        .header("Accept-Encoding", "gzip")
+                        .build(),
+                )
+            val resp = try { call.execute() } catch (e: Exception) {
+                if (com.hugo.player.net.SecureNet.isDnsBlock(e)) throw Exception(com.hugo.player.net.SecureNet.BLOCKED_MSG)
+                throw e
+            }
+            val conn = object {
+                val contentLengthLong = resp.body?.contentLength() ?: -1L
+                val contentEncoding: String? = resp.header("Content-Encoding")
+                val inputStream: java.io.InputStream get() = resp.body!!.byteStream()
+                fun disconnect() { resp.close() }
+            }
             try {
-                val code = conn.responseCode
+                val code = resp.code
                 if (code !in 200..299) throw Exception("provedor recusou no aparelho ($code)")
                 val len = conn.contentLengthLong
                 if (len > maxClientM3uBytes && conn.contentEncoding.isNullOrBlank()) throw Exception("lista muito grande (${len / 1_000_000} MB)")
