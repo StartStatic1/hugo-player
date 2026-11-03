@@ -340,6 +340,17 @@ fun SettingsScreen(deviceId: String, deviceKey: String, onBack: () -> Unit) {
                             }
                         }
                         Spacer(Modifier.height(10.dp))
+                        var dnsMode by remember { mutableStateOf(AppSettings.secureDns) }
+                        Text("DNS seguro", color = Color.White, fontSize = 14.sp)
+                        Text("Abre listas e canais que a operadora bloqueia, sem VPN.", color = HugoColors.TextMuted, fontSize = 12.sp)
+                        Spacer(Modifier.height(6.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            listOf("auto" to "Automático", "on" to "Sempre ligado", "off" to "Desligado").forEach { (code, name) ->
+                                if (dnsMode == code) Button(onClick = { }, colors = ButtonDefaults.buttonColors(containerColor = HugoColors.Accent), contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)) { androidx.compose.material3.Text("✓ " + tr(name), fontSize = 13.sp) }
+                                else OutlinedButton(onClick = { AppSettings.secureDns = code; dnsMode = code }, contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)) { androidx.compose.material3.Text(tr(name), fontSize = 13.sp) }
+                            }
+                        }
+                        Spacer(Modifier.height(10.dp))
                         OutlinedButton(onClick = { WatchHistory.clearContinue(context); message = "Continuar assistindo limpo" }, modifier = Modifier.fillMaxWidth(), contentPadding = PaddingValues(vertical = 6.dp)) { Text("Limpar continuar assistindo", fontSize = 13.sp) }
                     }
 
