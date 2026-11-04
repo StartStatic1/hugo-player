@@ -7,21 +7,25 @@
 <link rel="stylesheet" href="css/app.css">
 </head>
 <body>
-<div id="app">
-  <aside id="menu" class="menu"></aside>
-  <main id="screen"></main>
-</div>
+<div id="splash"><div class="sp-logo"><div class="sp-mark"><i></i></div><div class="brand big">Hugo<span>Player</span></div></div><div class="sp-bar"><i></i></div></div>
+<header id="top" class="hidden"><div class="brand">Hugo<span>Player</span></div><nav id="nav"></nav><div class="plchip" id="plName"></div></header>
+<main id="view" class="view"></main>
 <div id="player" class="player hidden">
   <video id="video" playsinline></video>
   <object id="avplay" type="application/avplayer" class="hidden"></object>
-  <div id="osd" class="osd"><div id="osdTitle"></div><div id="osdInfo"></div><div class="bar"><div id="osdBar"></div></div></div>
+  <div class="ptop"><div class="plogo" id="pLogo"></div><div><div class="ptitle" id="pTitle"></div><div class="psub" id="pSub"></div></div></div>
+  <div class="pstatus hidden" id="pStatus"></div>
+  <div class="pbig">❚❚</div>
+  <div class="pbot"><div class="pepg"><div id="pNow"></div><div id="pNext"></div></div><div class="pline"><span class="ptime" id="pTime"></span><div class="pbar"><i id="pBar"></i></div></div><div class="phint" id="pHint"></div></div>
 </div>
-<div id="toast" class="toast hidden"></div>
+<div id="toast" class="toast"></div>
 <script src="js/vendor/hls.min.js"></script>
 <script src="js/config.js"></script>
 <script src="js/mock.js"></script>
 <script src="js/api.js"></script>
 <script src="js/nav.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/store.js"></script>
 <script src="js/player.js"></script>
 <script src="js/app.js"></script>
 </body>

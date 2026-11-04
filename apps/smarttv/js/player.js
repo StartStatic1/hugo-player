@@ -1,98 +1,121 @@
-/* Player: Tizen usa AVPlay (nativo, toca HLS/TS/MP4); webOS e navegador usam <video> (+ hls.js quando precisa). */
+/*
+ * Player: Tizen = AVPlay nativo (HLS/TS/MP4); webOS/navegador = <video> + hls.js.
+ * Overlay: canal/logo + EPG agora/a seguir (ao vivo) ou linha do tempo (filmes/séries). Salva a posição (continuar assistindo).
+ */
 var Player = (function () {
-  var video, hls = null, useAv = false, open = false, osdTimer, onClose, queue = null, qi = 0, avState = "";
-  function el(id) { return document.getElementById(id); }
-  function osd(t, info) {
-    if (t !== undefined) el("osdTitle").textContent = t;
-    if (info !== undefined) el("osdInfo").textContent = info;
-    el("osd").classList.remove("off"); clearTimeout(osdTimer);
-    osdTimer = setTimeout(function () { el("osd").classList.add("off"); }, 4000);
-  }
-  function fmt(s) { s = Math.max(0, Math.floor(s)); var h = Math.floor(s / 3600), m = Math.floor(s / 60) % 60, x = s % 60; return (h ? h + ":" : "") + ("0" + m).slice(-2) + ":" + ("0" + x).slice(-2); }
+  var video, hls = null, useAv = false, open = false, hideT, tickT, saveT, o = null, idx = 0, item = null, avState = "", paused = false;
+  function $(id) { return document.getElementById(id); }
+  function fmt(s) { s = Math.max(0, Math.floor(s || 0)); var h = Math.floor(s / 3600), m = Math.floor(s / 60) % 60, x = s % 60; return (h ? h + ":" : "") + ("0" + m).slice(-2) + ":" + ("0" + x).slice(-2); }
+  function hm(iso) { var d = new Date(iso); return ("0" + d.getHours()).slice(-2) + ":" + ("0" + d.getMinutes()).slice(-2); }
+  function show(ms) { $("player").classList.add("ui"); clearTimeout(hideT); hideT = setTimeout(function () { if (!paused) $("player").classList.remove("ui"); }, ms || 4500); }
+  function pos() { try { return useAv ? webapis.avplay.getCurrentTime() / 1000 : video.currentTime || 0; } catch (e) { return 0; } }
+  function dur() { try { return useAv ? webapis.avplay.getDuration() / 1000 : (isFinite(video.duration) ? video.duration : 0); } catch (e) { return 0; } }
+  function status(t) { $("pStatus").textContent = t || ""; $("pStatus").classList.toggle("hidden", !t); }
   function tick() {
     if (!open) return;
-    var pos = 0, dur = 0;
-    if (useAv) { try { pos = webapis.avplay.getCurrentTime() / 1000; dur = webapis.avplay.getDuration() / 1000; } catch (e) {} }
-    else { pos = video.currentTime || 0; dur = isFinite(video.duration) ? video.duration : 0; }
-    el("osdBar").style.width = dur > 0 ? (pos / dur * 100) + "%" : "0";
-    if (dur > 0) el("osdInfo").textContent = fmt(pos) + " / " + fmt(dur);
-    setTimeout(tick, 1000);
+    var live = item && item.t === "live";
+    if (!live) { var p = pos(), d = dur(); $("pBar").style.width = d > 0 ? (p / d * 100) + "%" : "0"; $("pTime").textContent = fmt(p) + " / " + fmt(d); }
+    else if (item._now) { var s = new Date(item._now.start).getTime(), e = new Date(item._now.stop).getTime(); $("pBar").style.width = Math.max(0, Math.min(100, (Date.now() - s) / (e - s) * 100)) + "%"; }
+    tickT = setTimeout(tick, 1000);
   }
+  function saveProgress() { if (item && item.t !== "live" && o.pid) Progress.save(o.pid, item, pos(), dur()); }
   function stopAll() {
     if (hls) { try { hls.destroy(); } catch (e) {} hls = null; }
-    if (useAv) { try { webapis.avplay.stop(); webapis.avplay.close(); } catch (e) {} el("avplay").classList.add("hidden"); }
+    if (useAv) { try { webapis.avplay.stop(); webapis.avplay.close(); } catch (e) {} }
     if (video) { try { video.pause(); video.removeAttribute("src"); video.load(); } catch (e) {} }
   }
-  function err(msg) { osd(undefined, msg); }
-  function play(item) {
-    stopAll();
-    var url = item.url;
-    osd(item.name, "Carregando...");
+  function paintInfo() {
+    var live = item.t === "live";
+    $("pLogo").innerHTML = item.l ? UI.img(item.l) : "";
+    $("pTitle").textContent = item.n;
+    $("pSub").textContent = live ? (o.numberOf ? o.numberOf(idx) + " · " : "") + (item.g || "") : (item.se ? "T" + item.se + " · E" + item.ep : (item.g || ""));
+    $("pNow").innerHTML = ""; $("pNext").innerHTML = ""; $("pTime").textContent = live ? "AO VIVO" : "";
+    $("pTime").classList.toggle("live", live);
+    $("pHint").textContent = live ? "▲ ▼ ou CH+/CH− trocar canal · OK informações · Voltar sair" : "OK pausar · ◀ ▶ 10 s · ⏪ ⏩ 1 min · Voltar sair";
+    if (live && o.epg) o.epg(item).then(function (nn) {
+      if (!nn || item !== cur0) return;
+      item._now = nn.now;
+      if (nn.now) $("pNow").innerHTML = '<b>Agora</b> ' + hm(nn.now.start) + " " + UI.esc(nn.now.title);
+      if (nn.next) $("pNext").innerHTML = '<b>A seguir</b> ' + hm(nn.next.start) + " " + UI.esc(nn.next.title);
+    });
+    var cur0 = item;
+  }
+  function play(startAt) {
+    stopAll(); paintInfo(); status("Carregando..."); show();
+    var url = item.u; paused = false;
     useAv = !!(window.webapis && webapis.avplay);
+    $("video").classList.toggle("hidden", useAv); $("avplay").classList.toggle("hidden", !useAv);
     if (useAv) {
-      el("video").classList.add("hidden"); el("avplay").classList.remove("hidden");
       try {
         webapis.avplay.open(url);
         webapis.avplay.setDisplayRect(0, 0, 1920, 1080);
         webapis.avplay.setListener({
-          onbufferingcomplete: function () { osd(undefined, ""); },
-          onstreamcompleted: function () { next(1); },
-          onerror: function () { err("Não foi possível reproduzir este conteúdo."); }
+          onbufferingstart: function () { status("Carregando..."); },
+          onbufferingcomplete: function () { status(""); },
+          onstreamcompleted: function () { if (item.t === "live") return; Progress.save(o.pid, item, dur(), dur()); step(1); },
+          onerror: function () { status("Não foi possível reproduzir este conteúdo."); show(8000); }
         });
-        webapis.avplay.prepareAsync(function () { webapis.avplay.play(); avState = "play"; osd(undefined, ""); }, function () { err("Não foi possível abrir este conteúdo."); });
-      } catch (e) { err("Erro ao reproduzir."); }
+        webapis.avplay.prepareAsync(function () { if (startAt) try { webapis.avplay.seekTo(startAt * 1000); } catch (e) {} webapis.avplay.play(); avState = "play"; status(""); },
+          function () { status("Não foi possível abrir este conteúdo."); });
+      } catch (e) { status("Erro ao reproduzir."); }
       return;
     }
-    el("video").classList.remove("hidden");
-    var isHls = /\.m3u8(\?|$)/i.test(url) || /\/live\//i.test(url) && !/\.(ts|mp4|mkv)(\?|$)/i.test(url);
+    var isHls = /\.m3u8(\?|#|$)/i.test(url) || (/\/live\//i.test(url) && !/\.(ts|mp4|mkv)(\?|$)/i.test(url));
     if (isHls && !video.canPlayType("application/vnd.apple.mpegurl") && window.Hls && Hls.isSupported()) {
-      hls = new Hls({ enableWorker: true, lowLatencyMode: false });
-      hls.on(Hls.Events.ERROR, function (_, d) { if (d.fatal) err("Sem conexão com o servidor do canal."); });
+      hls = new Hls({ enableWorker: true, maxBufferLength: 20, backBufferLength: 10 });
+      hls.on(Hls.Events.ERROR, function (_, d) { if (d.fatal) { status("Sem conexão com o servidor do canal."); show(8000); } });
       hls.loadSource(url); hls.attachMedia(video);
     } else video.src = url;
-    var p = video.play(); if (p && p.catch) p.catch(function () {});
+    if (startAt) { var once = function () { video.removeEventListener("loadedmetadata", once); try { video.currentTime = startAt; } catch (e) {} }; video.addEventListener("loadedmetadata", once); }
+    var p = video.play(); if (p && p["catch"]) p["catch"](function () {});
   }
-  function next(d) {
-    if (!queue) return;
-    qi = (qi + d + queue.length) % queue.length;
-    play(queue[qi]);
+  function step(d) {
+    if (!o.count || o.count < 2) return;
+    saveProgress();
+    var n = (idx + d + o.count) % o.count;
+    o.at(n).then(function (it) { if (!it || !open) return; idx = n; item = it; play(0); });
   }
   function toggle() {
-    if (useAv) { try { if (avState === "play") { webapis.avplay.pause(); avState = "pause"; } else { webapis.avplay.play(); avState = "play"; } } catch (e) {} }
-    else if (video.paused) video.play(); else video.pause();
-    osd();
+    if (useAv) { try { if (avState === "play") { webapis.avplay.pause(); avState = "pause"; paused = true; } else { webapis.avplay.play(); avState = "play"; paused = false; } } catch (e) {} }
+    else if (video.paused) { video.play(); paused = false; } else { video.pause(); paused = true; }
+    $("player").classList.toggle("paused", paused); show();
   }
   function seek(sec) {
     if (useAv) { try { webapis.avplay[sec > 0 ? "jumpForward" : "jumpBackward"](Math.abs(sec) * 1000); } catch (e) {} }
     else try { video.currentTime = Math.max(0, video.currentTime + sec); } catch (e) {}
-    osd();
+    show();
   }
   return {
     init: function () {
-      video = el("video");
-      video.addEventListener("playing", function () { osd(undefined, ""); });
-      video.addEventListener("error", function () { err("Não foi possível reproduzir este conteúdo."); });
-      video.addEventListener("ended", function () { next(1); });
+      video = $("video");
+      video.addEventListener("playing", function () { status(""); });
+      video.addEventListener("waiting", function () { status("Carregando..."); });
+      video.addEventListener("error", function () { status("Não foi possível reproduzir este conteúdo."); show(8000); });
+      video.addEventListener("ended", function () { if (item && item.t !== "live") { Progress.save(o.pid, item, dur(), dur()); step(1); } });
     },
     isOpen: function () { return open; },
-    open: function (list, index, close) {
-      queue = list; qi = index; onClose = close; open = true;
-      el("player").classList.remove("hidden");
-      play(queue[qi]); tick();
+    /** opts: { pid, count, at(i)->Promise<item>, index, startAt, epg(item)->Promise<{now,next}>, numberOf(i), onClose } */
+    open: function (opts) {
+      o = opts; idx = opts.index || 0; open = true;
+      $("player").classList.remove("hidden", "paused");
+      o.at(idx).then(function (it) { item = it; play(opts.startAt || 0); tick(); });
+      clearInterval(saveT); saveT = setInterval(saveProgress, 10000);
     },
     close: function () {
-      stopAll(); open = false; el("player").classList.add("hidden");
-      if (onClose) onClose();
+      saveProgress(); clearInterval(saveT); clearTimeout(tickT);
+      stopAll(); open = false; $("player").classList.add("hidden");
+      if (o && o.onClose) o.onClose();
     },
     key: function (k) {
-      if (Keys.BACK.indexOf(k) >= 0 || k === Keys.STOP) { this.close(); return; }
-      var live = queue && queue[qi] && queue[qi].type === "live";
-      if (k === Keys.ENTER || k === Keys.PLAY || k === Keys.PAUSE || k === Keys.PLAYPAUSE) return toggle();
-      if (live && (k === Keys.UP || k === Keys.CHUP)) return next(-1);
-      if (live && (k === Keys.DOWN || k === Keys.CHDOWN)) return next(1);
-      if (k === Keys.RIGHT || k === Keys.FF) return seek(live ? 0 : 10);
-      if (k === Keys.LEFT || k === Keys.RW) return seek(live ? 0 : -10);
-      osd();
+      if (Keys.BACK.indexOf(k) >= 0 || k === Keys.STOP) { if ($("player").classList.contains("ui") && !paused && k !== Keys.STOP) { $("player").classList.remove("ui"); return; } return this.close(); }
+      var live = item && item.t === "live";
+      if (k === Keys.ENTER || k === Keys.PLAY || k === Keys.PAUSE || k === Keys.PLAYPAUSE) { if (live && k === Keys.ENTER) return show(); return toggle(); }
+      if (k === Keys.UP || k === Keys.CHUP) return live ? step(-1) : show();
+      if (k === Keys.DOWN || k === Keys.CHDOWN) return live ? step(1) : show();
+      if (k === Keys.RIGHT || k === Keys.FF) return live ? show() : seek(k === Keys.FF ? 60 : 10);
+      if (k === Keys.LEFT || k === Keys.RW) return live ? show() : seek(k === Keys.RW ? -60 : -10);
+      if (k === Keys.CHUP || k === 33) return step(-1);
+      show();
     }
   };
 })();

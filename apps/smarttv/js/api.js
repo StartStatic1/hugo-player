@@ -47,6 +47,11 @@ var Api = (function () {
     playlists: function () { return req("GET", "/playlists").then(function (r) { return r.playlists || []; }); },
     addPlaylist: function (p) { return req("POST", "/playlists", p); },
     deletePlaylist: function (id) { return req("DELETE", "/playlists/" + enc(id)); },
+    catalogPage: function (id, type, page, limit) { return req("GET", "/channels?playlistId=" + enc(id) + "&type=" + type + "&page=" + page + "&limit=" + limit); },
+    verifyPin: function (id, pin) { return req("POST", "/playlists/" + enc(id) + "/verify-pin", { pin: pin }, { "x-playlist-pin": pin }); },
+    nowNext: function (id, ids) { return req("POST", "/epg/now-next?playlistId=" + enc(id), { ids: ids.slice(0, 1000) }); },
+    epgChannel: function (id, key, limit) { return req("GET", "/epg/channel/" + enc(key) + "?playlistId=" + enc(id) + "&limit=" + (limit || 24)); },
+    tmdb: function (type, q) { return req("GET", "/tmdb/search?type=" + type + "&q=" + enc(q)); },
     // catálogo inteiro pelo id da playlist (o servidor usa o link guardado: sem usuário/senha na URL)
     catalog: function (id) { return req("GET", "/channels?playlistId=" + enc(id) + "&limit=80000"); },
     episodes: function (id, seriesId) { return req("GET", "/channels/series-episodes?playlistId=" + enc(id) + "&seriesId=" + enc(seriesId)); }
