@@ -28,17 +28,28 @@ test("mesmo ANDROID_ID depois de reinstalar (ID/Key novos): teste recusado", () 
   assert.equal(Object.keys(ledger).length, 1); // o registro não muda
 });
 
-test("ANDROID_ID nulo/falso: libera o teste (não trava cliente real) e marca para revisão", () => {
-  for (const [raw, flag] of [[null, "no_android_id"], ["", "no_android_id"], ["9774d56d682e549c", "invalid_android_id"], ["0000000000000000", "invalid_android_id"], [undefined, "old_app"]] as const) {
+test("ANDROID_ID nulo/falso/app antigo: sem teste (pendente); TV/web (allowUnverified) libera e marca", () => {
+  for (const [raw, flag, pend] of [[null, "no_android_id", "no_android_id"], ["", "no_android_id", "no_android_id"], ["9774d56d682e549c", "invalid_android_id", "no_android_id"], ["0000000000000000", "invalid_android_id", "no_android_id"], [undefined, "old_app", "update_required"]] as const) {
     const ledger: TrialLedger = {};
     const d = decideTrial(raw, ledger);
     assert.equal(d.kind, "unverified");
     const r = newDeviceTrial(d, "02:CC:00:00:00:03", now, 7, ledger);
-    assert.equal(r.license.type, "trial");
+    assert.equal(r.license.type, "expired");
+    assert.equal(r.trialPending, pend);
     assert.equal(r.trialFlag, flag);
+    const tv = newDeviceTrial(d, "02:CC:00:00:00:04", now, 7, ledger, { allowUnverified: true });
+    assert.equal(tv.license.type, "trial");
+    assert.equal(tv.trialFlag, flag);
     assert.equal(Object.keys(ledger).length, 0);
   }
-  assert.equal(normalizeAndroidId("9774D56D682E549C"), null);
+});
+
+test("IP no limite: teste pendente (ip_limit) e não grava o registro", () => {
+  const ledger: TrialLedger = {};
+  const r = newDeviceTrial(decideTrial(SSAID, ledger), "02:DD:00:00:00:01", now, 7, ledger, { ipLimited: true });
+  assert.equal(r.license.type, "expired");
+  assert.equal(r.trialPending, "ip_limit");
+  assert.equal(Object.keys(ledger).length, 0);
 });
 
 test("aparelho pago não muda; testes antigos continuam valendo e entram no registro", () => {

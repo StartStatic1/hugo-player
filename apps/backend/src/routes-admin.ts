@@ -19,6 +19,10 @@ export interface AdminDevice {
   createdAt: string;
   lastSeenAt: string;
   blockedAt?: string;
+  trialPending?: string;
+  createdIp?: string;
+  createdUa?: string;
+  lastIp?: string;
   blockedReason?: string;
   revokedAt?: string;
   revokedReason?: string;
@@ -32,6 +36,8 @@ export interface AdminDevice {
 }
 
 export interface AdminDeps {
+  /** só os nomes das playlists (nunca URL/usuário) — para a busca do painel */
+  playlistNames?: (deviceId: string) => string[];
   devices: () => Record<string, AdminDevice>;
   persist: () => Promise<void>;
   adminToken: string;
@@ -83,6 +89,7 @@ export function createAdminRouter(deps: AdminDeps): Router {
         platform: d.platform,
         appVersion: d.appVersion,
         playlistCount: deps.playlistCount(d.deviceId),
+        playlistNames: deps.playlistNames?.(d.deviceId) ?? [],
         license: d.license,
         createdAt: d.createdAt,
         lastSeenAt: d.lastSeenAt,
@@ -96,6 +103,10 @@ export function createAdminRouter(deps: AdminDeps): Router {
         trialFlag: d.trialFlag,
         trialDenied: d.trialDenied,
         hasAndroidId: Boolean(d.androidIdHash),
+        trialPending: d.trialPending,
+        createdIp: d.createdIp,
+        createdUa: d.createdUa,
+        lastIp: d.lastIp,
         activatedBy: d.activatedBy,
       }));
     res.json({ devices });
@@ -124,8 +135,13 @@ export function createAdminRouter(deps: AdminDeps): Router {
     };
     delete device.revokedAt;
     delete device.revokedReason;
+    // ativar pelo painel tira o bloqueio (senão o aparelho segue sem acesso)
+    const wasBlocked = Boolean(device.blockedAt);
+    delete device.blockedAt;
+    delete device.blockedReason;
+    delete device.trialPending;
     await deps.persist();
-    res.json({ ok: true, deviceId: device.deviceId, license: device.license });
+    res.json({ ok: true, deviceId: device.deviceId, license: device.license, ...(wasBlocked ? { unblocked: true } : {}) });
   });
 
   r.post("/devices/:id/test", async (req, res) => {
@@ -140,8 +156,13 @@ export function createAdminRouter(deps: AdminDeps): Router {
     };
     delete device.revokedAt;
     delete device.revokedReason;
+    // ativar pelo painel tira o bloqueio (senão o aparelho segue sem acesso)
+    const wasBlocked = Boolean(device.blockedAt);
+    delete device.blockedAt;
+    delete device.blockedReason;
+    delete device.trialPending;
     await deps.persist();
-    res.json({ ok: true, deviceId: device.deviceId, license: device.license });
+    res.json({ ok: true, deviceId: device.deviceId, license: device.license, ...(wasBlocked ? { unblocked: true } : {}) });
   });
 
   r.post("/devices/:id/reset-key", async (req, res) => {

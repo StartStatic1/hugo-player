@@ -19,7 +19,7 @@ import { canonicalDeviceId, isAppDeviceId } from "./device-id.js";
 import { clientVersionCode, normalizeConfig, updateRequired, type AppConfig } from "./app-config.js";
 import { createSubtitlesRouter } from "./subtitles.js";
 import { searchTmdb } from "./tmdb.js";
-import { backfillExisting, decideTrial, newDeviceTrial, pendingOldAppTrial, webPendingTrial, resolvePendingTrial, type TrialFlag, type TrialLedger } from "./trial-ledger.js";
+import { backfillExisting, decideTrial, newDeviceTrial, webPendingTrial, resolvePendingTrial, type TrialFlag, type TrialLedger, type TrialPendingReason, type TrialPolicy } from "./trial-ledger.js";
 import { PAID_PLANS, PLAN_LABELS, PLAN_PRICES, planExpiry, renewalBase, type PaidPlan } from "./plans.js";
 import { revokeRefundedOrder } from "./refunds.js";
 import { createResellerAdminRouter, createResellerRouter, ensureResellerStore, type ActivatedBy, type ResellerStore } from "./resellers.js";
@@ -66,7 +66,15 @@ interface Device {
   trialDenied?: { reason: "trial_already_used"; firstDeviceId: string; at: string };
   /** aparelho novo em app antigo: teste espera o app atualizado mandar o ANDROID_ID */
   /** update_required = app antigo sem ANDROID_ID; app_first_use = criado pelo site, teste só no 1º uso do app */
-  trialPending?: "update_required" | "app_first_use";
+  trialPending?: TrialPendingReason;
+  /** IP e navegador/app que criaram o aparelho (para o painel e limite por IP) */
+  createdIp?: string;
+  createdUa?: string;
+  /** último IP visto no registro */
+  lastIp?: string;
+  /** IP que recebeu o teste grátis (limite 1 teste por IP em 24 h) */
+  trialIp?: string;
+  trialAt?: string;
   /** ativado por um revendedor (último que ativou/renovou) */
   activatedBy?: ActivatedBy;
 }
@@ -198,6 +206,9 @@ const registerSchema = z.object({
 const app = express();
 app.disable("x-powered-by");
 app.set("trust proxy", 1);
+// IPs bloqueados (abuso). BLOCKED_IPS no .env, separado por vírgula.
+const BLOCKED_IPS = new Set((process.env.BLOCKED_IPS ?? "").split(",").map((x) => x.trim()).filter(Boolean));
+app.use((req, res, next) => (BLOCKED_IPS.has(clientIp(req)) ? res.status(403).json({ error: "forbidden" }) : next()));
 app.use(helmet());
 app.use(cors({ origin: true }));
 app.use(express.json({ limit: "32kb" }));
@@ -246,6 +257,7 @@ app.use("/admin", createAdminRouter({
   devices: () => db.devices,
   persist,
   adminToken: ADMIN_TOKEN,
+  playlistNames: (deviceId) => db.playlists.filter((p) => p.deviceId.toUpperCase() === deviceId.toUpperCase()).map((p) => p.name),
   playlistCount: (deviceId) => db.playlists.filter((p) => p.deviceId.toUpperCase() === deviceId.toUpperCase()).length,
   resetDeviceKey: (deviceId) => {
     const key = Object.keys(db.devices).find((k) => db.devices[k].deviceId.toUpperCase() === deviceId.toUpperCase());
@@ -279,6 +291,7 @@ app.post("/devices/register", async (req, res) => {
   const platform = parsed.data.platform;
   const appVersion = parsed.data.appVersion;
   const now = new Date();
+  const ip = clientIp(req);
   const storeKey = canonicalDeviceId(deviceId);
   const candidates = deviceCandidates(deviceId);
   const existing = candidates.find((d) => verifyKey(deviceKey, d) || verifyKey(deviceKey.toUpperCase(), d)) ?? candidates[0];
@@ -288,9 +301,12 @@ app.post("/devices/register", async (req, res) => {
       existing.platform = platform;
       if (appVersion) existing.appVersion = appVersion;
       // app atualizado: decide o teste pendente (se havia) ou só anota o ANDROID_ID (a licença não muda)
-      if (!resolvePendingTrial(existing, parsed.data.androidId, db.trialLedger ??= {}, now, TRIAL_DAYS)) {
+      existing.lastIp = ip;
+      const wasPending = Boolean(existing.trialPending);
+      if (!resolvePendingTrial(existing, parsed.data.androidId, db.trialLedger ??= {}, now, TRIAL_DAYS, trialPolicy(platform, ip, now, existing))) {
         backfillExisting(existing, parsed.data.androidId, db.trialLedger, now);
       }
+      if (wasPending && !existing.trialPending) markTrialIp(existing, ip, now);
       db.devices[existing.deviceId.toUpperCase()] = existing;
       await persist();
       return res.json({ registered: true, created: false, deviceId: existing.deviceId, ...trialInfo(existing) });
@@ -305,15 +321,12 @@ app.post("/devices/register", async (req, res) => {
   }
   const { salt, hash } = hashKey(deviceKey);
   const decision = decideTrial(parsed.data.androidId, db.trialLedger ??= {});
-  // app antigo (sem ANDROID_ID) com atualização obrigatória ligada: teste só depois de atualizar
-  const oldAppPending = decision.kind === "unverified" && decision.flag === "old_app" && minVersionCode() > 0;
   // criado pelo site: sem teste grátis. O teste nasce no primeiro uso do app (com a trava por ANDROID_ID).
+  // app sem ANDROID_ID / app antigo / IP no limite: teste pendente (o admin pode liberar)
   const webPending = platform === "web";
   const trial = webPending
     ? { ...webPendingTrial(now), androidIdHash: undefined, trialFlag: undefined, trialDenied: undefined }
-    : oldAppPending
-    ? { ...pendingOldAppTrial(now), androidIdHash: undefined, trialFlag: undefined, trialDenied: undefined }
-    : newDeviceTrial(decision, storeKey, now, TRIAL_DAYS, db.trialLedger);
+    : newDeviceTrial(decision, storeKey, now, TRIAL_DAYS, db.trialLedger, trialPolicy(platform, ip, now));
   const device: Device = {
     deviceId: storeKey,
     keyHash: hash,
@@ -324,10 +337,14 @@ app.post("/devices/register", async (req, res) => {
     ...(trial.androidIdHash ? { androidIdHash: trial.androidIdHash } : {}),
     ...(trial.trialFlag ? { trialFlag: trial.trialFlag } : {}),
     ...(trial.trialDenied ? { trialDenied: trial.trialDenied } : {}),
-    ...(webPending ? { trialPending: "app_first_use" as const } : oldAppPending ? { trialPending: "update_required" as const } : {}),
+    ...(webPending ? { trialPending: "app_first_use" as const } : trial.trialPending ? { trialPending: trial.trialPending } : {}),
+    createdIp: ip,
+    createdUa: (req.header("user-agent") ?? "").slice(0, 200),
+    lastIp: ip,
     createdAt: now.toISOString(),
     lastSeenAt: now.toISOString(),
   };
+  markTrialIp(device, ip, now);
   db.devices[storeKey] = device;
   await persist();
   res.status(201).json({ registered: true, created: true, deviceId: device.deviceId, ...trialInfo(device) });
@@ -340,6 +357,34 @@ function trialInfo(device: Device): { trial: "granted" | "denied" | "pending" | 
   // recusado só enquanto não houver licença ativa (pago, transferida ou teste dado pelo admin)
   if (device.trialDenied && !hasActiveLicense(device)) return { trial: "denied", reason: device.trialDenied.reason };
   return { trial: device.license.type === "trial" ? "granted" : "none" };
+}
+
+function clientIp(req: Request): string {
+  return (req.ip ?? "").replace(/^::ffff:/, "");
+}
+
+/** Plataformas sem ANDROID_ID: o teste é liberado sem ele (com o limite por IP). */
+const NO_ANDROID_ID_PLATFORMS = new Set(["samsung-tv", "lg-tv", "smarttv-web"]);
+const IP_WINDOW_MS = 24 * 3600 * 1000;
+const MAX_DEVICES_PER_IP = 3;
+const MAX_TRIALS_PER_IP = 1;
+
+/** Limite por IP em 24 h: até 3 aparelhos novos e 1 teste grátis. Acima disso o teste fica pendente. */
+function trialPolicy(platform: string, ip: string, now: Date, self?: Device): TrialPolicy {
+  const since = now.getTime() - IP_WINDOW_MS;
+  let devices = 0, trials = 0;
+  if (ip) {
+    for (const d of Object.values(db.devices)) {
+      if (d === self) continue;
+      if (d.createdIp === ip && new Date(d.createdAt).getTime() >= since) devices++;
+      if (d.trialIp === ip && d.trialAt && new Date(d.trialAt).getTime() >= since) trials++;
+    }
+  }
+  return { allowUnverified: NO_ANDROID_ID_PLATFORMS.has(platform), ipLimited: devices >= MAX_DEVICES_PER_IP || trials >= MAX_TRIALS_PER_IP };
+}
+
+function markTrialIp(device: Device, ip: string, now: Date) {
+  if (device.license.type === "trial" && !device.trialIp) { device.trialIp = ip; device.trialAt = now.toISOString(); }
 }
 
 function minVersionCode(): number {

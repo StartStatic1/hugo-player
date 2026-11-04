@@ -65,14 +65,41 @@ export interface TrialDevice {
   trialDenied?: { reason: "trial_already_used"; firstDeviceId: string; at: string };
 }
 
+/** Por que o teste ficou pendente (sem acesso até resolver ou o admin liberar). */
+export type TrialPendingReason = "update_required" | "app_first_use" | "no_android_id" | "ip_limit";
+
+/** Regras extras do teste: sem ANDROID_ID só libera em TV/web (allowUnverified); IP no limite → pendente. */
+export interface TrialPolicy {
+  /** libera teste sem ANDROID_ID (Smart TV Samsung/LG/web não têm ANDROID_ID). Padrão: false. */
+  allowUnverified?: boolean;
+  /** este IP já atingiu o limite de aparelhos/testes nas últimas 24 h */
+  ipLimited?: boolean;
+}
+
 /** Licença inicial de um aparelho novo conforme a decisão. Não mexe em nada já existente. */
-export function newDeviceTrial(decision: TrialDecision, deviceId: string, now: Date, trialDays: number, ledger: TrialLedger): Pick<TrialDevice, "license" | "androidIdHash" | "trialFlag" | "trialDenied"> {
+export function newDeviceTrial(
+  decision: TrialDecision,
+  deviceId: string,
+  now: Date,
+  trialDays: number,
+  ledger: TrialLedger,
+  policy: TrialPolicy = {},
+): Pick<TrialDevice, "license" | "androidIdHash" | "trialFlag" | "trialDenied"> & { trialPending?: TrialPendingReason } {
+  const expired = { type: "expired", plan: "trial", expiresAt: now.toISOString() };
   if (decision.kind === "denied") {
     return {
-      license: { type: "expired", plan: "trial", expiresAt: now.toISOString() },
+      license: expired,
       androidIdHash: decision.hash,
       trialDenied: { reason: "trial_already_used", firstDeviceId: decision.firstDeviceId, at: now.toISOString() },
     };
+  }
+  // sem ANDROID_ID usável (app novo sem ID, ID falso ou app antigo): sem teste — fica pendente
+  if (decision.kind === "unverified" && !policy.allowUnverified) {
+    return { license: expired, trialFlag: decision.flag, trialPending: decision.flag === "old_app" ? "update_required" : "no_android_id" };
+  }
+  // IP no limite (aparelhos/testes em 24 h): pendente; o teste sai num registro depois de 24 h ou pelo admin
+  if (policy.ipLimited) {
+    return { license: expired, ...(decision.kind === "granted" ? { androidIdHash: decision.hash } : { trialFlag: decision.flag }), trialPending: "ip_limit" };
   }
   const license = { type: "trial", plan: "trial", expiresAt: new Date(now.getTime() + trialDays * 86400000).toISOString() };
   if (decision.kind === "granted") {
@@ -112,17 +139,27 @@ export function webPendingTrial(now: Date): { license: LicenseLike; trialPending
   return { license: { type: "expired", plan: "trial", expiresAt: now.toISOString() }, trialPending: "app_first_use" };
 }
 
-/** O app atualizado mandou o ANDROID_ID: decide agora o teste que estava pendente. */
+/** Aparelho com teste pendente se registrou de novo: decide o teste agora (com as mesmas regras). */
 export function resolvePendingTrial(
   device: TrialDevice & { trialPending?: string },
   raw: unknown,
   ledger: TrialLedger,
   now: Date,
   trialDays: number,
+  policy: TrialPolicy = {},
 ): boolean {
-  if (!device.trialPending || raw === undefined) return false;
+  if (!device.trialPending) return false;
   if (device.license.type === "premium") { delete device.trialPending; return true; }
-  const r = newDeviceTrial(decideTrial(raw, ledger), device.deviceId, now, trialDays, ledger);
+  // app antigo (sem o campo) só resolve em TV/web
+  if (raw === undefined && !policy.allowUnverified) return false;
+  const r = newDeviceTrial(decideTrial(raw, ledger), device.deviceId, now, trialDays, ledger, policy);
+  if (r.trialPending) {
+    device.trialPending = r.trialPending;
+    if (r.androidIdHash) device.androidIdHash = r.androidIdHash;
+    if (r.trialFlag) device.trialFlag = r.trialFlag;
+    if (r.trialDenied) { device.trialDenied = r.trialDenied; delete device.trialPending; }
+    return true;
+  }
   device.license = { ...device.license, ...r.license };
   if (r.androidIdHash) device.androidIdHash = r.androidIdHash;
   if (r.trialFlag) device.trialFlag = r.trialFlag; else delete device.trialFlag;
