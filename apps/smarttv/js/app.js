@@ -3,7 +3,7 @@
   var h = UI.h, esc = UI.esc, img = UI.img;
   var S = { license: null, accounts: [], pl: null, meta: null, tab: "home", back: [] };
   var $ = function (id) { return document.getElementById(id); };
-  var NF = function (n) { return (n || 0).toLocaleString("pt-BR"); };
+  var NF = function (n) { return (n || 0).toLocaleString(I18N.locale); };
   function toast(t) { var e = $("toast"); e.textContent = t; e.classList.add("on"); clearTimeout(toast.t); toast.t = setTimeout(function () { e.classList.remove("on"); }, 3200); }
   function hm(iso) { var d = new Date(iso); return ("0" + d.getHours()).slice(-2) + ":" + ("0" + d.getMinutes()).slice(-2); }
   function view(html) { var v = $("view"); v.innerHTML = html || ""; v.className = "view"; void v.offsetWidth; v.className = "view in"; return v; }
@@ -166,14 +166,14 @@
     }
     var pvT;
     function preview(it) {
-      $("pvl").innerHTML = img(it.l); $("pvn").textContent = it.n; $("pvg").textContent = it.g; $("pvnow").innerHTML = '<span class="muted">Carregando guia...</span>'; $("pvlist").innerHTML = "";
+      $("pvl").innerHTML = img(it.l); $("pvn").textContent = it.n; $("pvn").dataset.k = it.n; $("pvg").textContent = it.g; $("pvnow").innerHTML = '<span class="muted">Carregando guia...</span>'; $("pvlist").innerHTML = "";
       clearTimeout(pvT); pvT = setTimeout(function () {
         Epg.nowNext(it).then(function (nn) {
-          if ($("pvn").textContent !== it.n) return;
+          if ($("pvn").dataset.k !== it.n) return;
           if (!nn || !nn.now) { $("pvnow").innerHTML = '<span class="muted">Sem guia para este canal</span>'; return; }
           var s = new Date(nn.now.start).getTime(), e = new Date(nn.now.stop).getTime(), pct = Math.max(0, Math.min(100, (Date.now() - s) / (e - s) * 100));
           $("pvnow").innerHTML = '<div class="now"><span class="badge">AGORA</span> ' + hm(nn.now.start) + " – " + hm(nn.now.stop) + "</div><div class=\"nowt\">" + esc(nn.now.title) + '</div><div class="prog"><i style="width:' + pct + '%"></i></div>' + (nn.next ? '<div class="next"><span class="badge b2">A SEGUIR</span> ' + hm(nn.next.start) + " " + esc(nn.next.title) + "</div>" : "");
-          Epg.day(it).then(function (ps) { if ($("pvn").textContent !== it.n) return; $("pvlist").innerHTML = ps.slice(2, 7).map(function (p) { return "<div><b>" + hm(p.start) + "</b> " + esc(p.title) + "</div>"; }).join(""); });
+          Epg.day(it).then(function (ps) { if ($("pvn").dataset.k !== it.n) return; $("pvlist").innerHTML = ps.slice(2, 7).map(function (p) { return "<div><b>" + hm(p.start) + "</b> " + esc(p.title) + "</div>"; }).join(""); });
         });
       }, 300);
     }
@@ -291,9 +291,10 @@
   /* ---------- Ajustes ---------- */
   function settingsScreen() {
     var idt = Api.identity(), l = S.license, m = S.meta;
-    view('<div class="page settings"><h1>Ajustes</h1><div class="sgrid"><div class="scard"><div class="lbl">Device ID</div><div class="mono">' + esc(idt.deviceId) + '</div><div class="lbl">Device Key</div><div class="mono">' + esc(idt.deviceKey) + '</div><div class="lic ' + (l && l.active ? "ok" : "bad") + '">' + esc(licenseText(l)) + '</div><div class="hint">Contas e planos são gerenciados em <b>' + esc(HUGO.SITE.replace("https://", "")) + '</b></div></div><div class="scard"><div class="lbl">Conta em uso</div><div class="big2">' + esc(S.pl.name) + '</div><div class="stats"><span><b>' + NF(m.counts.live) + "</b> canais</span><span><b>" + NF(m.counts.movie) + "</b> filmes</span><span><b>" + NF(m.counts.series) + '</b> séries</span></div><div class="hint">Atualizada em ' + new Date(m.syncedAt).toLocaleString("pt-BR") + '</div></div></div><div class="sbtns" id="sb"></div><div class="about">Hugo Player Smart TV ' + esc(HUGO.VERSION) + " · " + esc(Api.platform()) + "</div></div>");
+    view('<div class="page settings"><h1>Ajustes</h1><div class="sgrid"><div class="scard"><div class="lbl">Device ID</div><div class="mono">' + esc(idt.deviceId) + '</div><div class="lbl">Device Key</div><div class="mono">' + esc(idt.deviceKey) + '</div><div class="lic ' + (l && l.active ? "ok" : "bad") + '">' + esc(licenseText(l)) + '</div><div class="hint">Contas e planos são gerenciados em <b>' + esc(HUGO.SITE.replace("https://", "")) + '</b></div></div><div class="scard"><div class="lbl">Conta em uso</div><div class="big2">' + esc(S.pl.name) + '</div><div class="stats"><span><b>' + NF(m.counts.live) + "</b> canais</span><span><b>" + NF(m.counts.movie) + "</b> filmes</span><span><b>" + NF(m.counts.series) + '</b> séries</span></div><div class="hint">Atualizada em ' + new Date(m.syncedAt).toLocaleString(I18N.locale) + '</div></div></div><div class="sbtns" id="sb"></div><div class="about">Hugo Player Smart TV ' + esc(HUGO.VERSION) + " · " + esc(Api.platform()) + "</div></div>");
     var acts = [["Atualizar conteúdo", function () { syncScreen(S.pl, true); }], ["Trocar conta", function () { accountsScreen(); }], ["Atualizar licença", function () { Api.status().then(function (s) { S.license = s.license; go("settings"); toast("Licença atualizada"); }); }],
-      ["Limpar continuar assistindo", function () { localStorage.removeItem("hugo.progress"); toast("Continuar assistindo limpo"); }], ["Limpar favoritos", function () { Favs.clear(); toast("Favoritos apagados"); }]];
+      ["Limpar continuar assistindo", function () { localStorage.removeItem("hugo.progress"); toast("Continuar assistindo limpo"); }], ["Limpar favoritos", function () { Favs.clear(); toast("Favoritos apagados"); }],
+      [I18N.lang === "pt" ? "Language: English" : "Idioma: Português", function () { I18N.set(I18N.lang === "pt" ? "en" : "pt"); }]];
     var z = UI.Flat($("sb")).set(acts.map(function (a) { var el = h("div", "btn", a[0]); $("sb").appendChild(el); return { el: el, onEnter: a[1] }; }));
     UI.add("main", z, { U: "nav" });
   }
@@ -301,7 +302,7 @@
   /* ---------- ativação / licença ---------- */
   function licenseText(l) {
     if (!l) return "Verificando licença...";
-    var exp = l.expiresAt ? new Date(l.expiresAt).toLocaleDateString("pt-BR") : null;
+    var exp = l.expiresAt ? new Date(l.expiresAt).toLocaleDateString(I18N.locale) : null;
     if (l.trialDenied) return "Este aparelho já usou o período de teste. Ative um plano no site.";
     if (!l.active) return "Licença vencida. Renove no site para continuar.";
     if (l.type === "trial") return "Período de teste ativo" + (exp ? " até " + exp : "");

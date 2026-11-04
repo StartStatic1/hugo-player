@@ -84,7 +84,7 @@ var Store = (function () {
             done += rows.length;
             return putBatch(rows).then(function () {
               var label = { live: "Canais", movie: "Filmes", series: "Séries" }[t];
-              onProgress && onProgress(label + ": " + ai.toLocaleString("pt-BR") + (grandTotal ? " de " + grandTotal.toLocaleString("pt-BR") : ""), (ti + (grandTotal ? Math.min(1, ai / grandTotal) : 0)) / 3);
+              onProgress && onProgress(label + ": " + ai.toLocaleString(I18N.locale) + (grandTotal ? " de " + grandTotal.toLocaleString(I18N.locale) : ""), (ti + (grandTotal ? Math.min(1, ai / grandTotal) : 0)) / 3);
               if (r.hasMore) return page(p + 1);
             });
           });
