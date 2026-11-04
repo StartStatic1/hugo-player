@@ -1,6 +1,6 @@
 {
   "id": "online.streamflixvip.hugo",
-  "version": "0.2.0",
+  "version": "1.0.0",
   "vendor": "Hugo Player",
   "type": "web",
   "main": "index.html",

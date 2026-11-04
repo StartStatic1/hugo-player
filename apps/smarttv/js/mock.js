@@ -1,7 +1,7 @@
 /* Modo demonstração (?demo=1, ?demo=1&big=1 = 420 mil itens): dados falsos, nada vai ao servidor. */
 var Mock = (function () {
   var BIG = /[?&]big=1/.test(location.search);
-  var pls = [{ id: "demo1", name: "Minha Lista", type: "xtream", protected: false }, { id: "demo2", name: "Lista Kids", type: "m3u", protected: true }];
+  var pls = [{ id: "demo1", name: "Sala", type: "xtream", protected: false }, { id: "demo2", name: "Infantil", type: "xtream", protected: true }];
   var C = ["#22D3EE", "#7C5CFF", "#EC4899", "#0EA5E9", "#A855F7", "#F43F5E"];
   function pic(t, i, w, h) {
     var a = C[i % 6], b = C[(i + 2) % 6];
@@ -14,9 +14,9 @@ var Mock = (function () {
   var STREAM = "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8";
   var LG = ["Abertos", "Esportes", "Notícias", "Infantil", "Filmes 24h", "Documentários", "Música", "Religiosos"];
   var MG = ["Lançamentos", "Ação", "Comédia", "Drama", "Terror", "Animação", "Ficção", "Romance"];
-  var SG = ["Netflix", "HBO", "Animes", "Doramas", "Novelas"];
-  var MOV = ["Matrix", "Interestelar", "Duna", "Oppenheimer", "Avatar", "Gladiador", "Coringa", "Top Gun", "Toy Story", "Vingadores", "Titanic", "Batman"];
-  var SER = ["Breaking Bad", "Stranger Things", "The Last of Us", "Dark", "La Casa de Papel", "Round 6", "The Boys", "Wandinha"];
+  var SG = ["Drama", "Aventura", "Animação", "Suspense", "Comédia"];
+  var MOV = ["Aurora", "Horizonte", "Maré Alta", "Eco", "Vértice", "Lumen", "Travessia", "Órbita", "Farol", "Raízes", "Neblina", "Atlas"];
+  var SER = ["Cidade Norte", "Sinais", "Os Viajantes", "Vale Escuro", "Fronteira", "Laços", "Código Azul", "Ilha"];
   var N = { live: BIG ? 12000 : 64, movie: BIG ? 300000 : 96, series: BIG ? 108000 : 40 };
   function item(t, i) {
     if (t === "live") { var g = LG[i % LG.length]; return { name: g + " " + (Math.floor(i / LG.length) + 1) + " HD", url: STREAM + "#l" + i, group: g, type: "live", epgId: "ch" + i, logo: pic("TV " + (i + 1), i, 160, 100) }; }
@@ -26,7 +26,7 @@ var Mock = (function () {
   }
   function prog(key, i) {
     var now = Date.now(), slot = 30 * 60000, s = Math.floor(now / slot) * slot + (i - 1) * slot;
-    var T = ["Jornal da Manhã", "Futebol ao Vivo", "Filme da Tarde", "Desenhos", "Documentário", "Show de Música", "Série Policial", "Debate"];
+    var T = ["Jornal da Manhã", "Esporte Ao Vivo", "Filme da Tarde", "Desenhos", "Documentário", "Show de Música", "Série Policial", "Debate"];
     var h = 0; for (var j = 0; j < key.length; j++) h += key.charCodeAt(j);
     return { title: T[(h + i) % T.length], start: new Date(s).toISOString(), stop: new Date(s + slot).toISOString(), desc: "Programação de demonstração." };
   }
@@ -43,7 +43,7 @@ var Mock = (function () {
     else if (path.indexOf("/channels/series-episodes") === 0) { var e = []; for (var s = 1; s <= 3; s++) for (var i = 1; i <= 8; i++) e.push({ name: "Episódio " + i, season: s, episode: i, url: STREAM + "#e" + s + i, durationSecs: 2700 }); r = { name: "Série", plot: "Uma série de demonstração.", episodes: e }; }
     else if (path.indexOf("/epg/now-next") === 0) { r = { available: true, channels: {} }; (body.ids || []).forEach(function (id) { r.channels[id] = { channelId: id, now: prog(id, 1), next: prog(id, 2) }; }); }
     else if (path.indexOf("/epg/channel/") === 0) { var key = decodeURIComponent(path.split("/")[3].split("?")[0]), ps = []; for (var x = 1; x <= 10; x++) ps.push(prog(key, x)); r = { channelId: key, programmes: ps }; }
-    else if (path.indexOf("/tmdb/search") === 0) { var qq = q(path, "q") || ""; r = { results: [{ backdrop_path: backdrop(qq), overview: "Sinopse de demonstração para “" + qq + "”. No app real vem do TMDB, com a imagem de fundo do título." }] }; }
+    else if (path.indexOf("/tmdb/search") === 0) { var qq = q(path, "q") || ""; r = { results: [{ backdrop_path: backdrop(qq), overview: "Sinopse de demonstração para “" + qq + "”. Arte genérica de demonstração." }] }; }
     else if (path.indexOf("/channels") === 0) {
       var t = q(path, "type") || "live", page = +(q(path, "page") || 0), lim = +(q(path, "limit") || 50), n = N[t], out = [];
       for (var z = page * lim; z < Math.min(n, (page + 1) * lim); z++) out.push(item(t, z));

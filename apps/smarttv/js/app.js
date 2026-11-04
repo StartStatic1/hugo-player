@@ -1,7 +1,7 @@
 /* Hugo Player — Smart TV (Samsung Tizen / LG webOS) */
 (function () {
   var h = UI.h, esc = UI.esc, img = UI.img;
-  var S = { license: null, playlists: [], pl: null, meta: null, tab: "home", back: [] };
+  var S = { license: null, accounts: [], pl: null, meta: null, tab: "home", back: [] };
   var $ = function (id) { return document.getElementById(id); };
   var NF = function (n) { return (n || 0).toLocaleString("pt-BR"); };
   function toast(t) { var e = $("toast"); e.textContent = t; e.classList.add("on"); clearTimeout(toast.t); toast.t = setTimeout(function () { e.classList.remove("on"); }, 3200); }
@@ -55,10 +55,10 @@
 
   /* ---------- tocar ---------- */
   function liveNumber(i) { return i + 1; }
-  function playList(fetchAt, count, index, startAt, back) {
+  function playQueue(fetchAt, count, index, startAt, back) {
     Player.open({ pid: S.pl.id, count: count, index: index, startAt: startAt, at: fetchAt, epg: function (it) { return Epg.nowNext(it); }, numberOf: liveNumber, onClose: back });
   }
-  function playItems(items, i, back) { playList(function (n) { return Promise.resolve(items[n]); }, items.length, i, resumeAt(items[i]), back); }
+  function playItems(items, i, back) { playQueue(function (n) { return Promise.resolve(items[n]); }, items.length, i, resumeAt(items[i]), back); }
   function resumeAt(it) { if (!it || it.t === "live") return 0; var p = Progress.get(S.pl.id, it.u); return p && p.pos > 20 ? p.pos - 5 : 0; }
   function fav(it, node) {
     var on = Favs.toggle(S.pl.id, it); toast(on ? "★ Adicionado aos favoritos" : "Removido dos favoritos");
@@ -123,11 +123,11 @@
 
     var cont = Progress.list(S.pl.id).slice(0, 20).map(function (p) { return { t: p.t, n: p.n, u: p.u, l: p.l, sn: p.sn, se: p.se, ep: p.ep, pos: p.pos, dur: p.dur }; });
     Promise.all([Store.range(meta, "movie", null, 0, 20), Store.range(meta, "series", null, 0, 20), Store.range(meta, "live", null, 0, 20)]).then(function (r) {
-      addRow("Continuar assistindo", cont, "wide", function (it) { playList(function () { return Promise.resolve(it); }, 1, 0, Math.max(0, it.pos - 5), refocus("row0")); });
+      addRow("Continuar assistindo", cont, "wide", function (it) { playQueue(function () { return Promise.resolve(it); }, 1, 0, Math.max(0, it.pos - 5), refocus("row0")); });
       var fv = Favs.list(S.pl.id).slice(0, 20);
       addRow("Filmes em destaque", r[0], "poster", function (it, i, items) { openItem(it, items, i, refocusCur()); });
       addRow("Séries para maratonar", r[1], "poster", function (it) { seriesScreen(it); });
-      addRow("Canais ao vivo", r[2], "chan", function (it, i) { playList(function (n) { return Store.range(meta, "live", null, n, 1).then(function (a) { return a[0]; }); }, meta.counts.live, i, 0, refocusCur()); });
+      addRow("Canais ao vivo", r[2], "chan", function (it, i) { playQueue(function (n) { return Store.range(meta, "live", null, n, 1).then(function (a) { return a[0]; }); }, meta.counts.live, i, 0, refocusCur()); });
       addRow("Meus favoritos", fv, "poster", function (it, i, items) { openItem(it, items, i, refocusCur()); });
       heroItem = r[0][0] || r[1][0] || null; setHero(heroItem);
     });
@@ -160,7 +160,7 @@
       var el = $("l");
       items = UI.VGrid(el, { count: n, cols: 1, cw: 700, ch: 92, cls: "lcell",
         fetch: function (f, k) { return Store.range(meta, "live", group, f, k); }, render: chRow,
-        onFocus: preview, onEnter: function (it, i) { var g0 = group; playList(function (x) { return Store.range(meta, "live", g0, x, 1).then(function (a) { return a[0]; }); }, n, i, 0, refocus("items")); },
+        onFocus: preview, onEnter: function (it, i) { var g0 = group; playQueue(function (x) { return Store.range(meta, "live", g0, x, 1).then(function (a) { return a[0]; }); }, n, i, 0, refocus("items")); },
         onLong: function (it, i) { fav(it); items.refresh(i); } });
       UI.add("items", items, { L: "main", U: "nav" });
     }
@@ -190,7 +190,7 @@
       if (grid) grid.destroy();
       grid = UI.VGrid($("v"), { count: n, cols: 6, cw: 232, ch: 392, cls: "pcell", lead: 0.05,
         fetch: function (f, k) { return Store.range(meta, t, g, f, k); }, render: poster,
-        onEnter: function (it, i) { if (t === "series") return seriesScreen(it); var g0 = g; playList(function (x) { return Store.range(meta, t, g0, x, 1).then(function (a) { return a[0]; }); }, 1, 0, resumeAt(it), refocus("items")); },
+        onEnter: function (it, i) { if (t === "series") return seriesScreen(it); var g0 = g; playQueue(function (x) { return Store.range(meta, t, g0, x, 1).then(function (a) { return a[0]; }); }, 1, 0, resumeAt(it), refocus("items")); },
         onLong: function (it, i) { fav(it); grid.refresh(i); } });
       UI.add("items", grid, { L: "main", U: "nav" });
     }
@@ -215,7 +215,7 @@
         list = UI.VGrid($("eps"), { count: arr.length, cols: 1, cw: 900, ch: 96, cls: "ecell",
           fetch: function (f, n) { return Promise.resolve(arr.slice(f, f + n)); },
           render: function (e) { var pr = Progress.get(S.pl.id, e.u), pct = pr && pr.dur ? pr.pos / pr.dur * 100 : 0; return '<div class="ep"><span class="epn">E' + (e.ep || "") + '</span><span class="ept">' + esc(e.n) + "</span>" + (pct ? '<span class="epbar"><i style="width:' + pct + '%"></i></span>' : "") + "</div>"; },
-          onEnter: function (e, i) { playList(function (n) { return Promise.resolve(arr[n]); }, arr.length, i, resumeAt(e), function () { list.refresh(i); UI.focus("items"); }); } });
+          onEnter: function (e, i) { playQueue(function (n) { return Promise.resolve(arr[n]); }, arr.length, i, resumeAt(e), function () { list.refresh(i); UI.focus("items"); }); } });
         UI.add("items", list, { U: "main", L: "main" });
       }
       var sz = UI.Flat($("seasons")).set(seasons.map(function (sn) { var el = h("div", "btn sm", "Temporada " + sn); $("seasons").appendChild(el); return { el: el, onFocus: function () { showSeason(sn); }, onEnter: function () { UI.focus("items"); } }; }));
@@ -240,7 +240,7 @@
           setTimeout(function () { Epg.day(it).then(function (ps) { var el = document.getElementById(id); if (!el) return; el.innerHTML = ps.length ? ps.map(function (p) { var s = Math.max(t0, new Date(p.start).getTime()), e = Math.min(t0 + SPAN, new Date(p.stop).getTime()); if (e <= s) return ""; var on = Date.now() >= new Date(p.start).getTime() && Date.now() < new Date(p.stop).getTime(); return '<div class="gp' + (on ? " on" : "") + '" style="left:' + ((s - t0) / SPAN * W) + "px;width:" + Math.max(4, (e - s) / SPAN * W - 6) + 'px"><b>' + hm(p.start) + "</b> " + esc(p.title) + "</div>"; }).join("") : '<div class="gp none" style="left:0;width:' + (W - 6) + 'px">Sem informação de programação</div>'; }); }, 0);
           return '<div class="grow"><div class="gch"><span class="num">' + (i + 1) + '</span><span class="clogo">' + img(it.l) + '</span><span class="cname">' + esc(it.n) + '</span></div><div class="gprogs" id="' + id + '"></div></div>';
         },
-        onEnter: function (it, i) { var g0 = g; playList(function (x) { return Store.range(meta, "live", g0, x, 1).then(function (a) { return a[0]; }); }, n, i, 0, refocus("items")); } });
+        onEnter: function (it, i) { var g0 = g; playQueue(function (x) { return Store.range(meta, "live", g0, x, 1).then(function (a) { return a[0]; }); }, n, i, 0, refocus("items")); } });
       UI.add("items", grid, { L: "main", U: "nav" });
     }
     UI.add("main", groupsZone($("g"), "live", pick), { R: "items", U: "nav" });
@@ -291,8 +291,8 @@
   /* ---------- Ajustes ---------- */
   function settingsScreen() {
     var idt = Api.identity(), l = S.license, m = S.meta;
-    view('<div class="page settings"><h1>Ajustes</h1><div class="sgrid"><div class="scard"><div class="lbl">Device ID</div><div class="mono">' + esc(idt.deviceId) + '</div><div class="lbl">Device Key</div><div class="mono">' + esc(idt.deviceKey) + '</div><div class="lic ' + (l && l.active ? "ok" : "bad") + '">' + esc(licenseText(l)) + '</div><div class="hint">Planos e playlists também em <b>' + esc(HUGO.SITE.replace("https://", "")) + '</b></div></div><div class="scard"><div class="lbl">Playlist em uso</div><div class="big2">' + esc(S.pl.name) + '</div><div class="stats"><span><b>' + NF(m.counts.live) + "</b> canais</span><span><b>" + NF(m.counts.movie) + "</b> filmes</span><span><b>" + NF(m.counts.series) + '</b> séries</span></div><div class="hint">Atualizada em ' + new Date(m.syncedAt).toLocaleString("pt-BR") + '</div></div></div><div class="sbtns" id="sb"></div><div class="about">Hugo Player Smart TV ' + esc(HUGO.VERSION) + " · " + esc(Api.platform()) + "</div></div>");
-    var acts = [["Atualizar lista", function () { syncScreen(S.pl, true); }], ["Trocar playlist", function () { playlistsScreen(); }], ["Atualizar licença", function () { Api.status().then(function (s) { S.license = s.license; go("settings"); toast("Licença atualizada"); }); }],
+    view('<div class="page settings"><h1>Ajustes</h1><div class="sgrid"><div class="scard"><div class="lbl">Device ID</div><div class="mono">' + esc(idt.deviceId) + '</div><div class="lbl">Device Key</div><div class="mono">' + esc(idt.deviceKey) + '</div><div class="lic ' + (l && l.active ? "ok" : "bad") + '">' + esc(licenseText(l)) + '</div><div class="hint">Contas e planos são gerenciados em <b>' + esc(HUGO.SITE.replace("https://", "")) + '</b></div></div><div class="scard"><div class="lbl">Conta em uso</div><div class="big2">' + esc(S.pl.name) + '</div><div class="stats"><span><b>' + NF(m.counts.live) + "</b> canais</span><span><b>" + NF(m.counts.movie) + "</b> filmes</span><span><b>" + NF(m.counts.series) + '</b> séries</span></div><div class="hint">Atualizada em ' + new Date(m.syncedAt).toLocaleString("pt-BR") + '</div></div></div><div class="sbtns" id="sb"></div><div class="about">Hugo Player Smart TV ' + esc(HUGO.VERSION) + " · " + esc(Api.platform()) + "</div></div>");
+    var acts = [["Atualizar conteúdo", function () { syncScreen(S.pl, true); }], ["Trocar conta", function () { accountsScreen(); }], ["Atualizar licença", function () { Api.status().then(function (s) { S.license = s.license; go("settings"); toast("Licença atualizada"); }); }],
       ["Limpar continuar assistindo", function () { localStorage.removeItem("hugo.progress"); toast("Continuar assistindo limpo"); }], ["Limpar favoritos", function () { Favs.clear(); toast("Favoritos apagados"); }]];
     var z = UI.Flat($("sb")).set(acts.map(function (a) { var el = h("div", "btn", a[0]); $("sb").appendChild(el); return { el: el, onEnter: a[1] }; }));
     UI.add("main", z, { U: "nav" });
@@ -302,15 +302,15 @@
   function licenseText(l) {
     if (!l) return "Verificando licença...";
     var exp = l.expiresAt ? new Date(l.expiresAt).toLocaleDateString("pt-BR") : null;
-    if (l.trialDenied) return "Este aparelho já usou o teste grátis. Ative um plano no site.";
+    if (l.trialDenied) return "Este aparelho já usou o período de teste. Ative um plano no site.";
     if (!l.active) return "Licença vencida. Renove no site para continuar.";
-    if (l.type === "trial") return "Teste grátis ativo" + (exp ? " até " + exp : "");
+    if (l.type === "trial") return "Período de teste ativo" + (exp ? " até " + exp : "");
     return "Plano ativo" + (exp ? " até " + exp : " (vitalício)");
   }
   function activationScreen() {
     UI.reset(); shell(false);
     var idt = Api.identity(), l = S.license, ok = l && l.active;
-    view('<div class="center"><div class="brand big">Hugo<span>Player</span></div><div class="actcard"><div class="acol"><div class="lbl">Device ID</div><div class="mono xl">' + esc(idt.deviceId) + '</div><div class="lbl">Device Key</div><div class="mono xl">' + esc(idt.deviceKey) + '</div></div><div class="acol r"><div class="lic ' + (ok ? "ok" : "bad") + '">' + esc(licenseText(l)) + '</div><div class="steps"><div><b>1</b> Acesse <u>' + esc(HUGO.SITE.replace("https://", "")) + "</u></div><div><b>2</b> Digite o Device ID e a Key</div><div><b>3</b> Escolha um plano ou adicione sua playlist</div></div></div></div><div class=\"abtns\" id=\"ab\"></div></div>");
+    view('<div class="center"><div class="brand big">Hugo<span>Player</span></div><div class="actcard"><div class="acol"><div class="lbl">Device ID</div><div class="mono xl">' + esc(idt.deviceId) + '</div><div class="lbl">Device Key</div><div class="mono xl">' + esc(idt.deviceKey) + '</div></div><div class="acol r"><div class="lic ' + (ok ? "ok" : "bad") + '">' + esc(licenseText(l)) + '</div><div class="steps"><div><b>1</b> Acesse <u>' + esc(HUGO.SITE.replace("https://", "")) + "</u></div><div><b>2</b> Digite o Device ID e a Key</div><div><b>3</b> Entre com sua conta (servidor, usuário e senha)</div></div></div></div><div class=\"abtns\" id=\"ab\"></div></div>");
     var items = [];
     if (ok) items.push(["Continuar", function () { localStorage.setItem("hugo.activated", "1"); start(); }, true]);
     items.push(["Verificar de novo", boot]);
@@ -318,21 +318,21 @@
     UI.add("main", z); UI.focus("main");
   }
 
-  /* ---------- playlists + PIN ---------- */
-  function playlistsScreen() {
+  /* ---------- contas + PIN ---------- */
+  function accountsScreen() {
     UI.reset(); shell(false);
-    view('<div class="center"><div class="brand">Hugo<span>Player</span></div><h2 class="ctitle">Quem vai assistir?</h2><div class="plcards" id="pc"><div class="empty">Carregando...</div></div><div class="abtns" id="pb"></div></div>');
-    Api.playlists().then(function (list) {
-      S.playlists = list; $("pc").innerHTML = "";
+    view('<div class="center"><div class="brand">Hugo<span>Player</span></div><h2 class="ctitle">Quem vai assistir?</h2><div class="hint">Contas são gerenciadas em <b>' + esc(HUGO.SITE.replace("https://", "")) + '</b></div><div class="plcards" id="pc"><div class="empty">Carregando...</div></div><div class="abtns" id="pb"></div></div>');
+    Api.accounts().then(function (list) {
+      S.accounts = list; $("pc").innerHTML = "";
       var cards = list.map(function (p, i) {
         var el = h("div", "plcard", '<div class="plic">' + esc((p.name || "?").slice(0, 1).toUpperCase()) + '</div><div class="pln">' + esc(p.name) + '</div><div class="plt">' + (p.type === "xtream" ? "Xtream" : "M3U") + (p.protected ? ' · <span class="lock">🔒 PIN</span>' : "") + "</div>");
         el.style.setProperty("--c", ["#22D3EE", "#7C5CFF", "#EC4899"][i % 3]); $("pc").appendChild(el);
-        return { el: el, onEnter: function () { choose(p); }, onLong: function () { if (el.dataset.sure) { Api.deletePlaylist(p.id).then(playlistsScreen)["catch"](function (e) { toast(e.message); }); } else { el.dataset.sure = 1; toast("Segure OK de novo para excluir “" + p.name + "”"); } } };
+        return { el: el, onEnter: function () { choose(p); }, onLong: function () { if (el.dataset.sure) { Api.deleteAccount(p.id).then(accountsScreen)["catch"](function (e) { toast(e.message); }); } else { el.dataset.sure = 1; toast("Segure OK de novo para excluir “" + p.name + "”"); } } };
       });
-      if (!list.length) $("pc").innerHTML = '<div class="empty">Nenhuma playlist ainda. Adicione abaixo ou pelo site.</div>';
-      var add = h("div", "btn primary", "+ Adicionar playlist"); $("pb").appendChild(add);
+      if (!list.length) $("pc").innerHTML = '<div class="empty">Nenhuma conta ainda. Entre abaixo com servidor, usuário e senha.</div>';
+      var add = h("div", "btn primary", "+ Entrar com uma conta"); $("pb").appendChild(add);
       UI.add("main", UI.Flat($("pc")).set(cards), { D: "btns" });
-      UI.add("btns", UI.Flat($("pb")).set([{ el: add, onEnter: addScreen }]), { U: "main" });
+      UI.add("btns", UI.Flat($("pb")).set([{ el: add, onEnter: (window.HugoExtra && !HUGO.STORE) ? HugoExtra.addScreen : loginScreen }]), { U: "main" });
       if (!UI.focus("main")) UI.focus("btns");
     })["catch"](function (e) { $("pc").innerHTML = '<div class="empty">Erro: ' + esc(e.message) + "</div>"; });
   }
@@ -340,11 +340,11 @@
     if (!p.protected || sessionStorage.getItem("hugo.pin." + p.id)) return syncScreen(p, false);
     pinPad(p.name, function (pin, done) {
       Api.verifyPin(p.id, pin).then(function () { sessionStorage.setItem("hugo.pin." + p.id, "1"); done(true); syncScreen(p, false); })["catch"](function (e) { done(false, e.status === 429 ? "Muitas tentativas. Aguarde." : "PIN incorreto"); });
-    }, playlistsScreen);
+    }, accountsScreen);
   }
   function pinPad(title, check, cancel) {
     UI.reset(); shell(false);
-    view('<div class="center"><div class="lockic">🔒</div><h2 class="ctitle">' + esc(title) + '</h2><div class="hint">Digite o PIN da playlist</div><div class="pindots" id="pd"></div><div class="pinerr" id="pe"></div><div class="pinpad" id="pp"></div></div>');
+    view('<div class="center"><div class="lockic">🔒</div><h2 class="ctitle">' + esc(title) + '</h2><div class="hint">Digite o PIN da conta</div><div class="pindots" id="pd"></div><div class="pinerr" id="pe"></div><div class="pinpad" id="pp"></div></div>');
     var pin = "", K = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "⌫", "0", "OK"];
     function dots() { var s = ""; for (var i = 0; i < 4; i++) s += '<i class="' + (i < pin.length ? "on" : "") + '"></i>'; $("pd").innerHTML = s; }
     var z = UI.VGrid($("pp"), { count: 12, cols: 3, cw: 140, ch: 110, cls: "pcellk", fetch: function () { return Promise.resolve(K); },
@@ -358,46 +358,41 @@
     UI.add("main", z); UI.focus("main"); dots();
     S.back = [cancel];
   }
-  function addScreen() {
+  function loginScreen() {
     UI.reset(); shell(false);
-    view('<div class="center"><h2 class="ctitle">Adicionar playlist</h2><div class="form"><div class="seg" id="seg"></div><label>Nome</label><input id="f_name" value="Minha lista"><label>Servidor ou link M3U</label><input id="f_url" placeholder="http://"><div id="xt"><label>Usuário</label><input id="f_user"><label>Senha</label><input id="f_pass" type="password"></div></div><div class="abtns" id="fb"></div><div class="hint">Mais fácil: adicione pelo site com o Device ID e a Key — aparece aqui sozinha.</div></div>');
-    var type = "xtream";
-    var segs = [["xtream", "Xtream (usuário e senha)"], ["m3u", "Link M3U"]].map(function (s) { var el = h("div", "btn sm", s[1]); $("seg").appendChild(el); return { el: el, t: s[0], onEnter: function () { type = s[0]; paint(); } }; });
-    function paint() { segs.forEach(function (s) { s.el.classList.toggle("primary", s.t === type); }); $("xt").style.display = type === "xtream" ? "" : "none"; }
-    paint();
-    var fields = ["f_name", "f_url", "f_user", "f_pass"].map(function (id) { var el = $(id); return { el: el, id: id, onEnter: function () { el.focus(); } }; });
-    var save = h("div", "btn primary", "Salvar"), cancel = h("div", "btn", "Voltar"); $("fb").appendChild(save); $("fb").appendChild(cancel);
-    var fz = UI.Flat(null, { horizontal: false }).set(fields.filter(function (f) { return type === "xtream" || (f.id !== "f_user" && f.id !== "f_pass"); }));
-    fz.move = (function (m) { return function (d) { var vis = fields.filter(function (f) { return f.el.offsetParent; }); fz.set(vis); return m(d); }; })(fz.move);
-    UI.add("seg", UI.Flat($("seg")).set(segs), { D: "fields" });
-    UI.add("fields", fz, { U: "seg", D: "fbtns" });
+    view('<div class="center"><div class="brand">Hugo<span>Player</span></div><h2 class="ctitle">Entrar</h2><div class="form"><label>Servidor</label><input id="f_url" placeholder="servidor.exemplo.com:8080"><label>Usuário</label><input id="f_user"><label>Senha</label><input id="f_pass" type="password"></div><div class="abtns" id="fb"></div><div class="hint">Use os dados da conta que você já possui. Contas são gerenciadas em <b>' + esc(HUGO.SITE.replace("https://", "")) + '</b>. O Hugo Player não fornece conteúdo.</div></div>');
+    var fields = ["f_url", "f_user", "f_pass"].map(function (id) { var el = $(id); return { el: el, onEnter: function () { el.focus(); } }; });
+    var save = h("div", "btn primary", "Entrar"), cancel = h("div", "btn", "Voltar"); $("fb").appendChild(save); $("fb").appendChild(cancel);
+    UI.add("fields", UI.Flat(null, { horizontal: false }).set(fields), { D: "fbtns" });
     UI.add("fbtns", UI.Flat($("fb")).set([{ el: save, onEnter: function () {
-      var body = { name: $("f_name").value.trim() || "Minha lista", type: type, url: $("f_url").value.trim() };
-      if (type === "xtream") { body.username = $("f_user").value.trim(); body.password = $("f_pass").value.trim(); }
-      Api.addPlaylist(body).then(function () { toast("Playlist adicionada"); playlistsScreen(); })["catch"](function (e) { toast("Erro: " + e.message); });
-    } }, { el: cancel, onEnter: playlistsScreen }]), { U: "fields" });
-    S.back = [playlistsScreen];
-    UI.focus("seg");
+      var host = $("f_url").value.trim(), user = $("f_user").value.trim(), pass = $("f_pass").value.trim();
+      if (!host || !user || !pass) return toast("Preencha servidor, usuário e senha");
+      if (!/^https?:\/\//i.test(host)) host = "http://" + host;
+      var nm = host.replace(/^https?:\/\//i, "").split(/[/:]/)[0];
+      Api.addAccount({ name: nm, type: "xtream", url: host, username: user, password: pass }).then(function () { toast("Conta conectada"); accountsScreen(); })["catch"](function (e) { toast("Erro: " + e.message); });
+    } }, { el: cancel, onEnter: accountsScreen }]), { U: "fields" });
+    S.back = [accountsScreen];
+    UI.focus("fields");
   }
 
-  /* ---------- baixar/abrir a lista ---------- */
+  /* ---------- baixar/abrir o conteúdo ---------- */
   function syncScreen(p, force) {
     UI.reset(); shell(false);
     Store.getMeta(p.id).then(function (m) {
       var fresh = m && m.k && !force && Date.now() - m.syncedAt < 24 * 3600000;
       if (fresh) return enter(p, m);
-      view('<div class="center"><div class="brand">Hugo<span>Player</span></div><h2 class="ctitle">' + esc(p.name) + '</h2><div class="sync"><div class="sbar"><i id="sbar"></i></div><div class="stext" id="st">Conectando...</div></div>' + (m && m.k ? '<div class="hint">Você pode continuar usando a lista guardada enquanto atualiza.</div>' : "") + "</div>");
+      view('<div class="center"><div class="brand">Hugo<span>Player</span></div><h2 class="ctitle">' + esc(p.name) + '</h2><div class="sync"><div class="sbar"><i id="sbar"></i></div><div class="stext" id="st">Conectando...</div></div>' + (m && m.k ? '<div class="hint">Você pode continuar usando o conteúdo guardado enquanto atualiza.</div>' : "") + "</div>");
       Store.sync(p.id, function (t, f) { if ($("st")) $("st").textContent = t; if ($("sbar") && f != null) $("sbar").style.width = Math.round(f * 100) + "%"; })
         .then(function (meta) { toast(NF(meta.counts.live) + " canais · " + NF(meta.counts.movie) + " filmes · " + NF(meta.counts.series) + " séries"); enter(p, meta); })
         ["catch"](function (e) {
-          if (m && m.k) { toast("Não deu para atualizar: " + e.message + " — usando a lista guardada"); return enter(p, m); }
+          if (m && m.k) { toast("Não deu para atualizar: " + e.message + " — usando o conteúdo guardado"); return enter(p, m); }
           view('<div class="center"><h2 class="ctitle">' + esc(p.name) + '</h2><div class="empty">Não foi possível carregar: ' + esc(e.message) + '</div><div class="abtns" id="eb"></div></div>');
           var r = h("div", "btn primary", "Tentar de novo"), b = h("div", "btn", "Voltar"); $("eb").appendChild(r); $("eb").appendChild(b);
-          UI.add("main", UI.Flat($("eb")).set([{ el: r, onEnter: function () { syncScreen(p, true); } }, { el: b, onEnter: playlistsScreen }])); UI.focus("main");
+          UI.add("main", UI.Flat($("eb")).set([{ el: r, onEnter: function () { syncScreen(p, true); } }, { el: b, onEnter: accountsScreen }])); UI.focus("main");
         });
     });
   }
-  function enter(p, meta) { S.pl = p; S.meta = meta; localStorage.setItem("hugo.lastPlaylist", p.id); go("home"); }
+  function enter(p, meta) { S.pl = p; S.meta = meta; localStorage.setItem("hugo.lastAccount", p.id); go("home"); }
 
   /* ---------- teclas ---------- */
   var downAt = 0, longFired = false;
@@ -433,12 +428,12 @@
 
   /* ---------- início ---------- */
   function start() {
-    var last = localStorage.getItem("hugo.lastPlaylist");
-    Api.playlists().then(function (list) {
-      S.playlists = list;
+    var last = localStorage.getItem("hugo.lastAccount");
+    Api.accounts().then(function (list) {
+      S.accounts = list;
       var p = list.filter(function (x) { return x.id === last; })[0] || (list.length === 1 ? list[0] : null);
-      if (p && !p.protected) syncScreen(p, false); else playlistsScreen();
-    })["catch"](function () { playlistsScreen(); });
+      if (p && !p.protected) syncScreen(p, false); else accountsScreen();
+    })["catch"](function () { accountsScreen(); });
   }
   function splashDone() { var s = $("splash"); if (s) { s.classList.add("out"); setTimeout(function () { s.parentNode && s.parentNode.removeChild(s); }, 600); } }
   function boot() {
@@ -447,7 +442,7 @@
       if (s.license && s.license.active && localStorage.getItem("hugo.activated") === "1") start(); else activationScreen();
     })["catch"](function (e) { S.license = null; splashDone(); activationScreen(); toast("Sem conexão com o servidor: " + e.message); });
   }
-  window.HugoApp = { go: go, S: S, playlists: playlistsScreen, choose: choose };
+  window.HugoApp = { go: go, S: S, accounts: accountsScreen, choose: choose, h: h, $: $, view: view, shell: shell, toast: toast };
   registerTvKeys(); Player.init();
   Store.open()["catch"](function () {}).then(function () { setTimeout(boot, HUGO.DEMO ? 300 : 0); });
 })();

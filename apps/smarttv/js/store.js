@@ -1,8 +1,8 @@
 /*
- * Catálogo no aparelho (IndexedDB), pensado para listas de 400 mil+ itens em TV fraca:
+ * Catálogo no aparelho (IndexedDB), pensado para catálogos de 400 mil+ itens em TV fraca:
  *  - baixa por tipo e em páginas (nunca um JSON gigante na memória);
  *  - cada item guarda a posição no tipo (ai) e no grupo (gi) -> a grade virtual lê só a "janela" visível por faixa de índice;
- *  - atualização grava numa geração nova e só troca o ponteiro no fim (a lista antiga nunca some no meio);
+ *  - atualização grava numa geração nova e só troca o ponteiro no fim (o catálogo antigo nunca some no meio);
  *  - a geração antiga é apagada depois, aos poucos.
  */
 var Store = (function () {
@@ -32,7 +32,7 @@ var Store = (function () {
     return new Promise(function (ok, bad) {
       var t = DB.transaction("items", "readwrite"), s = t.objectStore("items");
       for (var i = 0; i < rows.length; i++) s.add(rows[i]);
-      t.oncomplete = ok; t.onerror = function () { bad(t.error); }; t.onabort = function () { bad(t.error || new Error("Sem espaço para guardar a lista")); };
+      t.oncomplete = ok; t.onerror = function () { bad(t.error); }; t.onabort = function () { bad(t.error || new Error("Sem espaço para guardar o catálogo")); };
     });
   }
   function deleteKey(k) {
@@ -51,7 +51,7 @@ var Store = (function () {
     });
   }
 
-  /** Baixa e guarda a lista. onProgress(texto, fração) */
+  /** Baixa e guarda o catálogo. onProgress(texto, fração) */
   function sync(pid, onProgress) {
     var k = pid + "#" + Date.now(), meta = { k: k, syncedAt: Date.now(), counts: {}, groups: {} }, prev;
     return open().then(function () { return getMeta(pid); }).then(function (m) {
@@ -66,7 +66,7 @@ var Store = (function () {
             var rows = [];
             (r.channels || []).forEach(function (c) {
               var g = c.group || "Outros";
-              // M3U: episódios soltos viram 1 card por série + episódios ("ep") achados pelo nome da série
+              // formato simples: episódios soltos viram 1 card por série + episódios ("ep") achados pelo nome da série
               if (t === "series" && !c.seriesId && c.seriesName) {
                 rows.push({ k: k, t: "ep", g: g, gi: 0, ai: 0, n: c.name || "", u: c.url, l: c.logo || "", nl: "", sn: c.seriesName, se: c.season, ep: c.episode });
                 if (seenSeries[c.seriesName]) return;
