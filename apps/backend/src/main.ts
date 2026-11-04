@@ -19,6 +19,7 @@ import { canonicalDeviceId, isAppDeviceId } from "./device-id.js";
 import { clientVersionCode, normalizeConfig, updateRequired, type AppConfig } from "./app-config.js";
 import { createSubtitlesRouter } from "./subtitles.js";
 import { searchTmdb } from "./tmdb.js";
+import { createSecurity, ensureSecurityStore, type SecurityStore } from "./security.js";
 import { backfillExisting, decideTrial, newDeviceTrial, webPendingTrial, resolvePendingTrial, type TrialFlag, type TrialLedger, type TrialPendingReason, type TrialPolicy } from "./trial-ledger.js";
 import { PAID_PLANS, PLAN_LABELS, PLAN_PRICES, planExpiry, renewalBase, type PaidPlan } from "./plans.js";
 import { revokeRefundedOrder } from "./refunds.js";
@@ -88,6 +89,8 @@ interface Db {
   trialLedger?: TrialLedger;
   /** versão mínima obrigatória etc. (admin) */
   config?: AppConfig;
+  /** alertas de segurança e IPs banidos */
+  security?: SecurityStore;
 }
 
 type FullDb = Db & Partial<ResellerStore>;
@@ -208,7 +211,18 @@ app.disable("x-powered-by");
 app.set("trust proxy", 1);
 // IPs bloqueados (abuso). BLOCKED_IPS no .env, separado por vírgula.
 const BLOCKED_IPS = new Set((process.env.BLOCKED_IPS ?? "").split(",").map((x) => x.trim()).filter(Boolean));
-app.use((req, res, next) => (BLOCKED_IPS.has(clientIp(req)) ? res.status(403).json({ error: "forbidden" }) : next()));
+// IPs que nunca são banidos automaticamente (dono, servidor). SECURITY_ALLOW_IPS no .env.
+const SECURITY_ALLOW_IPS = new Set(["127.0.0.1", "::1", ...(process.env.SECURITY_ALLOW_IPS ?? "").split(",").map((x) => x.trim()).filter(Boolean)]);
+const security = createSecurity({ store: () => ensureSecurityStore(db), persist: () => persist(), adminToken: ADMIN_TOKEN, allowIps: SECURITY_ALLOW_IPS });
+// nginx manda para cá as respostas 429 (limit_req) e 403 (deny) para virar alerta — só aceita do próprio servidor
+app.all("/__nginx-alert", (req, res) => {
+  const peer = (req.socket.remoteAddress ?? "").replace(/^::ffff:/, "");
+  if (peer !== "127.0.0.1" && peer !== "::1") return res.status(404).json({ error: "not_found" });
+  const kind = req.header("x-alert-kind") === "blocked" ? "blocked_ip" : "rate_429";
+  security.record(kind, (req.header("x-real-ip") ?? "").trim(), { path: req.header("x-original-uri") ?? "", ua: req.header("user-agent") ?? "" });
+  res.status(kind === "blocked_ip" ? 403 : 429).json({ error: kind === "blocked_ip" ? "forbidden" : "too_many_requests" });
+});
+app.use(security.middleware(BLOCKED_IPS, clientIp));
 app.use(helmet());
 app.use(cors({ origin: true }));
 app.use(express.json({ limit: "32kb" }));
@@ -253,6 +267,19 @@ const resellerDeps = {
 };
 app.use("/reseller", createResellerRouter(resellerDeps));
 app.use("/admin/resellers", createResellerAdminRouter({ ...resellerDeps, allDevices: () => Object.values(db.devices) }));
+app.get("/admin/security", (req, res) => (security.validAdmin(req) ? res.json(security.summary()) : res.status(401).json({ error: "admin_unauthorized" })));
+app.post("/admin/security/unban", (req, res) => {
+  if (!security.validAdmin(req)) return res.status(401).json({ error: "admin_unauthorized" });
+  const ip = String(req.body?.ip ?? "").trim();
+  res.json({ ok: security.unban(ip), ip });
+});
+app.post("/admin/security/ban", (req, res) => {
+  if (!security.validAdmin(req)) return res.status(401).json({ error: "admin_unauthorized" });
+  const ip = String(req.body?.ip ?? "").trim();
+  if (!/^[0-9a-fA-F:.]{3,45}$/.test(ip)) return res.status(400).json({ error: "invalid_ip" });
+  const b = security.ban(ip, String(req.body?.reason ?? "manual").slice(0, 120), false);
+  res.json({ ok: Boolean(b), ban: b, ...(b ? {} : { reason: "ip_na_lista_segura" }) });
+});
 app.use("/admin", createAdminRouter({
   devices: () => db.devices,
   persist,
@@ -346,6 +373,10 @@ app.post("/devices/register", async (req, res) => {
   };
   markTrialIp(device, ip, now);
   db.devices[storeKey] = device;
+  // mesmo IP criando 3+ aparelhos em 10 min → alerta (e conta para o banimento automático)
+  if (ip && Object.values(db.devices).filter((d) => d.createdIp === ip && now.getTime() - new Date(d.createdAt).getTime() <= 10 * 60 * 1000).length >= 3) {
+    security.record("device_burst", ip, { path: "/devices/register", ua: req.header("user-agent") ?? "" });
+  }
   await persist();
   res.status(201).json({ registered: true, created: true, deviceId: device.deviceId, ...trialInfo(device) });
 });
