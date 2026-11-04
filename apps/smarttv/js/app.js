@@ -422,9 +422,10 @@
   function back() {
     if (S.back.length) return S.back.pop()();
     var c = UI.current();
-    if (S.pl && c && c.name !== "nav" && $("top") && !$("top").classList.contains("hidden")) return UI.focus("nav");
+    /* na tela inicial o Voltar sai para a Home da TV (exigência LG webOS 23+); nas outras abas volta ao menu */
+    if (S.pl && S.tab !== "home" && c && c.name !== "nav" && $("top") && !$("top").classList.contains("hidden")) return UI.focus("nav");
     if (S.pl && S.tab !== "home") return go("home");
-    try { if (window.tizen) tizen.application.getCurrentApplication().exit(); else if (window.webOS && webOS.platformBack) webOS.platformBack(); } catch (e) {}
+    try { if (window.tizen) tizen.application.getCurrentApplication().exit(); else if (window.webOS && webOS.platformBack) webOS.platformBack(); else if (window.PalmSystem && PalmSystem.platformBack) PalmSystem.platformBack(); } catch (e) {}
   }
 
   /* ---------- início ---------- */

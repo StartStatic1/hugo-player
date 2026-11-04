@@ -11,5 +11,8 @@
   "resolution": "1920x1080",
   "disableBackHistoryAPI": true,
   "transparent": false,
-  "requiredACG": []
+  "requiredACG": [],
+  "appDescription": "Media player for content you already have",
+  "splashBackground": "img/splash.png",
+  "splashColor": "#0b0d14"
 }

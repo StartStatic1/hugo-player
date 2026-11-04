@@ -35,7 +35,7 @@ var UI = (function () {
     opts = opts || {};
     var items = [], idx = 0, horiz = opts.horizontal !== false;
     var z = {
-      set: function (arr) { items = arr; if (idx >= items.length) idx = 0; return z; },
+      set: function (arr) { items = arr; if (idx >= items.length) idx = 0; items.forEach(function (it, i) { if (it.el) it.el._zi = { z: z, i: i }; }); return z; },
       empty: function () { return !items.length; },
       focusIn: function () { if (opts.keep === false) idx = 0; paint(); },
       blur: function () { items.forEach(function (it) { it.el.classList.remove("f"); }); },
@@ -46,7 +46,8 @@ var UI = (function () {
       },
       enter: function () { var it = items[idx]; it && it.onEnter && it.onEnter(it); },
       long: function () { var it = items[idx]; it && it.onLong && it.onLong(it); },
-      index: function (i) { if (i != null) idx = i; return idx; }
+      index: function (i) { if (i != null) idx = i; return idx; },
+      point: function (i) { idx = i; paint(); }
     };
     function paint() {
       items.forEach(function (it, i) { it.el.classList.toggle("f", i === idx); });
@@ -74,7 +75,7 @@ var UI = (function () {
         var it = cache[i];
         if (it === undefined) load(i);
         var n = nodes[i];
-        if (!n) { n = nodes[i] = h("div", "cell " + (o.cls || "")); n.style.transform = "translate(" + c * o.cw + "px," + r * o.ch + "px)"; inner.appendChild(n); n._filled = false; }
+        if (!n) { n = nodes[i] = h("div", "cell " + (o.cls || "")); n._zi = { z: z, i: i }; n.style.transform = "translate(" + c * o.cw + "px," + r * o.ch + "px)"; inner.appendChild(n); n._filled = false; }
         if (it !== undefined && !n._filled) { n.innerHTML = o.render(it, i); n._filled = true; n.classList.remove("ghost"); } else if (it === undefined) n.classList.add("ghost");
         n.classList.toggle("f", active && i === idx);
       }
@@ -106,7 +107,8 @@ var UI = (function () {
       index: function (i) { if (i != null) { idx = i; scrollTo(); } return idx; },
       item: function () { return cache[idx]; },
       refresh: function (i) { var n = nodes[i]; if (n && cache[i] !== undefined) { n.innerHTML = o.render(cache[i], i); } },
-      destroy: function () { gen++; }
+      destroy: function () { gen++; },
+      point: function (i) { if (i >= o.count) return; idx = i; active = true; focused(); }
     };
     scrollTo(); draw();
     return z;
@@ -116,7 +118,8 @@ var UI = (function () {
   function HRow(el, items, o) {
     var idx = 0, left = 0, active = false;
     var track = h("div", "track"); el.appendChild(track);
-    items.forEach(function (it, i) { var n = h("div", "cell " + (o.cls || ""), o.render(it, i)); n.style.transform = "translateX(" + i * o.cw + "px)"; track.appendChild(n); it._n = n; });
+    var hz;
+    items.forEach(function (it, i) { var n = h("div", "cell " + (o.cls || ""), o.render(it, i)); n._zi = { get z() { return hz; }, i: i }; n.style.transform = "translateX(" + i * o.cw + "px)"; track.appendChild(n); it._n = n; });
     function paint() {
       var W = el.clientWidth, x = idx * o.cw;
       if (x < left + 10) left = Math.max(0, x - o.cw * 0.2);
@@ -125,7 +128,8 @@ var UI = (function () {
       items.forEach(function (it, i) { it._n.classList.toggle("f", active && i === idx); });
       if (active && o.onFocus) o.onFocus(items[idx], idx);
     }
-    return {
+    return hz = {
+      point: function (i) { idx = i; active = true; paint(); },
       empty: function () { return !items.length; },
       focusIn: function () { active = true; paint(); },
       blur: function () { active = false; paint(); },
@@ -134,6 +138,22 @@ var UI = (function () {
       long: function () { o.onLong && o.onLong(items[idx], idx, items[idx]._n); }
     };
   }
+
+  /* ---------- ponteiro (Magic Remote / mouse): passar por cima foca, clicar abre, roda rola ---------- */
+  function hit(t) { while (t && t !== document.body) { if (t._zi) return t._zi; t = t.parentNode; } return null; }
+  function point(zi, click) {
+    var z = zi.z; if (!z || !z.point || zones[z.name] !== z) return false;
+    if (cur && cur !== z) cur.blur();
+    cur = z; z.point(zi.i); if (click && z.enter) z.enter(); return true;
+  }
+  var wheelAt = 0;
+  document.addEventListener("mouseover", function (e) { if (window.Player && Player.isOpen()) return; var zi = hit(e.target); if (zi) point(zi, false); });
+  document.addEventListener("click", function (e) {
+    if (window.Player && Player.isOpen()) { Player.key(13); return; }
+    if (e.target && e.target.tagName === "INPUT") return;
+    var zi = hit(e.target); if (zi) { e.preventDefault(); point(zi, true); }
+  });
+  document.addEventListener("wheel", function (e) { var now = Date.now(); if (now - wheelAt < 120 || (window.Player && Player.isOpen())) return; wheelAt = now; key(e.deltaY > 0 ? "D" : "U"); }, { passive: true });
 
   return { h: h, esc: esc, img: img, reset: reset, add: add, link: link, focus: focus, key: key, enter: enter, long: long, current: current, Flat: Flat, VGrid: VGrid, HRow: HRow };
 })();
