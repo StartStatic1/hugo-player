@@ -38,7 +38,7 @@ var Mock = (function () {
     else if (path.indexOf("/channels/version") === 0) r = { versionName: "0.5.64" };
     else if (/\/verify-pin$/.test(path)) { if (body && body.pin === "1234") r = { ok: true }; else return Promise.reject(Object.assign(new Error("PIN incorreto"), { status: 403 })); }
     else if (path.indexOf("/playlists") === 0 && m === "GET") r = { playlists: pls };
-    else if (path.indexOf("/playlists") === 0 && m === "POST") { pls.push({ id: "demo" + (pls.length + 1), name: body.name, type: body.type }); r = { playlist: pls[pls.length - 1] }; }
+    else if (path.indexOf("/playlists") === 0 && m === "POST") { pls.push({ id: "demo" + (pls.length + 1), name: body.name, type: body.type }); r = { account: pls[pls.length - 1] }; }
     else if (path.indexOf("/playlists") === 0 && m === "DELETE") { pls = pls.filter(function (p) { return path.indexOf(p.id) < 0; }); r = {}; }
     else if (path.indexOf("/channels/series-episodes") === 0) { var e = []; for (var s = 1; s <= 3; s++) for (var i = 1; i <= 8; i++) e.push({ name: "Episódio " + i, season: s, episode: i, url: STREAM + "#e" + s + i, durationSecs: 2700 }); r = { name: "Série", plot: "Uma série de demonstração.", episodes: e }; }
     else if (path.indexOf("/epg/now-next") === 0) { r = { available: true, channels: {} }; (body.ids || []).forEach(function (id) { r.channels[id] = { channelId: id, now: prog(id, 1), next: prog(id, 2) }; }); }

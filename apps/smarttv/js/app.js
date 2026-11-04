@@ -325,7 +325,7 @@
     Api.accounts().then(function (list) {
       S.accounts = list; $("pc").innerHTML = "";
       var cards = list.map(function (p, i) {
-        var el = h("div", "plcard", '<div class="plic">' + esc((p.name || "?").slice(0, 1).toUpperCase()) + '</div><div class="pln">' + esc(p.name) + '</div><div class="plt">' + (p.type === "xtream" ? "Xtream" : "M3U") + (p.protected ? ' · <span class="lock">🔒 PIN</span>' : "") + "</div>");
+        var el = h("div", "plcard", '<div class="plic">' + esc((p.name || "?").slice(0, 1).toUpperCase()) + '</div><div class="pln">' + esc(p.name) + '</div><div class="plt">' + (HUGO.STORE ? "Conta" : String(p.type || "").toUpperCase()) + (p.protected ? ' · <span class="lock">🔒 PIN</span>' : "") + "</div>");
         el.style.setProperty("--c", ["#22D3EE", "#7C5CFF", "#EC4899"][i % 3]); $("pc").appendChild(el);
         return { el: el, onEnter: function () { choose(p); }, onLong: function () { if (el.dataset.sure) { Api.deleteAccount(p.id).then(accountsScreen)["catch"](function (e) { toast(e.message); }); } else { el.dataset.sure = 1; toast("Segure OK de novo para excluir “" + p.name + "”"); } } };
       });
