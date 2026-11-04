@@ -61,7 +61,8 @@ var Player = (function () {
       return;
     }
     var isHls = /\.m3u8(\?|#|$)/i.test(url) || (/\/live\//i.test(url) && !/\.(ts|mp4|mkv)(\?|$)/i.test(url));
-    if (isHls && !video.canPlayType("application/vnd.apple.mpegurl") && window.Hls && Hls.isSupported()) {
+    /* hls.js sempre que der (Chrome novo diz "maybe" para HLS nativo e falha); webOS usa o nativo */
+    if (isHls && window.Hls && Hls.isSupported() && !(window.webOS || window.PalmSystem)) {
       hls = new Hls({ enableWorker: true, maxBufferLength: 20, backBufferLength: 10 });
       hls.on(Hls.Events.ERROR, function (_, d) { if (d.fatal) { status("Sem conexão com o servidor do canal."); show(8000); } });
       hls.loadSource(url); hls.attachMedia(video);
