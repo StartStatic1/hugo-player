@@ -103,9 +103,10 @@ export function createSecurity(deps: SecurityDeps) {
         record("blocked_ip", ip, { path: req.path, ua: req.header("user-agent") ?? "" });
         return res.status(403).json({ error: "forbidden" });
       }
+      const path = req.path; // capturado antes dos routers montados reescreverem req.url
       res.on("finish", () => {
-        if (res.statusCode === 401 && req.path.startsWith("/admin")) record("admin_401", ip, { path: req.path, ua: req.header("user-agent") ?? "" });
-        else if (res.statusCode === 429) record("rate_429", ip, { path: req.path, ua: req.header("user-agent") ?? "" });
+        if (res.statusCode === 401 && path.startsWith("/admin")) record("admin_401", ip, { path, ua: req.header("user-agent") ?? "" });
+        else if (res.statusCode === 429) record("rate_429", ip, { path, ua: req.header("user-agent") ?? "" });
       });
       next();
     };
