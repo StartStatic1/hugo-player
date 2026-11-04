@@ -1,0 +1,51 @@
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{width:1920px;height:1080px;overflow:hidden;background:#0b0d14;color:#fff;font-family:"Samsung Sans","LG Smart",Roboto,Arial,sans-serif}
+#app{display:flex;width:1920px;height:1080px}
+.menu{width:300px;background:#11141f;padding:48px 24px;display:flex;flex-direction:column;gap:10px}
+.menu .logo{font-size:40px;font-weight:700;margin-bottom:36px;color:#8b5cf6}
+.menu .item{font-size:28px;padding:18px 22px;border-radius:14px;color:#c9cbd6}
+.menu .item.active{background:#1c2033;color:#fff}
+#screen{flex:1;padding:48px 56px;overflow:hidden;position:relative}
+h1{font-size:44px;margin-bottom:28px}
+h2{font-size:30px;margin:18px 0 14px;color:#c9cbd6}
+.muted{color:#8a8fa3}
+.focusable{outline:none;transition:transform .12s,box-shadow .12s}
+.focused{box-shadow:0 0 0 5px #8b5cf6;transform:scale(1.04);z-index:2}
+.btn{display:inline-block;font-size:28px;padding:18px 34px;border-radius:14px;background:#1c2033;margin:8px 16px 8px 0}
+.btn.primary{background:#7c3aed}
+.card{background:#151927;border-radius:18px;padding:30px;margin-bottom:22px}
+.big{font-size:56px;font-weight:700;letter-spacing:2px;color:#a78bfa}
+.row{display:flex;gap:22px;align-items:center}
+.cols{display:flex;gap:28px;height:900px}
+.groups{width:420px;overflow:hidden}
+.groups .g{font-size:26px;padding:14px 18px;border-radius:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.groups .g .n{float:right;color:#8a8fa3}
+.list{flex:1;overflow:hidden}
+.ch{display:flex;align-items:center;gap:20px;font-size:28px;padding:12px 18px;border-radius:12px;background:#121624;margin-bottom:10px}
+.ch img{width:84px;height:56px;object-fit:contain;background:#0b0d14;border-radius:8px}
+.ch .num{width:60px;color:#8a8fa3}
+.ch .fav{margin-left:auto;color:#facc15}
+.grid{display:flex;flex-wrap:wrap;gap:26px;align-content:flex-start;overflow:hidden;height:900px}
+.poster{width:220px;height:370px;border-radius:14px;background:#151927;overflow:hidden;position:relative}
+.poster img{width:220px;height:310px;object-fit:cover;display:block;background:#1c2033}
+.poster .t{font-size:20px;padding:8px 10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.field{font-size:28px;padding:18px 22px;border-radius:12px;background:#0b0d14;border:2px solid #2a3048;color:#fff;width:900px;margin:8px 0 18px}
+.label{font-size:24px;color:#8a8fa3}
+.player{position:fixed;left:0;top:0;width:1920px;height:1080px;background:#000;z-index:50}
+.player video,.player object{width:1920px;height:1080px}
+.osd{position:absolute;left:0;right:0;bottom:0;padding:40px 80px;background:linear-gradient(transparent,rgba(0,0,0,.85));transition:opacity .3s}
+.osd.off{opacity:0}
+#osdTitle{font-size:40px;font-weight:700}
+#osdInfo{font-size:26px;color:#c9cbd6;margin:8px 0 16px}
+.bar{height:8px;background:#333;border-radius:4px}
+#osdBar{height:8px;background:#8b5cf6;border-radius:4px;width:0}
+.hidden{display:none!important}
+.toast{position:fixed;bottom:60px;left:50%;transform:translateX(-50%);background:#1c2033;padding:20px 40px;border-radius:16px;font-size:28px;z-index:99}
+.kbd{display:flex;flex-wrap:wrap;width:1000px;gap:8px;margin-top:10px}
+.kbd .k{width:72px;height:64px;line-height:64px;text-align:center;font-size:26px;background:#1c2033;border-radius:10px}
+.kbd .k.w{width:160px}
+.list,.groups{padding:10px 16px}
+.ch.focused{transform:none;background:#1c2033}
+.ch .num{width:100px}
+.groups .g.focused{transform:none;background:#1c2033}
+.groups .g.active{color:#a78bfa;background:#151927}
