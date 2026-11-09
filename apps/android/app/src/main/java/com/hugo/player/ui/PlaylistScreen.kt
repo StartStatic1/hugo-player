@@ -145,7 +145,10 @@ fun PlaylistScreen(
                 updateBlocked = true
                 return
             }
-            listError = if (DeviceIdentity.isTrialDenied(context) && (e as? ApiException)?.status == 401)
+            listError = if (StoreBuild.isPlay && (e as? ApiException)?.status == 401)
+                // Google Play: só a mensagem neutra + ID e Key (sem preço, plano ou link)
+                tr(StoreBuild.LICENSE_INACTIVE) + "\nDevice ID: ${identity.deviceId} · Key: ${identity.deviceKey}"
+            else if (DeviceIdentity.isTrialDenied(context) && (e as? ApiException)?.status == 401)
                 "Este aparelho já usou o teste grátis. Para continuar, ative um plano no site hugo.streamflixvip.online com o Device ID e a Key deste aparelho (em Configurações)."
             else e.message ?: "Não foi possível carregar as playlists."
             if (playlists == null) playlists = emptyList()
@@ -450,7 +453,7 @@ fun PlaylistScreen(
 
     if (showAdd) {
         var name by remember { mutableStateOf("") }
-        var isXtream by remember { mutableStateOf(false) }
+        var isXtream by remember { mutableStateOf(StoreBuild.isPlay) }
         var url by remember { mutableStateOf("") }
         var host by remember { mutableStateOf("") }
         var user by remember { mutableStateOf("") }
@@ -464,7 +467,9 @@ fun PlaylistScreen(
             title = { Text("Adicionar playlist", color = Color.White) },
             text = {
                 Column(Modifier.verticalScroll(rememberScrollState())) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (StoreBuild.isPlay) {
+                        Text("Entre com os dados de acesso do seu provedor.", color = HugoColors.TextMuted, fontSize = 13.sp)
+                    } else Row(verticalAlignment = Alignment.CenterVertically) {
                         Text("Tipo:", color = Color.White, fontSize = 14.sp)
                         Spacer(Modifier.width(12.dp))
                         FilterChip(selected = !isXtream, onClick = { isXtream = false }, label = { Text("M3U") })
@@ -750,6 +755,8 @@ private fun UpdateRequiredPanel(onRetry: () -> Unit) {
             FocusSurface(
                 onClick = {
                     if (step.busy) return@FocusSurface
+                    // Google Play: a loja atualiza o app (sem baixar APK)
+                    if (StoreBuild.isPlay) { StoreBuild.openStoreListing(context); return@FocusSurface }
                     scope.launch { runAppUpdate(context, null, resolveUrl = true) { step = it } }
                 },
                 modifier = Modifier.fillMaxWidth().height(56.dp).focusRequester(updateFocus),

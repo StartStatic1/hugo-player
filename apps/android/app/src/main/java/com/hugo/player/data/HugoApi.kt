@@ -121,6 +121,7 @@ object HugoApi {
 
     private fun friendlyApiError(code: Int, apiErr: String?): String = when {
         code == 426 || apiErr == "update_required" -> "Atualize o Hugo Player para continuar."
+        code == 401 && com.hugo.player.ui.StoreBuild.isPlay -> com.hugo.player.ui.StoreBuild.LICENSE_INACTIVE
         code == 401 -> "Dispositivo não autorizado. Ative novamente no site."
         apiErr == "invalid_pin" -> "PIN incorreto."
         apiErr == "pin_required" -> "Esta playlist exige PIN."

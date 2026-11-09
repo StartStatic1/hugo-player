@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -18,6 +20,8 @@ android {
         // Servidor da API; para testar contra outro: ./gradlew assembleDebug -PhugoApiUrl=http://10.0.2.2:8080
         val apiUrl = (project.findProperty("hugoApiUrl") as String?) ?: "https://api-hugo.streamflixvip.online"
         buildConfigField("String", "API_BASE_URL", "\"$apiUrl\"")
+        // false no APK do site / Fire TV; true só no build "play" (Google Play)
+        buildConfigField("boolean", "PLAY_STORE", "false")
     }
 
     signingConfigs {
@@ -26,6 +30,19 @@ android {
             storePassword = "hugoplayer2026"
             keyAlias = "hugo"
             keyPassword = "hugoplayer2026"
+        }
+        // Google Play: chave de UPLOAD (fora do repositório). Caminho do .properties em
+        // -PhugoPlaySigning=/caminho/hugo-play-upload.properties (storeFile, storePassword, keyAlias, keyPassword).
+        // Sem isso o build "play" sai sem assinatura (assina-se depois com jarsigner/apksigner).
+        val playProps = (project.findProperty("hugoPlaySigning") as String?)?.let { file(it) }
+        if (playProps != null && playProps.canRead()) {
+            val p = Properties().apply { playProps.inputStream().use { load(it) } }
+            create("playUpload") {
+                storeFile = file(p.getProperty("storeFile"))
+                storePassword = p.getProperty("storePassword")
+                keyAlias = p.getProperty("keyAlias")
+                keyPassword = p.getProperty("keyPassword")
+            }
         }
     }
     buildTypes {
@@ -36,6 +53,16 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+        }
+        // Build separado para a Google Play (./gradlew bundlePlay). Não muda debug/release (APK do site).
+        // Sem compra, sem autoatualização por APK, sem entrada de link M3U; pacote próprio (com.hugo.player.play).
+        create("play") {
+            initWith(getByName("release"))
+            applicationIdSuffix = ".play"
+            versionNameSuffix = "-play"
+            signingConfig = signingConfigs.findByName("playUpload")
+            buildConfigField("boolean", "PLAY_STORE", "true")
+            matchingFallbacks += listOf("release")
         }
     }
 

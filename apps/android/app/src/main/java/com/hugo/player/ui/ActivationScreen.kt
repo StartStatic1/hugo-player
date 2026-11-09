@@ -65,7 +65,9 @@ fun ActivationScreen(onActivated: (String, String) -> Unit) {
                 color = HugoColors.TextMuted, fontSize = 14.sp, lineHeight = 20.sp
             )
             Spacer(Modifier.height(20.dp))
-            listOf("Abra o site do Hugo Player", "Entre com Device ID + Key", "Adicione sua lista M3U").forEachIndexed { i, s ->
+            val steps = if (StoreBuild.isPlay) listOf("Abra o site do Hugo Player", "Entre com Device ID + Key", "Adicione os dados do seu provedor")
+                else listOf("Abra o site do Hugo Player", "Entre com Device ID + Key", "Adicione sua lista M3U")
+            steps.forEachIndexed { i, s ->
                 Row(Modifier.padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.size(24.dp).background(HugoColors.Accent, RoundedCornerShape(50)), contentAlignment = Alignment.Center) {
                         Text("${i + 1}", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
@@ -99,7 +101,8 @@ fun ActivationScreen(onActivated: (String, String) -> Unit) {
                         Icon(Icons.Default.CloudOff, null, tint = Color(0xFFFBBF24), modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(8.dp))
                         Text(
-                            "Este aparelho já usou o teste grátis. Para usar o Hugo Player, ative um plano no site com o Device ID e a Key acima.",
+                            if (StoreBuild.isPlay) StoreBuild.LICENSE_INACTIVE
+                            else "Este aparelho já usou o teste grátis. Para usar o Hugo Player, ative um plano no site com o Device ID e a Key acima.",
                             color = Color(0xFFFBBF24), fontSize = 13.sp, lineHeight = 18.sp, modifier = Modifier.weight(1f),
                         )
                     } else {

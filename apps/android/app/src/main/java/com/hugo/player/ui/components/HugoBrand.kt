@@ -83,10 +83,10 @@ fun HugoIconButton(
             .padding(horizontal = if (label != null) 12.dp else 9.dp, vertical = 9.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(icon, contentDescription = contentDescription, tint = if (enabled) tint else HugoColors.TextDim, modifier = Modifier.size(18.dp))
+        Icon(icon, contentDescription = if (com.hugo.player.ui.StoreBuild.isPlay) com.hugo.player.ui.tr(contentDescription) else contentDescription, tint = if (enabled) tint else HugoColors.TextDim, modifier = Modifier.size(18.dp))
         if (label != null) {
             Spacer(Modifier.width(6.dp))
-            Text(label, color = if (enabled) Color.White else HugoColors.TextDim, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+            Text(if (com.hugo.player.ui.StoreBuild.isPlay) com.hugo.player.ui.tr(label) else label, color = if (enabled) Color.White else HugoColors.TextDim, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
         }
     }
 }

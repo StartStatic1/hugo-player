@@ -46,11 +46,57 @@ fun UpdateGate(content: @Composable () -> Unit) {
 
     val current = info
     if (current != null && current.mandatory) {
-        ForcedUpdateScreen(current, onRetryCheck = { AppUpdate.requestRecheck() })
+        // Google Play: nada de baixar APK; manda atualizar pela loja
+        if (StoreBuild.isPlay) PlayForcedUpdateScreen(current) else ForcedUpdateScreen(current, onRetryCheck = { AppUpdate.requestRecheck() })
         return
     }
     content()
-    if (current != null && !dismissed) OptionalUpdateDialog(current) { dismissed = true }
+    // Google Play: atualização opcional fica por conta da loja (sem popup de download)
+    if (current != null && !dismissed && !StoreBuild.isPlay) OptionalUpdateDialog(current) { dismissed = true }
+}
+
+/** Versão abaixo da mínima no build da Google Play: só abre a página do app na loja. */
+@Composable
+private fun PlayForcedUpdateScreen(info: UpdateInfo) {
+    val context = LocalContext.current
+    val buttonFocus = remember { FocusRequester() }
+    BackHandler { }
+    LaunchedEffect(Unit) { kotlinx.coroutines.delay(100); runCatching { buttonFocus.requestFocus() } }
+    Box(Modifier.fillMaxSize().background(HugoColors.Background), contentAlignment = Alignment.Center) {
+        Column(
+            Modifier.widthIn(max = 560.dp).padding(32.dp)
+                .background(HugoColors.Card, RoundedCornerShape(20.dp))
+                .border(1.dp, Color(0xFF1F2638), RoundedCornerShape(20.dp))
+                .padding(32.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            HugoLogo(markSize = 40.dp, textSize = 26.sp)
+            Spacer(Modifier.height(20.dp))
+            Icon(Icons.Default.SystemUpdate, null, tint = HugoColors.Accent, modifier = Modifier.size(44.dp))
+            Spacer(Modifier.height(12.dp))
+            Text("Atualização obrigatória", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.height(10.dp))
+            Text(
+                "Atualize o Hugo Player pela Google Play para continuar.",
+                color = HugoColors.TextMuted, fontSize = 15.sp, lineHeight = 21.sp, textAlign = TextAlign.Center,
+            )
+            Spacer(Modifier.height(24.dp))
+            FocusSurface(
+                onClick = { StoreBuild.openStoreListing(context) },
+                modifier = Modifier.fillMaxWidth().height(56.dp).focusRequester(buttonFocus),
+                color = HugoColors.Accent,
+                focusedColor = HugoColors.Accent,
+                focusBorderWidth = 3.dp,
+                focusBorderColor = Color.White,
+                focusScale = 1.03f,
+                shape = RoundedCornerShape(14.dp),
+            ) { _ ->
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text("Abrir Google Play", color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+                }
+            }
+        }
+    }
 }
 
 @Composable

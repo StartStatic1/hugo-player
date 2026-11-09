@@ -79,7 +79,7 @@ private enum class SettingsCat(val label: String, val hint: String, val icon: Im
     PARENTAL("Controle dos pais", "PIN para conteúdo adulto", Icons.Rounded.Lock),
     CACHE("Cache e histórico", "Lista salva no aparelho e histórico", Icons.Rounded.Storage),
     DIAG("Diagnóstico", "Último fechamento inesperado", Icons.Rounded.BugReport),
-    ABOUT("Site e suporte", "Ajuda e site oficial", Icons.Rounded.Public),
+    ABOUT(if (StoreBuild.isPlay) "Suporte" else "Site e suporte", if (StoreBuild.isPlay) "Ajuda" else "Ajuda e site oficial", Icons.Rounded.Public),
 }
 
 /**
@@ -388,7 +388,10 @@ fun SettingsScreen(deviceId: String, deviceKey: String, onBack: () -> Unit) {
                                 Icon(Icons.Rounded.Language, null, tint = HugoColors.Cyan, modifier = Modifier.fillMaxSize())
                             }
                         }
-                        if (compact) {
+                        if (StoreBuild.isPlay) {
+                            // Google Play: sem atalho para o site (que tem preços/compra); só o suporte
+                            support(Modifier.fillMaxWidth().padding(bottom = 14.dp))
+                        } else if (compact) {
                             Column(verticalArrangement = Arrangement.spacedBy(14.dp), modifier = Modifier.fillMaxWidth().padding(bottom = 14.dp)) {
                                 support(Modifier.fillMaxWidth()); site(Modifier.fillMaxWidth())
                             }

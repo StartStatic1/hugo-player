@@ -32,6 +32,11 @@ object I18n {
     fun set(code: String) { AppSettings.language = code; lang = AppSettings.language }
 
     fun t(pt: String): String {
+        val out = translate(pt)
+        return if (StoreBuild.isPlay) StoreBuild.wording(out, lang) else out
+    }
+
+    private fun translate(pt: String): String {
         val l = lang
         if (l == "pt" || pt.isEmpty()) return pt
         val i = if (l == "en") 0 else 1
@@ -320,6 +325,13 @@ object I18n {
         "Temporadas" to arrayOf("Seasons", "Temporadas"),
         "Buscar" to arrayOf("Search", "Buscar"),
         "Remover" to arrayOf("Remove", "Quitar"),
+        // build Google Play
+        "Ajuda" to arrayOf("Help", "Ayuda"),
+        "Teste encerrado. Ative sua licença." to arrayOf("Trial ended. Activate your license.", "Prueba finalizada. Activa tu licencia."),
+        "Adicione os dados do seu provedor" to arrayOf("Add your provider's login", "Agrega los datos de tu proveedor"),
+        "Entre com os dados de acesso do seu provedor." to arrayOf("Enter the login details from your provider.", "Ingresa los datos de acceso de tu proveedor."),
+        "Atualize o Hugo Player pela Google Play para continuar." to arrayOf("Update Hugo Player on Google Play to continue.", "Actualiza Hugo Player en Google Play para continuar."),
+        "Abrir Google Play" to arrayOf("Open Google Play", "Abrir Google Play"),
     )
 }
 
