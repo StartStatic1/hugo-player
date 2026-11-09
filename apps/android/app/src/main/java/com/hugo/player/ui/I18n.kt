@@ -32,8 +32,9 @@ object I18n {
     fun set(code: String) { AppSettings.language = code; lang = AppSettings.language }
 
     fun t(pt: String): String {
-        val out = translate(pt)
-        return if (StoreBuild.isPlay) StoreBuild.wording(out, lang) else out
+        if (!StoreBuild.isPlay) return translate(pt)
+        val out = StoreBuild.extra(pt, lang) ?: translate(pt)
+        return StoreBuild.wording(out, lang)
     }
 
     private fun translate(pt: String): String {

@@ -33,6 +33,32 @@ object StoreBuild {
         }
     }
 
+    /**
+     * Textos que o app base ainda não traduz (só aparecem traduzidos no build "play", para as telas da loja).
+     * Chave em português; valor [en, es]. Aplicado antes de [wording].
+     */
+    private val EXTRA: Map<String, Array<String>> = mapOf(
+        "Canais, filmes e séries que você marcar" to arrayOf("Channels, movies and series you mark", "Canales, películas y series que marques"),
+        "Trocar, adicionar ou editar listas" to arrayOf("Switch, add or edit connections", "Cambiar, agregar o editar conexiones"),
+    )
+    private val EXTRA_PATTERNS: List<Pair<Regex, Array<String>>> = listOf(
+        Regex("Vence em (\\d{2}/\\d{2}/\\d{4})") to arrayOf("Expires on $1", "Vence el $1"),
+        Regex(" · atualizada ") to arrayOf(" · updated ", " · actualizada "),
+        Regex("(\\d[\\d.]*) canais") to arrayOf("$1 channels", "$1 canales"),
+        Regex("(\\d[\\d.]*) filmes") to arrayOf("$1 movies", "$1 películas"),
+        Regex("(\\d[\\d.]*) séries") to arrayOf("$1 series", "$1 series"),
+    )
+
+    /** Tradução extra do build "play" (en/es); null = usar a tradução normal. */
+    fun extra(pt: String, lang: String): String? {
+        if (lang == "pt") return null
+        val i = if (lang == "en") 0 else 1
+        EXTRA[pt]?.let { return it[i] }
+        var out = pt
+        for ((rx, rep) in EXTRA_PATTERNS) out = rx.replace(out, rep[i])
+        return if (out != pt) out else null
+    }
+
     private val WORDS = Regex("(?<![\\p{L}])(playlists|playlist|listas|lista)(?![\\p{L}])", RegexOption.IGNORE_CASE)
     private val cache = java.util.concurrent.ConcurrentHashMap<String, String>()
 
