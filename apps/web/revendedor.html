@@ -8,7 +8,8 @@
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <link rel="icon" href="/favicon-32.png" sizes="32x32" type="image/png">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
-<title>Hugo Player · Área do revendedor</title>
+<title data-i18n="meta.title">Hugo Player · Área do revendedor</title>
+<script src="/i18n.js"></script>
 <style>
 :root{--bg:#07080f;--bg2:#0c0e18;--card:#12141f;--card2:#181b2a;--primary:#8b5cf6;--pink:#ec4899;--ok:#34d399;--err:#f87171;--warn:#fbbf24;--text:#f1f5f9;--muted:#94a3b8;--border:#1f2638}
 *{box-sizing:border-box}html,body{margin:0}
@@ -31,6 +32,7 @@ table{width:100%;border-collapse:collapse;font-size:14px}th,td{text-align:left;p
 .badge{display:inline-block;padding:3px 9px;border-radius:999px;font-size:12px;font-weight:600;background:var(--card2);border:1px solid var(--border)}.badge.active,.badge.approved{color:var(--ok)}.badge.expired,.badge.blocked,.badge.revoked,.badge.rejected{color:var(--err)}.badge.pending,.badge.transferred{color:var(--warn)}
 .confirm{background:#1b1630;border:1px solid #8b5cf680;border-radius:12px;padding:16px;margin-top:14px}.plus{color:var(--ok)}.minus{color:var(--err)}
 .scroll{overflow-x:auto}
+@media(max-width:560px){.topbar{flex-wrap:wrap}.topbar>div:last-child{width:100%}}
 @media(max-width:480px){.topbar{padding:12px 14px}.brand{font-size:17px}.brand-sub{display:none}}
 @media(max-width:800px){.packs{grid-template-columns:1fr 1fr}.row,.stats{grid-template-columns:1fr}}
 [data-support-wa][hidden]{display:none !important}.wa-link{display:inline-flex;align-items:center;gap:6px;border-color:#25D36655 !important}.wa-link .wa-ico{flex:none}
@@ -39,34 +41,34 @@ table{width:100%;border-collapse:collapse;font-size:14px}th,td{text-align:left;p
 </head>
 <body>
 <header class="topbar">
-  <div class="brand" style="white-space:nowrap"><img class="mark" src="/favicon.svg" alt="" width="34" height="34">Hugo&nbsp;<span>Player</span><small class="brand-sub" style="color:var(--muted);font-weight:600;font-size:13px;margin-left:6px">Revenda</small></div>
-  <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:flex-end"><a class="btn ghost sm" href="/" style="text-decoration:none;color:var(--text);white-space:nowrap">← Área do cliente</a><a class="btn ghost sm wa-link" data-support-wa data-wa-icon hidden href="#" style="text-decoration:none;color:var(--text);white-space:nowrap">Suporte</a>
-  <div id="sessionBox" class="hidden"><span id="whoName" style="color:var(--muted);font-size:13px;margin-right:10px"></span><button class="btn ghost sm" id="logoutBtn" type="button">Sair</button></div></div>
+  <div class="brand" style="white-space:nowrap"><img class="mark" src="/favicon.svg" alt="" width="34" height="34">Hugo&nbsp;<span>Player</span><small class="brand-sub" style="color:var(--muted);font-weight:600;font-size:13px;margin-left:6px" data-i18n="brand.sub">Revenda</small></div>
+  <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:flex-end"><a class="btn ghost sm" href="/" style="text-decoration:none;color:var(--text);white-space:nowrap" data-i18n="nav.client">← Área do cliente</a><a class="btn ghost sm wa-link" data-lang-only="pt" data-support-wa data-wa-icon hidden href="#" style="text-decoration:none;color:var(--text);white-space:nowrap">Suporte</a><a class="btn ghost sm" data-lang-only="en es" data-support-email href="mailto:hugoplayervip@gmail.com" style="text-decoration:none;color:var(--text);white-space:nowrap" data-i18n="nav.email">✉ Suporte</a><a class="btn ghost sm wa-link" data-lang-only="en es" data-support-wa data-wa-icon hidden href="#" style="text-decoration:none;color:var(--text);white-space:nowrap" data-i18n="nav.wa">WhatsApp (PT)</a><div data-lang-switch></div>
+  <div id="sessionBox" class="hidden"><span id="whoName" style="color:var(--muted);font-size:13px;margin-right:10px"></span><button class="btn ghost sm" id="logoutBtn" type="button" data-i18n="logout">Sair</button></div></div>
 </header>
 <main class="wrap">
 
 <section id="authView">
   <div class="card" style="max-width:520px;margin:20px auto">
-    <div class="tabs"><button type="button" id="tabLogin" class="on">Entrar como revendedor</button><button type="button" id="tabSignup">Quero ser revendedor</button></div>
+    <div class="tabs"><button type="button" id="tabLogin" class="on" data-i18n="tab.login">Entrar como revendedor</button><button type="button" id="tabSignup" data-i18n="tab.signup">Quero ser revendedor</button></div>
     <form id="loginForm">
-      <h1>Entrar</h1>
-      <p class="desc">Área para revendedores aprovados ativarem clientes com créditos.</p>
-      <label for="lEmail">E-mail</label><input id="lEmail" type="email" autocomplete="username" required>
-      <label for="lPass">Senha</label><input id="lPass" type="password" autocomplete="current-password" required>
-      <div style="margin-top:16px"><button class="btn" type="submit">Entrar</button></div>
+      <h1 data-i18n="login.h">Entrar</h1>
+      <p class="desc" data-i18n="login.desc">Área para revendedores aprovados ativarem clientes com créditos.</p>
+      <label for="lEmail" data-i18n="f.email">E-mail</label><input id="lEmail" type="email" autocomplete="username" required>
+      <label for="lPass" data-i18n="f.pass">Senha</label><input id="lPass" type="password" autocomplete="current-password" required>
+      <div style="margin-top:16px"><button class="btn" type="submit" data-i18n="login.btn">Entrar</button></div>
       <div id="loginStatus" class="status"></div>
     </form>
     <form id="signupForm" class="hidden">
-      <h1>Quero ser revendedor</h1>
-      <p class="desc">Preencha seus dados. Seu cadastro fica <b>aguardando aprovação</b>; depois de aprovado você entra aqui, compra créditos e ativa seus clientes (1 crédito = 1 ano de Hugo Player Premium).</p>
-      <label for="sName">Nome</label><input id="sName" maxlength="80" autocomplete="name" required>
-      <label for="sEmail">E-mail</label><input id="sEmail" type="email" maxlength="120" autocomplete="email" required>
-      <label for="sWhats">WhatsApp</label><input id="sWhats" maxlength="30" autocomplete="tel" placeholder="(00) 00000-0000">
+      <h1 data-i18n="su.h">Quero ser revendedor</h1>
+      <p class="desc" data-i18n="su.desc">Preencha seus dados. Seu cadastro fica <b>aguardando aprovação</b>; depois de aprovado você entra aqui, compra créditos e ativa seus clientes (1 crédito = 1 ano de Hugo Player Premium).</p>
+      <label for="sName" data-i18n="f.name">Nome</label><input id="sName" maxlength="80" autocomplete="name" required>
+      <label for="sEmail" data-i18n="f.email">E-mail</label><input id="sEmail" type="email" maxlength="120" autocomplete="email" required>
+      <label for="sWhats">WhatsApp</label><input id="sWhats" maxlength="30" autocomplete="tel" placeholder="(00) 00000-0000" data-i18n-attr="placeholder:ph.whats">
       <div class="row">
-        <div><label for="sPass">Senha (mín. 8)</label><input id="sPass" type="password" minlength="8" autocomplete="new-password" required></div>
-        <div><label for="sPass2">Repita a senha</label><input id="sPass2" type="password" minlength="8" autocomplete="new-password" required></div>
+        <div><label for="sPass" data-i18n="f.pass8">Senha (mín. 8)</label><input id="sPass" type="password" minlength="8" autocomplete="new-password" required></div>
+        <div><label for="sPass2" data-i18n="f.pass2">Repita a senha</label><input id="sPass2" type="password" minlength="8" autocomplete="new-password" required></div>
       </div>
-      <div style="margin-top:16px"><button class="btn" type="submit">Enviar cadastro</button></div>
+      <div style="margin-top:16px"><button class="btn" type="submit" data-i18n="su.btn">Enviar cadastro</button></div>
       <div id="signupStatus" class="status"></div>
     </form>
   </div>
@@ -76,46 +78,48 @@ table{width:100%;border-collapse:collapse;font-size:14px}th,td{text-align:left;p
   <div id="statusBanner" class="card hidden"></div>
   <div class="card">
     <div class="stats">
-      <div class="stat"><small>Saldo</small><b id="balance">–</b><small>créditos (1 crédito = 1 ano)</small></div>
-      <div class="stat"><small>Clientes ativados</small><b id="clientCount">–</b><small>aparelhos</small></div>
-      <div class="stat"><small>Situação da conta</small><b id="accStatus" style="font-size:20px">–</b><small id="accEmail"></small></div>
+      <div class="stat"><small data-i18n="st.bal">Saldo</small><b id="balance">–</b><small data-i18n="st.bal2">créditos (1 crédito = 1 ano)</small></div>
+      <div class="stat"><small data-i18n="st.cli">Clientes ativados</small><b id="clientCount">–</b><small data-i18n="st.cli2">aparelhos</small></div>
+      <div class="stat"><small data-i18n="st.acc">Situação da conta</small><b id="accStatus" style="font-size:20px">–</b><small id="accEmail"></small></div>
     </div>
     <div id="payStatus" class="status"></div>
   </div>
 
   <div class="card" id="activateCard">
-    <h2>Ativar cliente (1 ano)</h2>
-    <p class="desc">Peça ao cliente o <b>Device ID</b> e a <b>Key</b> que aparecem na tela do app Hugo Player. Se o aparelho ainda tiver dias, o ano novo é <b>somado</b>.</p>
+    <h2 data-i18n="act.h">Ativar cliente (1 ano)</h2>
+    <p class="desc" data-i18n="act.desc">Peça ao cliente o <b>Device ID</b> e a <b>Key</b> que aparecem na tela do app Hugo Player. Se o aparelho ainda tiver dias, o ano novo é <b>somado</b>.</p>
     <form id="actForm">
       <div class="row">
-        <div><label for="aId">Device ID do cliente</label><input id="aId" class="mono" maxlength="128" autocomplete="off" required></div>
-        <div><label for="aKey">Key do cliente</label><input id="aKey" class="mono" maxlength="64" autocomplete="off" required></div>
+        <div><label for="aId" data-i18n="act.id">Device ID do cliente</label><input id="aId" class="mono" maxlength="128" autocomplete="off" required></div>
+        <div><label for="aKey" data-i18n="act.key">Key do cliente</label><input id="aKey" class="mono" maxlength="64" autocomplete="off" required></div>
       </div>
-      <div style="margin-top:14px"><button class="btn" type="submit" id="actCheckBtn">Conferir aparelho</button></div>
+      <div style="margin-top:14px"><button class="btn" type="submit" id="actCheckBtn" data-i18n="act.btn">Conferir aparelho</button></div>
     </form>
     <div id="actConfirm" class="confirm hidden"></div>
     <div id="actStatus" class="status"></div>
   </div>
 
   <div class="card" id="buyCard">
-    <h2>Comprar créditos</h2>
-    <p class="desc">Pagamento por Pix ou cartão (InfinitePay). Os créditos entram automaticamente depois da confirmação.</p>
+    <h2 data-i18n="buy.h">Comprar créditos</h2>
+    <p class="desc" data-i18n="buy.desc">Pagamento por Pix ou cartão (InfinitePay). Os créditos entram automaticamente depois da confirmação.</p>
+    <p class="desc" data-lang-only="en es" data-i18n="buy.intl" style="color:#fde68a">Prices are in Brazilian reais (BRL).</p>
     <div class="packs" id="packs"></div>
     <div id="buyStatus" class="status"></div>
   </div>
 
   <div class="card">
-    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap"><h2>Meus clientes</h2><button class="btn ghost sm" type="button" id="reloadBtn">↻ Atualizar</button></div>
-    <div class="scroll"><table><thead><tr><th>Aparelho</th><th>Plano</th><th>Vence em</th><th>Situação</th><th></th></tr></thead><tbody id="clients"></tbody></table></div>
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap"><h2 data-i18n="cl.h">Meus clientes</h2><button class="btn ghost sm" type="button" id="reloadBtn" data-i18n="refresh">↻ Atualizar</button></div>
+    <div class="scroll"><table><thead><tr data-i18n="cl.th"><th>Aparelho</th><th>Plano</th><th>Vence em</th><th>Situação</th><th></th></tr></thead><tbody id="clients"></tbody></table></div>
     <div id="renewStatus" class="status"></div>
   </div>
 
   <div class="card">
-    <h2>Histórico de créditos</h2>
-    <div class="scroll"><table><thead><tr><th>Data</th><th>Movimento</th><th>Créditos</th><th>Detalhe</th></tr></thead><tbody id="ledger"></tbody></table></div>
+    <h2 data-i18n="lg.h">Histórico de créditos</h2>
+    <div class="scroll"><table><thead><tr data-i18n="lg.th"><th>Data</th><th>Movimento</th><th>Créditos</th><th>Detalhe</th></tr></thead><tbody id="ledger"></tbody></table></div>
   </div>
 </section>
 </main>
+<script src="/i18n-revendedor.js"></script>
 <script>
 "use strict";
 var API = (new URLSearchParams(location.search).get("api") || "https://api-hugo.streamflixvip.online").replace(/\/+$/, "");
@@ -124,9 +128,9 @@ var token = sessionStorage.getItem(KEY) || "";
 var me = null, packs = [], pendingDevice = null;
 function $(id) { return document.getElementById(id); }
 function esc(v) { return String(v == null ? "" : v).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); }
-function money(c) { return (c / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" }); }
-function date(s) { if (!s) return "sem vencimento"; var d = new Date(s); return isNaN(d) ? "–" : d.toLocaleDateString("pt-BR"); }
-function dateTime(s) { var d = new Date(s); return isNaN(d) ? "–" : d.toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" }); }
+function money(c) { return (c / 100).toLocaleString(HUGO_I18N.locale, HUGO_I18N.lang === "pt" ? { style: "currency", currency: "BRL" } : { style: "currency", currency: "BRL", currencyDisplay: "narrowSymbol" }); }
+function date(s) { if (!s) return T("sem vencimento"); var d = new Date(s); return isNaN(d) ? "–" : d.toLocaleDateString(HUGO_I18N.locale); }
+function dateTime(s) { var d = new Date(s); return isNaN(d) ? "–" : d.toLocaleString(HUGO_I18N.locale, { dateStyle: "short", timeStyle: "short" }); }
 function show(el, msg, kind) { el.className = "status " + (kind || ""); el.textContent = msg || ""; }
 var STATUS = { pending: "Aguardando aprovação", approved: "Aprovada", rejected: "Recusada", blocked: "Bloqueada" };
 var CLIENT = { active: "Ativo", expired: "Vencido", blocked: "Bloqueado", revoked: "Revogado", transferred: "Transferido", missing: "Não encontrado" };
@@ -140,7 +144,10 @@ var ERR = {
   checkout_create_failed: "Não foi possível abrir o pagamento agora. Tente de novo.", not_your_client: "Este aparelho não está na sua lista de clientes.",
   session_expired: "Sua sessão expirou. Entre de novo.", not_logged_in: "Entre de novo."
 };
-function errMsg(e) { return (e && (e.message || ERR[e.error])) || "Algo deu errado. Tente de novo."; }
+function errMsg(e) {
+  if (HUGO_I18N.lang !== "pt" && e && e.error) { var tr = HUGO_I18N.get("err." + e.error); if (tr) return tr; }
+  return T((e && (e.message || ERR[e.error])) || "Algo deu errado. Tente de novo.");
+}
 
 async function api(method, path, body) {
   var headers = { "Content-Type": "application/json" };
@@ -164,17 +171,17 @@ $("tabSignup").onclick = function () { setTab(true); };
 $("signupForm").onsubmit = async function (ev) {
   ev.preventDefault();
   var st = $("signupStatus");
-  if ($("sPass").value !== $("sPass2").value) return show(st, "As senhas não são iguais.", "err");
+  if ($("sPass").value !== $("sPass2").value) return show(st, T("As senhas não são iguais."), "err");
   try {
     await api("POST", "/reseller/signup", { name: $("sName").value, email: $("sEmail").value, whatsapp: $("sWhats").value || undefined, password: $("sPass").value });
     $("signupForm").reset();
-    show(st, "Cadastro enviado! Ele fica aguardando aprovação do administrador. Você já pode entrar para acompanhar.", "ok");
+    show(st, T("Cadastro enviado! Ele fica aguardando aprovação do administrador. Você já pode entrar para acompanhar."), "ok");
   } catch (e) { show(st, errMsg(e), "err"); }
 };
 
 $("loginForm").onsubmit = async function (ev) {
   ev.preventDefault();
-  var st = $("loginStatus"); show(st, "Entrando…");
+  var st = $("loginStatus"); show(st, T("Entrando…"));
   try {
     var data = await api("POST", "/reseller/login", { email: $("lEmail").value, password: $("lPass").value });
     token = data.token; sessionStorage.setItem(KEY, token); $("lPass").value = "";
@@ -186,7 +193,7 @@ function logout(expired) {
   if (token && !expired) { fetch(API + "/reseller/logout", { method: "POST", headers: { Authorization: "Bearer " + token } }).catch(function () {}); }
   token = ""; me = null; sessionStorage.removeItem(KEY);
   $("panelView").classList.add("hidden"); $("sessionBox").classList.add("hidden"); $("authView").classList.remove("hidden");
-  if (expired) show($("loginStatus"), "Sua sessão terminou. Entre de novo.", "warn");
+  if (expired) show($("loginStatus"), T("Sua sessão terminou. Entre de novo."), "warn");
 }
 $("logoutBtn").onclick = function () { logout(false); };
 
@@ -202,12 +209,12 @@ async function refresh() {
   $("whoName").textContent = me.name;
   $("balance").textContent = me.balance;
   $("balance").style.color = me.balance < 0 ? "var(--err)" : "";
-  $("accStatus").innerHTML = '<span class="badge ' + esc(me.status) + '">' + esc(STATUS[me.status] || me.status) + "</span>";
+  $("accStatus").innerHTML = '<span class="badge ' + esc(me.status) + '">' + esc(T(STATUS[me.status] || me.status)) + "</span>";
   $("accEmail").textContent = me.email;
   var banner = $("statusBanner"), approved = me.status === "approved";
-  if (me.status === "pending") { banner.innerHTML = "<h2>Cadastro aguardando aprovação</h2><p class=desc>Assim que o administrador aprovar, você poderá comprar créditos e ativar clientes aqui.</p>"; }
-  else if (me.status === "blocked") { banner.innerHTML = "<h2>Conta bloqueada</h2><p class=desc>" + esc(me.blockedReason || "Fale com o administrador.") + "</p>"; }
-  else if (me.status === "rejected") { banner.innerHTML = "<h2>Cadastro recusado</h2><p class=desc>Fale com o administrador.</p>"; }
+  if (me.status === "pending") { banner.innerHTML = T("<h2>Cadastro aguardando aprovação</h2><p class=desc>Assim que o administrador aprovar, você poderá comprar créditos e ativar clientes aqui.</p>"); }
+  else if (me.status === "blocked") { banner.innerHTML = "<h2>" + T("Conta bloqueada") + "</h2><p class=desc>" + esc(me.blockedReason || T("Fale com o administrador.")) + "</p>"; }
+  else if (me.status === "rejected") { banner.innerHTML = "<h2>" + T("Cadastro recusado") + "</h2><p class=desc>" + T("Fale com o administrador.") + "</p>"; }
   banner.classList.toggle("hidden", approved);
   $("activateCard").classList.toggle("hidden", !approved);
   $("buyCard").classList.toggle("hidden", !approved);
@@ -217,14 +224,14 @@ async function refresh() {
 
 function renderPacks() {
   $("packs").innerHTML = packs.map(function (p) {
-    return '<div class="pack"><b>' + esc(p.credits) + ' créditos</b><div>' + esc(money(p.amount)) + '</div><div class="per">' + esc(money(Math.round(p.amount / p.credits))) + ' por crédito · ' + esc(p.credits) + ' ativações de 1 ano</div>' +
-      '<button class="btn" type="button" data-pack="' + esc(p.id) + '">Comprar</button></div>';
+    return '<div class="pack"><b>' + esc(T("{n} créditos", { n: p.credits })) + '</b><div>' + esc(money(p.amount)) + '</div><div class="per">' + esc(T("{v} por crédito · {n} ativações de 1 ano", { v: money(Math.round(p.amount / p.credits)), n: p.credits })) + '</div>' +
+      '<button class="btn" type="button" data-pack="' + esc(p.id) + '">' + T("Comprar") + '</button></div>';
   }).join("");
   Array.prototype.forEach.call($("packs").querySelectorAll("button[data-pack]"), function (b) { b.onclick = function () { buy(b.getAttribute("data-pack"), b); }; });
 }
 
 async function buy(packId, btn) {
-  var st = $("buyStatus"); btn.disabled = true; show(st, "Abrindo pagamento seguro…");
+  var st = $("buyStatus"); btn.disabled = true; show(st, T("Abrindo pagamento seguro…"));
   try { var data = await api("POST", "/reseller/orders", { packId: packId }); location.href = data.checkoutUrl; }
   catch (e) { show(st, errMsg(e), "err"); btn.disabled = false; }
 }
@@ -232,31 +239,31 @@ async function buy(packId, btn) {
 async function handlePaymentReturn() {
   var q = new URLSearchParams(location.search);
   if (q.get("payment") !== "complete" || !q.get("order_nsu")) return;
-  var st = $("payStatus"); show(st, "Confirmando o pagamento…", "warn");
+  var st = $("payStatus"); show(st, T("Confirmando o pagamento…"), "warn");
   var body = { transaction_nsu: q.get("transaction_nsu") || q.get("transaction_id") || "", slug: q.get("slug") || q.get("invoice_slug") || "" };
   for (var i = 0; i < 8; i++) {
     try {
       var r = await api("POST", "/reseller/orders/" + encodeURIComponent(q.get("order_nsu")) + "/check", body);
-      if (r.status === "paid") { show(st, "Pagamento confirmado! Créditos adicionados. Saldo: " + r.balance, "ok"); history.replaceState(null, "", location.pathname); await refresh(); return; }
+      if (r.status === "paid") { show(st, T("Pagamento confirmado! Créditos adicionados. Saldo: {b}", { b: r.balance }), "ok"); history.replaceState(null, "", location.pathname); await refresh(); return; }
     } catch (e) { if (e.status === 404) break; }
     await new Promise(function (ok) { setTimeout(ok, 4000); });
   }
-  show(st, "Ainda não recebemos a confirmação do pagamento. Se você pagou, os créditos entram em alguns minutos — toque em Atualizar.", "warn");
+  show(st, T("Ainda não recebemos a confirmação do pagamento. Se você pagou, os créditos entram em alguns minutos — toque em Atualizar."), "warn");
 }
 
 function previewHtml(p, renew) {
   var d = p.device;
-  return "<b>Confirme a ativação</b><p class=desc style='margin:8px 0'>Aparelho <span class=mono>" + esc(d.deviceId) + "</span> · " + esc(d.platform) + " · cadastrado em " + esc(date(d.createdAt)) + "<br>" +
-    "Licença hoje: " + esc(d.type === "premium" ? "Premium" : d.type === "trial" ? "Teste" : "Vencida") + (d.expiresAt ? " até " + esc(date(d.expiresAt)) : "") + "<br>" +
-    "<b>Depois:</b> Premium 1 ano até <b>" + esc(date(p.newExpiresAt)) + "</b>" + (p.renewal ? " (renovação, dias somados)" : "") + "<br>" +
-    "Custo: <b>" + esc(p.cost) + " crédito</b> · Saldo " + esc(p.balance) + " → <b>" + esc(p.balanceAfter) + "</b></p>" +
-    "<button class='btn ok' type='button' id='doConfirm'" + (p.balanceAfter < 0 ? " disabled" : "") + ">Confirmar e usar 1 crédito</button> <button class='btn ghost' type='button' id='doCancel'>Cancelar</button>" +
-    (p.balanceAfter < 0 ? "<div class='status err'>Saldo insuficiente. Compre créditos.</div>" : "");
+  return "<b>" + T("Confirme a ativação") + "</b><p class=desc style='margin:8px 0'>" + T("Aparelho") + " <span class=mono>" + esc(d.deviceId) + "</span> · " + esc(d.platform) + " · " + T("cadastrado em") + " " + esc(date(d.createdAt)) + "<br>" +
+    T("Licença hoje: ") + esc(T(d.type === "premium" ? "Premium" : d.type === "trial" ? "Teste" : "Vencida")) + (d.expiresAt ? T(" até ") + esc(date(d.expiresAt)) : "") + "<br>" +
+    T("<b>Depois:</b> Premium 1 ano até <b>") + esc(date(p.newExpiresAt)) + "</b>" + (p.renewal ? T(" (renovação, dias somados)") : "") + "<br>" +
+    T("Custo: <b>{c} crédito</b> · Saldo ", { c: esc(p.cost) }) + esc(p.balance) + " → <b>" + esc(p.balanceAfter) + "</b></p>" +
+    "<button class='btn ok' type='button' id='doConfirm'" + (p.balanceAfter < 0 ? " disabled" : "") + ">" + T("Confirmar e usar 1 crédito") + "</button> <button class='btn ghost' type='button' id='doCancel'>" + T("Cancelar") + "</button>" +
+    (p.balanceAfter < 0 ? "<div class='status err'>" + T("Saldo insuficiente. Compre créditos.") + "</div>" : "");
 }
 
 $("actForm").onsubmit = async function (ev) {
   ev.preventDefault();
-  var st = $("actStatus"); show(st, "Conferindo…"); $("actConfirm").classList.add("hidden");
+  var st = $("actStatus"); show(st, T("Conferindo…")); $("actConfirm").classList.add("hidden");
   var body = { deviceId: $("aId").value.trim(), deviceKey: $("aKey").value.trim() };
   try {
     var r = await api("POST", "/reseller/activate", body);
@@ -269,7 +276,7 @@ $("actForm").onsubmit = async function (ev) {
       try {
         var ok = await api("POST", "/reseller/activate", Object.assign({}, pendingDevice, { confirm: true }));
         box.classList.add("hidden"); $("actForm").reset(); pendingDevice = null;
-        show(st, "Ativado! Premium até " + date(ok.activation.expiresAt) + ". Peça ao cliente para fechar e abrir o app. Saldo: " + ok.balance, "ok");
+        show(st, T("Ativado! Premium até {d}. Peça ao cliente para fechar e abrir o app. Saldo: {b}", { d: date(ok.activation.expiresAt), b: ok.balance }), "ok");
         await refresh();
       } catch (e) { show(st, errMsg(e), "err"); this.disabled = false; }
     };
@@ -280,12 +287,12 @@ async function loadClients() {
   var data = await api("GET", "/reseller/clients");
   $("clientCount").textContent = data.clients.length;
   var tb = $("clients");
-  if (!data.clients.length) { tb.innerHTML = "<tr><td colspan=5 style='color:var(--muted)'>Nenhum cliente ativado ainda.</td></tr>"; return; }
+  if (!data.clients.length) { tb.innerHTML = "<tr><td colspan=5 style='color:var(--muted)'>" + T("Nenhum cliente ativado ainda.") + "</td></tr>"; return; }
   tb.innerHTML = data.clients.map(function (c) {
     return "<tr><td><span class=mono>" + esc(c.deviceId) + "</span><br><small style='color:var(--muted)'>" + esc(c.platform || "") + "</small></td>" +
-      "<td>" + esc(c.plan === "annual" ? "Anual" : c.plan === "lifetime" ? "Vitalício" : c.plan === "semiannual" ? "6 meses" : c.plan || "–") + "</td>" +
-      "<td>" + esc(date(c.expiresAt)) + "</td><td><span class='badge " + esc(c.status) + "'>" + esc(CLIENT[c.status] || c.status) + "</span></td>" +
-      "<td>" + (c.canRenew && me.status === "approved" ? "<button class='btn ghost sm' type='button' data-renew='" + esc(c.deviceId) + "'>Renovar +1 ano</button>" : "") + "</td></tr>";
+      "<td>" + esc(T(c.plan === "annual" ? "Anual" : c.plan === "lifetime" ? "Vitalício" : c.plan === "semiannual" ? "6 meses" : c.plan || "–")) + "</td>" +
+      "<td>" + esc(date(c.expiresAt)) + "</td><td><span class='badge " + esc(c.status) + "'>" + esc(T(CLIENT[c.status] || c.status)) + "</span></td>" +
+      "<td>" + (c.canRenew && me.status === "approved" ? "<button class='btn ghost sm' type='button' data-renew='" + esc(c.deviceId) + "'>" + T("Renovar +1 ano") + "</button>" : "") + "</td></tr>";
   }).join("");
   Array.prototype.forEach.call(tb.querySelectorAll("button[data-renew]"), function (b) { b.onclick = function () { renew(b.getAttribute("data-renew"), b); }; });
 }
@@ -295,10 +302,10 @@ async function renew(id, btn) {
   try {
     var r = await api("POST", "/reseller/renew", { deviceId: id });
     var p = r.preview;
-    if (!confirm("Renovar " + id + " por mais 1 ano?\nNovo vencimento: " + date(p.newExpiresAt) + "\nCusto: 1 crédito (saldo " + p.balance + " → " + p.balanceAfter + ")")) return;
+    if (!confirm(T("Renovar {id} por mais 1 ano?\nNovo vencimento: {d}\nCusto: 1 crédito (saldo {b} → {a})", { id: id, d: date(p.newExpiresAt), b: p.balance, a: p.balanceAfter }))) return;
     btn.disabled = true;
     var ok = await api("POST", "/reseller/renew", { deviceId: id, confirm: true });
-    show(st, "Renovado! Premium até " + date(ok.activation.expiresAt) + ". Saldo: " + ok.balance, "ok");
+    show(st, T("Renovado! Premium até {d}. Saldo: {b}", { d: date(ok.activation.expiresAt), b: ok.balance }), "ok");
     await refresh();
   } catch (e) { show(st, errMsg(e), "err"); btn.disabled = false; }
 }
@@ -306,17 +313,17 @@ async function renew(id, btn) {
 async function loadLedger() {
   var data = await api("GET", "/reseller/ledger");
   var tb = $("ledger");
-  if (!data.entries.length) { tb.innerHTML = "<tr><td colspan=4 style='color:var(--muted)'>Sem movimentos.</td></tr>"; return; }
+  if (!data.entries.length) { tb.innerHTML = "<tr><td colspan=4 style='color:var(--muted)'>" + T("Sem movimentos.") + "</td></tr>"; return; }
   tb.innerHTML = data.entries.map(function (e) {
-    return "<tr><td>" + esc(dateTime(e.at)) + "</td><td>" + esc(KIND[e.kind] || e.kind) + "</td><td class='" + (e.delta > 0 ? "plus" : "minus") + "'>" + (e.delta > 0 ? "+" : "") + esc(e.delta) + "</td><td>" +
-      esc(e.deviceId ? "Aparelho " + e.deviceId : "") + (e.reason ? (e.deviceId ? " · " : "") + esc(e.reason) : "") + "</td></tr>";
+    return "<tr><td>" + esc(dateTime(e.at)) + "</td><td>" + esc(T(KIND[e.kind] || e.kind)) + "</td><td class='" + (e.delta > 0 ? "plus" : "minus") + "'>" + (e.delta > 0 ? "+" : "") + esc(e.delta) + "</td><td>" +
+      esc(e.deviceId ? T("Aparelho") + " " + e.deviceId : "") + (e.reason ? (e.deviceId ? " · " : "") + esc(e.reason) : "") + "</td></tr>";
   }).join("");
 }
 
 $("reloadBtn").onclick = function () { refresh().catch(function (e) { show($("renewStatus"), errMsg(e), "err"); }); };
 
 if (token) { enterPanel().catch(function () {}); }
-else if (new URLSearchParams(location.search).get("payment") === "complete") { show($("loginStatus"), "Entre para confirmar seu pagamento e ver os créditos.", "warn"); }
+else if (new URLSearchParams(location.search).get("payment") === "complete") { show($("loginStatus"), T("Entre para confirmar seu pagamento e ver os créditos."), "warn"); }
 </script>
 <script src="/site-config.js"></script>
 </body>

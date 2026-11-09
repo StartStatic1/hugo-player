@@ -7,7 +7,18 @@
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <link rel="icon" href="/favicon-32.png" sizes="32x32" type="image/png">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
-<title>Hugo Player · Minhas Playlists</title>
+<title data-i18n="meta.title">Hugo Player · Minhas Playlists</title>
+<meta name="description" content="Hugo Player: reprodutor de mídia para as suas próprias playlists M3U e Xtream Codes. Nenhum conteúdo incluído." data-i18n-attr="content:meta.desc">
+<meta property="og:title" content="Hugo Player" data-i18n-attr="content:meta.ogtitle">
+<meta property="og:description" content="Reprodutor de mídia para as suas próprias playlists M3U e Xtream Codes. Nenhum conteúdo incluído." data-i18n-attr="content:meta.desc">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://hugo.streamflixvip.online/">
+<meta property="og:image" content="https://hugo.streamflixvip.online/app-icon-192.png">
+<link rel="alternate" hreflang="pt-BR" href="https://hugo.streamflixvip.online/?lang=pt">
+<link rel="alternate" hreflang="en" href="https://hugo.streamflixvip.online/?lang=en">
+<link rel="alternate" hreflang="es" href="https://hugo.streamflixvip.online/?lang=es">
+<link rel="alternate" hreflang="x-default" href="https://hugo.streamflixvip.online/">
+<script src="/i18n.js"></script>
 <style>
 :root {
   --bg: #07080f;
@@ -164,102 +175,105 @@ button:disabled { opacity: .55; cursor: not-allowed; }
 <header class="topbar">
   <div class="brand"><img class="mark" src="/favicon.svg" alt="" width="34" height="34">Hugo <span>Player</span></div>
   <div class="top-right">
-    <a class="btn ghost sm reseller-link" href="/baixar" title="Baixar o app Hugo Player (celular, Fire TV e TV Box)">⬇ Baixar app</a>
-    <a class="btn ghost sm reseller-link" href="/revendedor" title="Área do revendedor: compre créditos e ative clientes">🤝 Área do revendedor</a>
-    <a class="btn ghost sm reseller-link wa-link" data-support-wa data-wa-icon hidden href="#" title="Suporte do Hugo Player no WhatsApp">Suporte</a>
+    <a class="btn ghost sm reseller-link" href="/baixar" title="Baixar o app Hugo Player (celular, Fire TV e TV Box)" data-i18n="nav.download" data-i18n-attr="title:nav.download.t">⬇ Baixar app</a>
+    <a class="btn ghost sm reseller-link" href="/revendedor" title="Área do revendedor: compre créditos e ative clientes" data-i18n="nav.reseller" data-i18n-attr="title:nav.reseller.t">🤝 Área do revendedor</a>
+    <a class="btn ghost sm reseller-link wa-link" data-lang-only="pt" data-support-wa data-wa-icon hidden href="#" title="Suporte do Hugo Player no WhatsApp">Suporte</a>
+    <a class="btn ghost sm reseller-link" data-lang-only="en es" data-support-email href="mailto:hugoplayervip@gmail.com" title="Email support" data-i18n="nav.email" data-i18n-attr="title:nav.email.t">✉ Suporte</a>
+    <div data-lang-switch></div>
     <div class="session hidden" id="session">
       <span class="who mono" id="whoId"></span>
       <span class="badge" id="licBadge"></span>
-      <button class="btn ghost sm" id="logoutBtn" type="button">Sair</button>
+      <button class="btn ghost sm" id="logoutBtn" type="button" data-i18n="logout">Sair</button>
     </div>
   </div>
 </header>
 <main class="wrap">
   <section id="loginView" class="login">
     <div class="hero">
-      <h1>Gerencie suas listas no <em>Hugo Player</em></h1>
-      <p class="desc">Entre com o Device ID e a Device Key que aparecem na tela do aplicativo.</p>
+      <h1 data-i18n="hero.title">Gerencie suas listas no <em>Hugo Player</em></h1>
+      <p class="desc" data-i18n="hero.desc">Entre com o Device ID e a Device Key que aparecem na tela do aplicativo.</p>
       <div class="steps">
-        <div class="step"><b><i>1</i>Abra o app</b>No celular ou na TV</div>
-        <div class="step"><b><i>2</i>Copie ID e Key</b>Mostrados na tela inicial</div>
-        <div class="step"><b><i>3</i>Entre aqui</b>E adicione suas listas</div>
+        <div class="step" data-i18n="step1"><b><i>1</i>Abra o app</b>No celular ou na TV</div>
+        <div class="step" data-i18n="step2"><b><i>2</i>Copie ID e Key</b>Mostrados na tela inicial</div>
+        <div class="step" data-i18n="step3"><b><i>3</i>Entre aqui</b>E adicione suas listas</div>
       </div>
       <div class="trust-grid">
-        <div class="trust-item"><strong>🔐 Acesso por dispositivo</strong><span>Seu ID e sua Key identificam o aparelho autorizado.</span></div>
-        <div class="trust-item"><strong>☁️ Suas listas no servidor</strong><span>As playlists ficam associadas ao seu dispositivo para aparecer no app.</span></div>
-        <div class="trust-item"><strong>⚡ Controle simples</strong><span>Adicione, edite, proteja com PIN ou remova suas próprias listas.</span></div>
+        <div class="trust-item" data-i18n="trust1"><strong>🔐 Acesso por dispositivo</strong><span>Seu ID e sua Key identificam o aparelho autorizado.</span></div>
+        <div class="trust-item" data-i18n="trust2"><strong>☁️ Suas listas no servidor</strong><span>As playlists ficam associadas ao seu dispositivo para aparecer no app.</span></div>
+        <div class="trust-item" data-i18n="trust3"><strong>⚡ Controle simples</strong><span>Adicione, edite, proteja com PIN ou remova suas próprias listas.</span></div>
       </div>
       <details class="rs-acc">
-        <summary>🤝 Seja revendedor Hugo Player</summary>
+        <summary data-i18n="rs.sum">🤝 Seja revendedor Hugo Player</summary>
         <div class="rs-body">
-          <p>Compre créditos e ative licenças de <b>1 ano</b> para os seus clientes (1 crédito = 1 ano). Você tem um painel próprio com saldo, clientes e renovações; pagamento por Pix ou cartão.</p>
-          <a class="btn sm" href="/revendedor">Entrar ou cadastrar como revendedor</a>
+          <p data-i18n="rs.p">Compre créditos e ative licenças de <b>1 ano</b> para os seus clientes (1 crédito = 1 ano). Você tem um painel próprio com saldo, clientes e renovações; pagamento por Pix ou cartão.</p>
+          <a class="btn sm" href="/revendedor" data-i18n="rs.btn">Entrar ou cadastrar como revendedor</a>
         </div>
       </details>
     </div>
     <form class="card" id="loginForm" autocomplete="off">
-      <h2>Entrar com o dispositivo</h2>
-      <p class="desc">Use o Device ID e a Key que aparecem no app. O teste grátis começa no primeiro uso do app.</p>
+      <h2 data-i18n="login.h">Entrar com o dispositivo</h2>
+      <p class="desc" data-i18n="login.desc">Use o Device ID e a Key que aparecem no app. O teste grátis começa no primeiro uso do app.</p>
       <label for="deviceId">Device ID</label>
       <input id="deviceId" class="mono" placeholder="A1:B2:C3:D4:E5:F6" maxlength="40" required>
       <label for="deviceKey">Device Key</label>
-      <input id="deviceKey" class="mono" placeholder="8 caracteres" maxlength="16" required>
-      <button class="btn block" id="loginBtn" type="submit">Entrar</button>
+      <input id="deviceKey" class="mono" placeholder="8 caracteres" maxlength="16" required data-i18n-attr="placeholder:ph.8chars">
+      <button class="btn block" id="loginBtn" type="submit" data-i18n="login.btn">Entrar</button>
       <div class="status" id="loginStatus"></div>
     </form>
   </section>
   <section id="dashView" class="hidden">
     <div class="dash-head">
       <div>
-        <h1>Minhas playlists</h1>
-        <p class="desc" style="margin:0" id="dashSub">Tudo o que você mudar aqui aparece no app ao atualizar a lista.</p>
+        <h1 data-i18n="dash.h">Minhas playlists</h1>
+        <p class="desc" style="margin:0" id="dashSub" data-i18n="dash.sub">Tudo o que você mudar aqui aparece no app ao atualizar a lista.</p>
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <button class="btn ghost sm" id="transferBtn" type="button">⇄ Transferir de outro aparelho</button>
-        <button class="btn ghost sm" id="refreshBtn" type="button">↻ Atualizar</button>
+        <button class="btn ghost sm" id="transferBtn" type="button" data-i18n="dash.transfer">⇄ Transferir de outro aparelho</button>
+        <button class="btn ghost sm" id="refreshBtn" type="button" data-i18n="dash.refresh">↻ Atualizar</button>
       </div>
     </div>
     <section class="card" id="plansCard">
-      <h2>Ative o Hugo Player</h2>
-      <p class="desc">Escolha seu plano. O acesso é liberado automaticamente depois da confirmação do pagamento.</p>
+      <h2 data-i18n="plans.h">Ative o Hugo Player</h2>
+      <p class="desc" data-i18n="plans.desc">Escolha seu plano. O acesso é liberado automaticamente depois da confirmação do pagamento.</p>
       <div class="plans">
-        <div class="legal-card plan"><h3>Teste · Grátis</h3><p>7 dias para experimentar, liberado automaticamente no primeiro uso do app.</p></div>
-        <div class="legal-card plan"><h3>Premium 6 meses · R$ 29,90</h3><p class="permonth">equivale a R$ 4,98/mês</p><p>Licença válida por 6 meses e vinculada a este dispositivo.</p><button class="btn" type="button" onclick="startPayment('semiannual')">Comprar 6 meses</button></div>
-        <div class="legal-card plan"><h3>Premium 1 ano · R$ 44,90</h3><p class="permonth">equivale a R$ 3,74/mês</p><p>Licença válida por 12 meses e vinculada a este dispositivo.</p><button class="btn" type="button" onclick="startPayment('annual')">Comprar 1 ano</button></div>
-        <div class="legal-card plan"><h3>Premium Vitalício · R$ 119,90</h3><p>Licença sem data de vencimento, vinculada a este dispositivo.</p><button class="btn" type="button" onclick="startPayment('lifetime')">Comprar vitalício</button></div>
+        <div class="legal-card plan"><h3 data-i18n="plan.trial.h">Teste · Grátis</h3><p data-i18n="plan.trial.p">7 dias para experimentar, liberado automaticamente no primeiro uso do app.</p></div>
+        <div class="legal-card plan"><h3 data-i18n="plan.6m.h">Premium 6 meses · R$ 29,90</h3><p class="permonth" data-i18n="plan.6m.pm">equivale a R$ 4,98/mês</p><p data-i18n="plan.6m.p">Licença válida por 6 meses e vinculada a este dispositivo.</p><button class="btn" type="button" onclick="startPayment('semiannual')" data-i18n="plan.6m.btn">Comprar 6 meses</button></div>
+        <div class="legal-card plan"><h3 data-i18n="plan.1y.h">Premium 1 ano · R$ 44,90</h3><p class="permonth" data-i18n="plan.1y.pm">equivale a R$ 3,74/mês</p><p data-i18n="plan.1y.p">Licença válida por 12 meses e vinculada a este dispositivo.</p><button class="btn" type="button" onclick="startPayment('annual')" data-i18n="plan.1y.btn">Comprar 1 ano</button></div>
+        <div class="legal-card plan"><h3 data-i18n="plan.lt.h">Premium Vitalício · R$ 119,90</h3><p data-i18n="plan.lt.p">Licença sem data de vencimento, vinculada a este dispositivo.</p><button class="btn" type="button" onclick="startPayment('lifetime')" data-i18n="plan.lt.btn">Comprar vitalício</button></div>
       </div>
+      <div class="legal-note" data-lang-only="en es" data-i18n="plans.intl">Prices are in Brazilian reais (BRL).</div>
       <div class="status" id="paymentStatus"></div>
     </section>
     <div class="grid">
       <form class="card" id="addForm" autocomplete="off">
-        <h2>Adicionar playlist</h2>
+        <h2 data-i18n="add.h">Adicionar playlist</h2>
         <div class="seg">
-          <button type="button" class="on" data-type="m3u">URL M3U</button>
+          <button type="button" class="on" data-type="m3u" data-i18n="add.url">URL M3U</button>
           <button type="button" data-type="xtream">Xtream Codes</button>
         </div>
-        <label for="plName">Nome da playlist</label>
-        <input id="plName" placeholder="Ex.: Minha Lista" maxlength="80" required>
+        <label for="plName" data-i18n="add.name">Nome da playlist</label>
+        <input id="plName" placeholder="Ex.: Minha Lista" maxlength="80" required data-i18n-attr="placeholder:ph.mylist">
         <div id="m3uFields">
-          <label for="plUrl">URL M3U</label>
-          <input id="plUrl" placeholder="http://servidor.com/get.php?..." inputmode="url">
+          <label for="plUrl" data-i18n="add.url">URL M3U</label>
+          <input id="plUrl" placeholder="http://servidor.com/get.php?..." data-i18n-attr="placeholder:ph.m3u" inputmode="url">
         </div>
         <div id="xtFields" class="hidden">
-          <label for="xtHost">Servidor</label>
-          <input id="xtHost" placeholder="http://servidor.com:8080">
+          <label for="xtHost" data-i18n="add.server">Servidor</label>
+          <input id="xtHost" placeholder="http://servidor.com:8080" data-i18n-attr="placeholder:ph.host">
           <div class="row">
-            <div><label for="xtUser">Usuário</label><input id="xtUser"></div>
-            <div><label for="xtPass">Senha</label><input id="xtPass" type="password"></div>
+            <div><label for="xtUser" data-i18n="add.user">Usuário</label><input id="xtUser"></div>
+            <div><label for="xtPass" data-i18n="add.pass">Senha</label><input id="xtPass" type="password"></div>
           </div>
         </div>
-        <label for="plEpg">Link do EPG (XMLTV) <span style="opacity:.6;font-weight:400">— opcional</span></label>
-        <input id="plEpg" class="mono" placeholder="http://servidor.com/epg.xml.gz" inputmode="url" maxlength="2000">
-        <div style="font-size:12px;opacity:.65;margin-top:4px">Aceita .xml e .xml.gz. Em branco: o app usa o guia do próprio Xtream (xmltv.php) quando houver.</div>
-        <label class="check"><input type="checkbox" id="plPinOn"> Proteger com PIN</label>
+        <label for="plEpg" data-i18n="add.epg">Link do EPG (XMLTV) <span style="opacity:.6;font-weight:400">— opcional</span></label>
+        <input id="plEpg" class="mono" placeholder="http://servidor.com/epg.xml.gz" data-i18n-attr="placeholder:ph.epg" inputmode="url" maxlength="2000">
+        <div style="font-size:12px;opacity:.65;margin-top:4px" data-i18n="add.epghint">Aceita .xml e .xml.gz. Em branco: o app usa o guia do próprio Xtream (xmltv.php) quando houver.</div>
+        <label class="check"><input type="checkbox" id="plPinOn"> <span data-i18n="add.pinon">Proteger com PIN</span></label>
         <div id="pinFields" class="hidden">
-          <label for="plPin">PIN (4 a 8 dígitos)</label>
+          <label for="plPin" data-i18n="add.pin">PIN (4 a 8 dígitos)</label>
           <input id="plPin" class="mono" inputmode="numeric" maxlength="8">
         </div>
-        <button class="btn block" id="addBtn" type="submit">Adicionar playlist</button>
+        <button class="btn block" id="addBtn" type="submit" data-i18n="add.btn">Adicionar playlist</button>
         <div class="status" id="addStatus"></div>
       </form>
       <div><div class="pl-list" id="plList"></div></div>
@@ -267,23 +281,23 @@ button:disabled { opacity: .55; cursor: not-allowed; }
   </section>
   <section class="card dl-card" id="downloadCard">
     <div>
-      <h2>📲 Baixe o app Hugo Player</h2>
-      <p class="desc" style="margin:0 0 12px">Versão mais nova para celular Android, Fire TV e TV Box. <span id="dlVer"></span></p>
+      <h2 data-i18n="dl.h">📲 Baixe o app Hugo Player</h2>
+      <p class="desc" style="margin:0 0 12px"><span data-i18n="dl.desc">Versão mais nova para celular Android, Fire TV e TV Box.</span> <span id="dlVer"></span></p>
       <div class="dl-actions">
-        <a class="btn dl-big" href="/apk">⬇ Baixar APK</a>
-        <a class="btn ghost" href="/baixar">Como instalar (celular e TV)</a>
+        <a class="btn dl-big" href="/apk" data-i18n="dl.apk">⬇ Baixar APK</a>
+        <a class="btn ghost" href="/baixar" data-i18n="dl.how">Como instalar (celular e TV)</a>
       </div>
-      <div class="tv-code" data-dl-code-box><span class="lbl">📺 Fire TV / TV Box · Código Downloader</span><span class="code" data-dl-code></span></div>
-      <div class="tv">No app <b>Downloader</b>, digite o código acima ou o endereço <code data-tv-url></code></div>
+      <div class="tv-code" data-dl-code-box><span class="lbl" data-i18n="dl.codelbl">📺 Fire TV / TV Box · Código Downloader</span><span class="code" data-dl-code></span></div>
+      <div class="tv"><span data-i18n="dl.tv">No app <b>Downloader</b>, digite o código acima ou o endereço</span> <code data-tv-url></code></div>
     </div>
-    <div class="qrbox"><img src="/qr-apk.svg" alt="QR code para baixar o Hugo Player" width="132" height="132">Escaneie com o celular</div>
+    <div class="qrbox"><img src="/qr-apk.svg" alt="QR code para baixar o Hugo Player" width="132" height="132" data-i18n-attr="alt:dl.qralt"><span data-i18n="dl.scan">Escaneie com o celular</span></div>
   </section>
   <section class="legal">
-    <div class="legal-card"><h3>O que é o Hugo Player?</h3><p>Uma ferramenta de gerenciamento e reprodução para playlists fornecidas pelo próprio usuário. O Hugo Player não vende, hospeda, indexa ou distribui filmes, séries, canais ou arquivos de terceiros.</p></div>
-    <div class="legal-card"><h3>Responsabilidade do usuário</h3><p>Você deve utilizar somente listas e links obtidos legalmente e ter autorização para acessá-los. O serviço não se responsabiliza pelo conteúdo, disponibilidade ou origem de listas adicionadas pelo usuário.</p></div>
-    <div class="legal-card"><h3>Direitos autorais e DMCA</h3><p>Se você é titular de direitos e acredita que um link fornecido por um usuário viola seus direitos, envie uma notificação com a identificação da obra, URL e comprovação de titularidade pelo canal oficial de suporte.</p></div>
+    <div class="legal-card"><h3 data-i18n="legal1.h">O que é o Hugo Player?</h3><p data-i18n="legal1.p">Uma ferramenta de gerenciamento e reprodução para playlists fornecidas pelo próprio usuário. O Hugo Player não vende, hospeda, indexa ou distribui filmes, séries, canais ou arquivos de terceiros.</p></div>
+    <div class="legal-card"><h3 data-i18n="legal2.h">Responsabilidade do usuário</h3><p data-i18n="legal2.p">Você deve utilizar somente listas e links obtidos legalmente e ter autorização para acessá-los. O serviço não se responsabiliza pelo conteúdo, disponibilidade ou origem de listas adicionadas pelo usuário.</p></div>
+    <div class="legal-card"><h3 data-i18n="legal3.h">Direitos autorais e DMCA</h3><p data-i18n="legal3.p">Se você é titular de direitos e acredita que um link fornecido por um usuário viola seus direitos, envie uma notificação com a identificação da obra, URL e comprovação de titularidade pelo canal oficial de suporte.</p></div>
   </section>
-  <div class="footer">Hugo Player • Gerenciamento de playlists • Licenciamento por dispositivo · <a href="/revendedor">Área do revendedor</a> · <a href="/privacidade">Privacidade</a> · <a href="/termos">Termos</a> · <a class="wa-link" data-support-wa data-wa-icon hidden href="#">Suporte no WhatsApp</a></div>
+  <div class="footer"><span data-i18n="foot.tag">Hugo Player • Gerenciamento de playlists • Licenciamento por dispositivo</span> · <a href="/revendedor" data-i18n="foot.reseller">Área do revendedor</a> · <a href="/privacidade" data-i18n="foot.privacy">Privacidade</a> · <a href="/termos" data-i18n="foot.terms">Termos</a> · <span data-lang-only="en es"><a data-support-email href="mailto:hugoplayervip@gmail.com">hugoplayervip@gmail.com</a> · </span><a class="wa-link" data-support-wa data-wa-icon hidden href="#" data-i18n="foot.wa">Suporte no WhatsApp</a></div>
 </main>
 <div class="modal-bg hidden" id="modalBg">
   <form class="card modal" id="modalForm">
@@ -292,11 +306,12 @@ button:disabled { opacity: .55; cursor: not-allowed; }
     <div id="mBody"></div>
     <div class="status" id="mStatus"></div>
     <div class="actions">
-      <button type="button" class="btn ghost" id="mCancel">Cancelar</button>
+      <button type="button" class="btn ghost" id="mCancel" data-i18n="cancel">Cancelar</button>
       <button type="submit" class="btn" id="mOk">OK</button>
     </div>
   </form>
 </div>
+<script src="/i18n-index.js"></script>
 <script>
 "use strict";
 const API = (new URLSearchParams(location.search).get("api") || "https://api-hugo.streamflixvip.online").replace(/\/+$/, "");
@@ -332,9 +347,11 @@ function esc(s) {
 function friendly(err) {
   if (err && err.details && err.details.fieldErrors) {
     var f = Object.values(err.details.fieldErrors).flat()[0];
-    if (f) return f;
+    if (f) return HUGO_I18N.lang === "pt" ? f : T("Verifique os campos preenchidos.");
   }
-  return ERRORS[err && err.error] || (err && err.message) || (err && err.error) || "Erro inesperado.";
+  var code = err && err.error;
+  if (HUGO_I18N.lang !== "pt" && code) { var tr = HUGO_I18N.get("err." + code); if (tr) return tr; }
+  return T(ERRORS[code] || (err && err.message) || code || "Erro inesperado.");
 }
 async function api(method, path, body, extraHeaders) {
   extraHeaders = extraHeaders || {};
@@ -362,7 +379,7 @@ function toast(msg, type) {
 }
 async function startPayment(plan) {
   var status = $("paymentStatus");
-  clear(status); show(status, "Preparando checkout seguro...", "ok");
+  clear(status); show(status, T("Preparando checkout seguro..."), "ok");
   try {
     var data = await api("POST", "/payments/checkout", { plan: plan });
     if (!data.checkoutUrl) throw { error: "checkout_create_failed" };
@@ -382,8 +399,8 @@ $("loginForm").addEventListener("submit", async function(e) {
   // Diferente do ID, ela pode ser sensível a maiúsculas/minúsculas.
   var deviceKey = $("deviceKey").value.trim();
   var st = $("loginStatus"); clear(st);
-  if (!deviceId || deviceKey.length < 4) return show(st, "Preencha o Device ID e a Device Key.", "err");
-  $("loginBtn").disabled = true; $("loginBtn").textContent = "Entrando...";
+  if (!deviceId || deviceKey.length < 4) return show(st, T("Preencha o Device ID e a Device Key."), "err");
+  $("loginBtn").disabled = true; $("loginBtn").textContent = T("Entrando...");
   try {
     session = null;
     var reg = await api("POST", "/devices/register", { deviceId: deviceId, deviceKey: deviceKey, platform: "web" });
@@ -394,7 +411,7 @@ $("loginForm").addEventListener("submit", async function(e) {
     session = null;
     show(st, friendly(err), "err");
   } finally {
-    $("loginBtn").disabled = false; $("loginBtn").textContent = "Entrar";
+    $("loginBtn").disabled = false; $("loginBtn").textContent = T("Entrar");
   }
 });
 $("logoutBtn").addEventListener("click", function() {
@@ -419,22 +436,22 @@ async function enterDashboard() {
   licenseActive = lic.active !== false && lic.type !== "expired";
   pendingApp = !licenseActive && lic.trialPending === "app_first_use";
   var label = lic.type === "premium"
-    ? ({ lifetime: "Premium Vitalício", semiannual: "Premium 6 meses" }[lic.plan] || "Premium Anual")
-    : lic.paymentProvider === "transferred" ? "Transferida para outro aparelho"
-    : lic.trialDenied ? "Teste grátis já usado neste aparelho"
-    : lic.trialPending === "app_first_use" ? "Sem licença"
-    : ({ trial: "Teste", expired: "Trial expirado" }[lic.type] || lic.type);
-  var until = lic.expiresAt && lic.active !== false ? " até " + new Date(lic.expiresAt).toLocaleDateString("pt-BR") : "";
-  $("licBadge").className = "badge " + lic.type; $("licBadge").textContent = "Licença: " + label + until;
+    ? T({ lifetime: "Premium Vitalício", semiannual: "Premium 6 meses" }[lic.plan] || "Premium Anual")
+    : lic.paymentProvider === "transferred" ? T("Transferida para outro aparelho")
+    : lic.trialDenied ? T("Teste grátis já usado neste aparelho")
+    : lic.trialPending === "app_first_use" ? T("Sem licença")
+    : T({ trial: "Teste", expired: "Trial expirado" }[lic.type] || lic.type);
+  var until = lic.expiresAt && lic.active !== false ? T(" até ") + new Date(lic.expiresAt).toLocaleDateString(HUGO_I18N.locale) : "";
+  $("licBadge").className = "badge " + lic.type; $("licBadge").textContent = T("Licença: ") + label + until;
   $("loginView").classList.add("hidden");
   $("dashView").classList.remove("hidden"); $("session").classList.remove("hidden");
   $("plansCard").classList.toggle("hidden", licenseActive && lic.type === "premium");
   $("addForm").classList.toggle("hidden", !licenseActive);
   $("dashSub").textContent = licenseActive
-    ? "Tudo o que você mudar aqui aparece no app ao atualizar a lista."
-    : lic.trialDenied ? "Este aparelho já usou o teste grátis. Escolha um plano para usar o Hugo Player."
-    : lic.trialPending === "app_first_use" ? "Sem licença — abra o app no aparelho para iniciar o teste grátis ou compre um plano abaixo."
-    : "Seu acesso de teste terminou. Escolha um plano para continuar usando suas playlists.";
+    ? T("Tudo o que você mudar aqui aparece no app ao atualizar a lista.")
+    : lic.trialDenied ? T("Este aparelho já usou o teste grátis. Escolha um plano para usar o Hugo Player.")
+    : lic.trialPending === "app_first_use" ? T("Sem licença — abra o app no aparelho para iniciar o teste grátis ou compre um plano abaixo.")
+    : T("Seu acesso de teste terminou. Escolha um plano para continuar usando suas playlists.");
   await loadPlaylists();
 }
 
@@ -442,8 +459,8 @@ async function loadPlaylists() {
   var box = $("plList");
   if (!licenseActive) {
     box.innerHTML = pendingApp
-      ? '<div class="empty"><div class="big">📲</div><b>Sem licença</b><br>Abra o Hugo Player no aparelho para iniciar o teste grátis, ou compre um plano acima.</div>'
-      : '<div class="empty"><div class="big">🔒</div><b>Licença inativa</b><br>Ative o Premium acima para gerenciar e reproduzir suas playlists.</div>';
+      ? '<div class="empty"><div class="big">📲</div>' + T('<b>Sem licença</b><br>Abra o Hugo Player no aparelho para iniciar o teste grátis, ou compre um plano acima.') + '</div>'
+      : '<div class="empty"><div class="big">🔒</div>' + T('<b>Licença inativa</b><br>Ative o Premium acima para gerenciar e reproduzir suas playlists.') + '</div>';
     return;
   }
   box.innerHTML = '<div class="skeleton"></div><div class="skeleton"></div>';
@@ -452,15 +469,15 @@ async function loadPlaylists() {
     playlists = data.playlists || [];
     render();
   } catch (err) {
-    if (err.status === 401) { $("logoutBtn").click(); return show($("loginStatus"), "Sessão expirada.", "err"); }
+    if (err.status === 401) { $("logoutBtn").click(); return show($("loginStatus"), T("Sessão expirada."), "err"); }
     box.innerHTML = '<div class="empty"><div class="big">⚠️</div>' + esc(friendly(err)) + '</div>';
   }
 }
 function render() {
   var box = $("plList");
-  $("dashSub").textContent = playlists.length ? playlists.length + " playlist(s) salva(s)." : "Adicione sua primeira playlist.";
+  $("dashSub").textContent = playlists.length ? T("{n} playlist(s) salva(s).", { n: playlists.length }) : T("Adicione sua primeira playlist.");
   if (!playlists.length) {
-    box.innerHTML = '<div class="empty"><div class="big">📺</div><b>Nenhuma playlist ainda</b><br>Adicione a primeira no formulário ao lado.</div>';
+    box.innerHTML = '<div class="empty"><div class="big">📺</div>' + T('<b>Nenhuma playlist ainda</b><br>Adicione a primeira no formulário ao lado.') + '</div>';
     return;
   }
   box.innerHTML = playlists.map(function(p) {
@@ -468,16 +485,16 @@ function render() {
     var hasPin = Boolean(p.protected);
     var canManage = !hasPin || Boolean(u);
     var lock = hasPin ? '<span class="badge lock">🔒 PIN</span>' : '';
-    var url = u ? esc(u.url) : (hasPin ? '<i>protegida por PIN</i>' : esc(p.url || ''));
+    var url = u ? esc(u.url) : (hasPin ? '<i>' + T('protegida por PIN') + '</i>' : esc(p.url || ''));
     var epgShown = u ? u.epgUrl : p.epgUrl;
     if (epgShown) url += '<br><span style="opacity:.7">EPG: ' + esc(epgShown) + '</span>';
     return '<div class="pl"><div class="ico">' + (p.type === 'xtream' ? '📡' : '📺') + '</div><div><div class="name">' + esc(p.name) + '</div><div class="meta"><span class="badge">' + p.type + '</span>' + lock + '</div><div class="url">' + url + '</div></div><div class="actions">' +
-      (hasPin && !u ? '<button class="icon-btn" data-act="unlock" data-id="' + p.id + '">Desbloquear</button>' : '') +
-      (canManage ? '<button class="icon-btn" data-act="edit" data-id="' + p.id + '" title="Editar playlist">✎ Editar</button>' +
-      '<button class="icon-btn" data-act="rename" data-id="' + p.id + '">Renomear</button>' +
-      '<button class="icon-btn" data-act="pin" data-id="' + p.id + '">' + (hasPin ? 'Mudar PIN' : 'Definir PIN') + '</button>' +
-      (hasPin ? '<button class="icon-btn" data-act="unpin" data-id="' + p.id + '">Remover PIN</button>' : '') +
-      '<button class="icon-btn del" data-act="del" data-id="' + p.id + '">Excluir</button>' : '') + '</div></div>';
+      (hasPin && !u ? '<button class="icon-btn" data-act="unlock" data-id="' + p.id + '">' + T('Desbloquear') + '</button>' : '') +
+      (canManage ? '<button class="icon-btn" data-act="edit" data-id="' + p.id + '" title="' + T('Editar playlist') + '">' + T('✎ Editar') + '</button>' +
+      '<button class="icon-btn" data-act="rename" data-id="' + p.id + '">' + T('Renomear') + '</button>' +
+      '<button class="icon-btn" data-act="pin" data-id="' + p.id + '">' + T(hasPin ? 'Mudar PIN' : 'Definir PIN') + '</button>' +
+      (hasPin ? '<button class="icon-btn" data-act="unpin" data-id="' + p.id + '">' + T('Remover PIN') + '</button>' : '') +
+      '<button class="icon-btn del" data-act="del" data-id="' + p.id + '">' + T('Excluir') + '</button>' : '') + '</div></div>';
   }).join('');
 }
 
@@ -488,51 +505,51 @@ $("plList").addEventListener("click", async function(e) {
   var act = btn.dataset.act;
   var p = playlists.find(function(x){ return x.id === id; });
   if (!p) return;
-  if (act === "unlock") openModal("Desbloquear", "Digite o PIN.", '<label>PIN</label><input id="mPin" class="mono" maxlength="8">', async function() {
+  if (act === "unlock") openModal(T("Desbloquear"), T("Digite o PIN."), '<label>PIN</label><input id="mPin" class="mono" maxlength="8">', async function() {
     var pin = $("mPin").value.trim();
     var data = await api("POST", "/playlists/" + id + "/verify-pin", { pin: pin });
     unlocked[id] = { pin: pin, url: data.playlist.url, epgUrl: data.playlist.epgUrl || "" };
     render();
   });
-  if (act === "edit") openModal("Editar playlist", "Atualize o nome, a URL M3U e o EPG (opcional).",
-    '<label>Nome</label><input id="mName" value="' + esc(p.name) + '" maxlength="80" required>' +
-    '<label>URL M3U</label><input id="mUrl" class="mono" value="' + esc(p.url || (unlocked[id] ? unlocked[id].url : '')) + '" maxlength="2000" required>' +
-    '<label>Link do EPG (XMLTV, .xml ou .xml.gz) — opcional</label><input id="mEpg" class="mono" placeholder="em branco = automático (Xtream)" value="' + esc(p.epgUrl || (unlocked[id] && unlocked[id].epgUrl) || '') + '" maxlength="2000">', async function() {
+  if (act === "edit") openModal(T("Editar playlist"), T("Atualize o nome, a URL M3U e o EPG (opcional)."),
+    '<label>' + T('Nome') + '</label><input id="mName" value="' + esc(p.name) + '" maxlength="80" required>' +
+    '<label>' + T('URL M3U') + '</label><input id="mUrl" class="mono" value="' + esc(p.url || (unlocked[id] ? unlocked[id].url : '')) + '" maxlength="2000" required>' +
+    '<label>' + T('Link do EPG (XMLTV, .xml ou .xml.gz) — opcional') + '</label><input id="mEpg" class="mono" placeholder="' + T('em branco = automático (Xtream)') + '" value="' + esc(p.epgUrl || (unlocked[id] && unlocked[id].epgUrl) || '') + '" maxlength="2000">', async function() {
       var name = $("mName").value.trim();
       var url = $("mUrl").value.trim();
       var epgUrl = $("mEpg").value.trim();
-      if (epgUrl && !isHttpUrl(epgUrl)) throw { error: "O link do EPG deve começar com http:// ou https://" };
+      if (epgUrl && !isHttpUrl(epgUrl)) throw { error: T("O link do EPG deve começar com http:// ou https://") };
       var headers = unlocked[id] ? { "x-playlist-pin": unlocked[id].pin } : {};
       await api("PATCH", "/playlists/" + id, { name: name, url: url, epgUrl: epgUrl }, headers);
-      toast("Playlist atualizada.");
+      toast(T("Playlist atualizada."));
       await loadPlaylists();
     });
-  if (act === "rename") openModal("Renomear", "Novo nome.", '<label>Nome</label><input id="mName" value="' + esc(p.name) + '" maxlength="80">', async function() {
+  if (act === "rename") openModal(T("Renomear"), T("Novo nome."), '<label>' + T('Nome') + '</label><input id="mName" value="' + esc(p.name) + '" maxlength="80">', async function() {
     var name = $("mName").value.trim();
     var headers = unlocked[id] ? { "x-playlist-pin": unlocked[id].pin } : {};
     await api("PATCH", "/playlists/" + id, { name: name }, headers);
-    toast("Renomeada.");
+    toast(T("Renomeada."));
     await loadPlaylists();
   });
-  if (act === "pin") openModal(p.protected ? "Mudar PIN" : "Definir PIN", "4 a 8 dígitos.", '<label>PIN</label><input id="mPin" class="mono" maxlength="8">', async function() {
+  if (act === "pin") openModal(T(p.protected ? "Mudar PIN" : "Definir PIN"), T("4 a 8 dígitos."), '<label>PIN</label><input id="mPin" class="mono" maxlength="8">', async function() {
     var pin = $("mPin").value.trim();
     var headers = unlocked[id] ? { "x-playlist-pin": unlocked[id].pin } : {};
     await api("PATCH", "/playlists/" + id, { newPin: pin }, headers);
-    toast("PIN atualizado.");
+    toast(T("PIN atualizado."));
     await loadPlaylists();
   });
-  if (act === "unpin") openModal("Remover PIN", "Confirma?", '<label>PIN atual</label><input id="mPin" class="mono" maxlength="8">', async function() {
+  if (act === "unpin") openModal(T("Remover PIN"), T("Confirma?"), '<label>' + T('PIN atual') + '</label><input id="mPin" class="mono" maxlength="8">', async function() {
     var headers = { "x-playlist-pin": $("mPin").value.trim() };
     await api("PATCH", "/playlists/" + id, { removePin: true }, headers);
     delete unlocked[id];
-    toast("PIN removido.");
+    toast(T("PIN removido."));
     await loadPlaylists();
   });
-  if (act === "del") openModal("Excluir", "Isso não pode ser desfeito.", p.protected ? '<label>PIN</label><input id="mPin" class="mono" maxlength="8">' : "", async function() {
+  if (act === "del") openModal(T("Excluir"), T("Isso não pode ser desfeito."), p.protected ? '<label>PIN</label><input id="mPin" class="mono" maxlength="8">' : "", async function() {
     var headers = p.protected ? { "x-playlist-pin": $("mPin").value.trim() } : (unlocked[id] ? { "x-playlist-pin": unlocked[id].pin } : {});
     await api("DELETE", "/playlists/" + id, {}, headers);
     delete unlocked[id];
-    toast("Excluída.");
+    toast(T("Excluída."));
     await loadPlaylists();
   });
 });
@@ -540,24 +557,24 @@ $("plList").addEventListener("click", async function(e) {
 // Transferir playlists E licença do aparelho antigo (ID + Key) para o aparelho logado agora.
 $("transferBtn").addEventListener("click", function() {
   openModal(
-    "Transferir de outro aparelho",
-    "Reinstalou o app ou trocou de aparelho? Digite o Device ID e a Key do aparelho ANTIGO. As playlists dele (com link do EPG e PIN) e a LICENÇA passam para este aparelho (" + session.deviceId + "). Se este aparelho já tiver uma licença melhor, ela é mantida. O aparelho antigo fica sem playlists e sem licença (para de funcionar).",
-    '<label>Device ID do aparelho antigo</label><input id="tFromId" class="mono" placeholder="A1:B2:C3:D4:E5:F6" maxlength="40" required>' +
-    '<label>Device Key do aparelho antigo</label><input id="tFromKey" class="mono" placeholder="8 caracteres" maxlength="16" required>' +
-    '<p class="desc" style="margin-top:8px">O ID e a Key antigos aparecem na tela de Playlists do app antigo, no e-mail/print que você guardou ou com o suporte. Depois, no app novo, toque em Atualizar.</p>',
+    T("Transferir de outro aparelho"),
+    T("Reinstalou o app ou trocou de aparelho? Digite o Device ID e a Key do aparelho ANTIGO. As playlists dele (com link do EPG e PIN) e a LICENÇA passam para este aparelho ({id}). Se este aparelho já tiver uma licença melhor, ela é mantida. O aparelho antigo fica sem playlists e sem licença (para de funcionar).", { id: session.deviceId }),
+    '<label>' + T('Device ID do aparelho antigo') + '</label><input id="tFromId" class="mono" placeholder="A1:B2:C3:D4:E5:F6" maxlength="40" required>' +
+    '<label>' + T('Device Key do aparelho antigo') + '</label><input id="tFromKey" class="mono" placeholder="' + T('8 caracteres') + '" maxlength="16" required>' +
+    '<p class="desc" style="margin-top:8px">' + T('O ID e a Key antigos aparecem na tela de Playlists do app antigo, no e-mail/print que você guardou ou com o suporte. Depois, no app novo, toque em Atualizar.') + '</p>',
     async function() {
       var fromId = $("tFromId").value.trim().toUpperCase();
       var fromKey = $("tFromKey").value.trim();
-      if (!fromId || fromKey.length < 4) throw { error: "Preencha o Device ID e a Key do aparelho antigo." };
+      if (!fromId || fromKey.length < 4) throw { error: T("Preencha o Device ID e a Key do aparelho antigo.") };
       var r = await api("POST", "/devices/transfer", { fromId: fromId, fromKey: fromKey, toId: session.deviceId, toKey: session.deviceKey });
-      var msg = (r.moved ? r.moved + " playlist(s)" : "Nenhuma playlist") +
-        (r.license === "moved" ? " e a licença transferidas para este aparelho." : r.license === "kept_new" ? " transferida(s); este aparelho manteve a licença dele (era melhor)." : " transferida(s).") +
-        " O aparelho antigo parou de funcionar. No app novo, toque em Atualizar.";
+      var msg = (r.moved ? T("{n} playlist(s)", { n: r.moved }) : T("Nenhuma playlist")) +
+        T(r.license === "moved" ? " e a licença transferidas para este aparelho." : r.license === "kept_new" ? " transferida(s); este aparelho manteve a licença dele (era melhor)." : " transferida(s).") +
+        T(" O aparelho antigo parou de funcionar. No app novo, toque em Atualizar.");
       toast(msg, "ok");
       await enterDashboard();
     }
   );
-  $("mOk").textContent = "Transferir";
+  $("mOk").textContent = T("Transferir");
 });
 
 function openModal(title, desc, body, onOk) {
@@ -590,19 +607,19 @@ $("addForm").addEventListener("submit", async function(e) {
     var host = $("xtHost").value.trim().replace(/\/+$/, "");
     var user = $("xtUser").value.trim();
     var pass = $("xtPass").value.trim();
-    if (!host || !user || !pass) return show(st, "Preencha host, usuário e senha.", "err");
+    if (!host || !user || !pass) return show(st, T("Preencha host, usuário e senha."), "err");
     url = host + "/get.php?username=" + encodeURIComponent(user) + "&password=" + encodeURIComponent(pass) + "&type=m3u_plus&output=ts";
   }
-  if (!url) return show(st, "Informe a URL.", "err");
+  if (!url) return show(st, T("Informe a URL."), "err");
   var body = { name: name, type: addType, url: url };
   var epg = $("plEpg").value.trim();
   if (epg) {
-    if (!isHttpUrl(epg)) return show(st, "O link do EPG deve começar com http:// ou https://", "err");
+    if (!isHttpUrl(epg)) return show(st, T("O link do EPG deve começar com http:// ou https://"), "err");
     body.epgUrl = epg;
   }
   if ($("plPinOn").checked) {
     var pin = $("plPin").value.trim();
-    if (pin.length < 4) return show(st, "PIN precisa de 4 a 8 dígitos.", "err");
+    if (pin.length < 4) return show(st, T("PIN precisa de 4 a 8 dígitos."), "err");
     body.pin = pin;
   }
   $("addBtn").disabled = true;
@@ -610,7 +627,7 @@ $("addForm").addEventListener("submit", async function(e) {
     await api("POST", "/playlists", body);
     $("addForm").reset();
     $("pinFields").classList.add("hidden");
-    show(st, "Playlist adicionada.", "ok");
+    show(st, T("Playlist adicionada."), "ok");
     await loadPlaylists();
   } catch (err) { show(st, friendly(err), "err"); }
   finally { $("addBtn").disabled = false; }
@@ -636,7 +653,7 @@ try {
 <script src="/site-config.js"></script>
 <script>
 fetch(API + "/channels/version", { cache: "no-store" }).then(function (r) { return r.json(); })
-  .then(function (v) { if (v && v.versionName) document.getElementById("dlVer").textContent = "Versão atual: " + v.versionName + "."; }).catch(function () {});
+  .then(function (v) { if (v && v.versionName) document.getElementById("dlVer").textContent = T("Versão atual: {v}.", { v: v.versionName }); }).catch(function () {});
 </script>
 </body>
 </html>

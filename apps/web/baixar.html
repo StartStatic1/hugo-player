@@ -7,10 +7,15 @@
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <link rel="icon" href="/favicon-32.png" sizes="32x32" type="image/png">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
-<title>Baixar Hugo Player · APK para celular, Fire TV e TV Box</title>
-<meta name="description" content="Baixe a versão mais nova do Hugo Player para Android, Fire TV e TV Box.">
-<meta property="og:title" content="Baixar Hugo Player">
-<meta property="og:description" content="Versão mais nova do app para celular Android, Fire TV e TV Box.">
+<title data-i18n="meta.title">Baixar Hugo Player · APK para celular, Fire TV e TV Box</title>
+<meta name="description" content="Baixe a versão mais nova do Hugo Player para Android, Fire TV e TV Box." data-i18n-attr="content:meta.desc">
+<meta property="og:title" content="Baixar Hugo Player" data-i18n-attr="content:meta.ogtitle">
+<meta property="og:description" content="Versão mais nova do app para celular Android, Fire TV e TV Box." data-i18n-attr="content:meta.ogdesc">
+<link rel="alternate" hreflang="pt-BR" href="https://hugo.streamflixvip.online/baixar?lang=pt">
+<link rel="alternate" hreflang="en" href="https://hugo.streamflixvip.online/baixar?lang=en">
+<link rel="alternate" hreflang="es" href="https://hugo.streamflixvip.online/baixar?lang=es">
+<link rel="alternate" hreflang="x-default" href="https://hugo.streamflixvip.online/baixar">
+<script src="/i18n.js"></script>
 <style>
 :root{--bg:#07080f;--bg2:#0c0e18;--card:#12141f;--card2:#181b2a;--primary:#8b5cf6;--pink:#ec4899;--ok:#34d399;--warn:#fbbf24;--text:#f1f5f9;--muted:#94a3b8;--border:#1f2638}
 *{box-sizing:border-box}html,body{margin:0}
@@ -49,6 +54,7 @@ ol.steps b{color:#fff}ol.steps .path{display:inline-block;margin-top:4px;font-si
 .or{display:flex;align-items:center;gap:10px;color:var(--muted);font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin:10px 0 4px}.or::before,.or::after{content:"";flex:1;height:1px;background:var(--border)}
 .footer{text-align:center;color:var(--muted);font-size:12px;margin-top:34px}
 @media(max-width:860px){.hero,.cols{grid-template-columns:1fr}h1{font-size:32px}}
+.hero>*,.cols>*,ol.steps li>div{min-width:0}ol.steps .path{overflow-wrap:anywhere}@media(max-width:420px){.card{padding:20px 16px}.hero-title h1{font-size:28px}}
 [data-support-wa][hidden]{display:none !important}.wa-link{display:inline-flex;align-items:center;gap:6px;border-color:#25D36655 !important}.wa-link .wa-ico{flex:none}
 .support-card{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-top:18px;padding:16px 18px;border-radius:14px;background:#0f2a1c;border:1px solid #25D36655}.support-card b{display:block;font-size:16px}.support-card span{color:var(--muted);font-size:13px}
 .hero-title{display:flex;align-items:center;gap:14px;margin-bottom:10px}.hero-title h1{margin:0}.app-ico{width:64px;height:64px;border-radius:16px;flex:none;box-shadow:0 8px 24px #7c3aed55}
@@ -58,23 +64,23 @@ ol.steps b{color:#fff}ol.steps .path{display:inline-block;margin-top:4px;font-si
 <body>
 <header class="topbar">
   <a class="brand" href="/"><img class="mark" src="/favicon.svg" alt="" width="34" height="34">Hugo&nbsp;<span>Player</span></a>
-  <nav class="nav"><a class="btn ghost sm" href="/">Área do cliente</a><a class="btn ghost sm" href="/revendedor">🤝 Área do revendedor</a><a class="btn ghost sm wa-link" data-support-wa data-wa-icon hidden href="#">Suporte</a></nav>
+  <nav class="nav"><a class="btn ghost sm" href="/" data-i18n="nav.client">Área do cliente</a><a class="btn ghost sm" href="/revendedor" data-i18n="nav.reseller">🤝 Área do revendedor</a><a class="btn ghost sm wa-link" data-lang-only="pt" data-support-wa data-wa-icon hidden href="#">Suporte</a><a class="btn ghost sm" data-lang-only="en es" data-support-email href="mailto:hugoplayervip@gmail.com" data-i18n="nav.email">✉ Suporte</a><div data-lang-switch></div></nav>
 </header>
 <main class="wrap">
   <section class="hero">
     <div class="card">
-      <div class="hero-title"><img class="app-ico" src="/app-icon-192.png" width="64" height="64" alt="Ícone do app Hugo Player"><h1>Baixe o <em>Hugo Player</em></h1></div>
-      <p class="desc">Sempre a versão mais nova, para celular Android, Fire TV e TV Box. Grátis para baixar — o teste de 7 dias começa no primeiro uso.</p>
-      <a class="btn big" id="dlBtn" href="/apk" download>⬇&nbsp; Baixar APK</a>
-      <div><span class="ver" id="ver">Versão mais nova</span></div>
-      <p class="small">Arquivo .apk (~15 MB). Depois de instalar, o app se atualiza sozinho quando sair versão nova.</p>
+      <div class="hero-title"><img class="app-ico" src="/app-icon-192.png" width="64" height="64" alt="Ícone do app Hugo Player" data-i18n-attr="alt:icoalt"><h1 data-i18n="h1">Baixe o <em>Hugo Player</em></h1></div>
+      <p class="desc" data-i18n="desc">Sempre a versão mais nova, para celular Android, Fire TV e TV Box. Grátis para baixar — o teste de 7 dias começa no primeiro uso.</p>
+      <a class="btn big" id="dlBtn" href="/apk" download data-i18n="apk">⬇&nbsp; Baixar APK</a>
+      <div><span class="ver" id="ver" data-i18n="ver">Versão mais nova</span></div>
+      <p class="small" data-i18n="apkinfo">Arquivo .apk (~15 MB). Depois de instalar, o app se atualiza sozinho quando sair versão nova.</p>
     </div>
     <div class="card qr">
-      <h2>Escaneie para baixar</h2>
-      <img src="/qr-apk.svg" alt="QR code para baixar o Hugo Player" width="230" height="230">
-      <div class="small">Aponte a câmera do celular</div>
-      <div class="code-box" data-dl-code-box style="width:100%;margin:6px 0 0"><div class="lbl">Código Downloader</div><span class="code" data-dl-code></span></div>
-      <div class="small">Na TV, digite no app Downloader o código acima ou:</div>
+      <h2 data-i18n="scan.h">Escaneie para baixar</h2>
+      <img src="/qr-apk.svg" alt="QR code para baixar o Hugo Player" width="230" height="230" data-i18n-attr="alt:qralt">
+      <div class="small" data-i18n="scan.cam">Aponte a câmera do celular</div>
+      <div class="code-box" data-dl-code-box style="width:100%;margin:6px 0 0"><div class="lbl" data-i18n="codelbl">Código Downloader</div><span class="code" data-dl-code></span></div>
+      <div class="small" data-i18n="scan.tv">Na TV, digite no app Downloader o código acima ou:</div>
       <span class="tv-url" data-tv-url style="font-size:15px;margin:0;width:100%;padding:12px 8px"></span>
     </div>
   </section>
@@ -83,44 +89,45 @@ ol.steps b{color:#fff}ol.steps .path{display:inline-block;margin-top:4px;font-si
     <div class="card">
       <div class="head">
         <svg width="46" height="46" viewBox="0 0 48 48" fill="none"><rect x="13" y="3" width="22" height="42" rx="5" stroke="#a78bfa" stroke-width="3"/><circle cx="24" cy="38" r="2" fill="#f472b6"/><path d="M24 13v14m-6-6 6 6 6-6" stroke="#f472b6" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        <div><h2>No celular Android</h2><div class="small">Leva menos de 1 minuto</div></div>
+        <div><h2 data-i18n="ph.h">No celular Android</h2><div class="small" data-i18n="ph.sub">Leva menos de 1 minuto</div></div>
       </div>
       <ol class="steps">
-        <li><div>Toque em <b>Baixar APK</b> (ou escaneie o QR code).</div></li>
-        <li><div>Quando terminar, toque na notificação <b>“Download concluído”</b> ou abra a pasta <b>Downloads</b> e toque no arquivo.</div></li>
-        <li><div>Se aparecer <b>“Instalação bloqueada”</b>, toque em <b>Configurações</b> e ative <b>Permitir desta fonte</b> para o navegador.
-          <div class="mock"><div class="switch"><span>Permitir desta fonte</span><span class="tog"></span></div></div></div></li>
-        <li><div>Volte e toque em <b>Instalar</b>. Abra o Hugo Player — o <b>Device ID</b> e a <b>Key</b> aparecem na tela.</div></li>
+        <li><div data-i18n="ph.1">Toque em <b>Baixar APK</b> (ou escaneie o QR code).</div></li>
+        <li><div data-i18n="ph.2">Quando terminar, toque na notificação <b>“Download concluído”</b> ou abra a pasta <b>Downloads</b> e toque no arquivo.</div></li>
+        <li><div><span data-i18n="ph.3">Se aparecer <b>“Instalação bloqueada”</b>, toque em <b>Configurações</b> e ative <b>Permitir desta fonte</b> para o navegador.</span>
+          <div class="mock"><div class="switch"><span data-i18n="ph.3m">Permitir desta fonte</span><span class="tog"></span></div></div></div></li>
+        <li><div data-i18n="ph.4">Volte e toque em <b>Instalar</b>. Abra o Hugo Player — o <b>Device ID</b> e a <b>Key</b> aparecem na tela.</div></li>
       </ol>
     </div>
     <div class="card">
       <div class="head">
         <svg width="52" height="46" viewBox="0 0 54 48" fill="none"><rect x="3" y="5" width="48" height="31" rx="4" stroke="#a78bfa" stroke-width="3"/><path d="M19 44h16M27 36v8" stroke="#a78bfa" stroke-width="3" stroke-linecap="round"/><path d="M23 15l10 6-10 6z" fill="#f472b6"/></svg>
-        <div><h2>Na Fire TV / TV Box</h2><div class="small">Usando o app gratuito <b>Downloader</b></div></div>
+        <div><h2 data-i18n="tv.h">Na Fire TV / TV Box</h2><div class="small" data-i18n="tv.sub">Usando o app gratuito <b>Downloader</b></div></div>
       </div>
       <ol class="steps">
-        <li><div>Na tela inicial, procure por <b>Downloader</b> (ícone laranja, da AFTVnews) e instale. Na TV Box, instale o Downloader pela Play Store.</div></li>
-        <li><div>Libere a instalação: <span class="path">Configurações › Minha Fire TV › Opções do desenvolvedor › Instalar apps desconhecidos › Downloader: Ativado</span>
-          <div class="small" style="margin-top:6px">Não aparece “Opções do desenvolvedor”? Vá em <b>Minha Fire TV › Sobre</b> e clique 7 vezes no nome do aparelho. Na TV Box: Configurações › Segurança/Apps › Fontes desconhecidas.</div></div></li>
-        <li><div>Abra o Downloader e, no campo de endereço (onde está “Enter a URL or Search Term”), digite o <b>código</b>:
-          <div class="code-box" data-dl-code-box><div class="lbl">Código Downloader</div><span class="code" data-dl-code></span></div>
+        <li><div data-i18n="tv.1">Na tela inicial, procure por <b>Downloader</b> (ícone laranja, da AFTVnews) e instale. Na TV Box, instale o Downloader pela Play Store.</div></li>
+        <li><div><span data-i18n="tv.2">Libere a instalação: <span class="path">Configurações › Minha Fire TV › Opções do desenvolvedor › Instalar apps desconhecidos › Downloader: Ativado</span></span>
+          <div class="small" style="margin-top:6px" data-i18n="tv.2b">Não aparece “Opções do desenvolvedor”? Vá em <b>Minha Fire TV › Sobre</b> e clique 7 vezes no nome do aparelho. Na TV Box: Configurações › Segurança/Apps › Fontes desconhecidas.</div></div></li>
+        <li><div><span data-i18n="tv.3">Abra o Downloader e, no campo de endereço (onde está “Enter a URL or Search Term”), digite o <b>código</b>:</span>
+          <div class="code-box" data-dl-code-box><div class="lbl" data-i18n="codelbl">Código Downloader</div><span class="code" data-dl-code></span></div>
           <div class="mock"><div class="bar"><span class="field" data-dl-code></span><span class="go">Go</span></div></div>
-          <div class="or">ou digite o endereço</div>
+          <div class="or" data-i18n="tv.or">ou digite o endereço</div>
           <span class="tv-url" data-tv-url></span></div></li>
-        <li><div>Toque em <b>Go</b>, espere baixar e toque em <b>Instalar</b>. No fim, pode tocar em <b>Excluir</b> o arquivo para liberar espaço e depois <b>Abrir</b> o Hugo Player.</div></li>
+        <li><div data-i18n="tv.4">Toque em <b>Go</b>, espere baixar e toque em <b>Instalar</b>. No fim, pode tocar em <b>Excluir</b> o arquivo para liberar espaço e depois <b>Abrir</b> o Hugo Player.</div></li>
       </ol>
     </div>
   </section>
 
-  <div class="note">⚠️ Baixe o Hugo Player só por este site (<b>hugo.streamflixvip.online</b>). O app não vem com canais, filmes ou listas: você adiciona a sua própria playlist depois de instalar.</div>
-  <div class="support-card"><div><b>Dúvida na instalação?</b><span>Fale com o suporte do Hugo Player pelo WhatsApp.</span></div><a class="btn wa-link" style="background:#25D366;color:#06210f" data-support-wa data-wa-icon hidden href="#">Suporte no WhatsApp</a></div>
-  <div class="footer">Hugo Player • Link fixo para a versão mais nova: <a href="/apk">hugo.streamflixvip.online/apk</a> • Código Downloader: <span data-dl-code></span> • <a class="wa-link" data-support-wa data-wa-icon hidden href="#">Suporte no WhatsApp</a></div>
+  <div class="note" data-i18n="note">⚠️ Baixe o Hugo Player só por este site (<b>hugo.streamflixvip.online</b>). O app não vem com canais, filmes ou listas: você adiciona a sua própria playlist depois de instalar.</div>
+  <div class="support-card"><div><b data-i18n="sup.h">Dúvida na instalação?</b><span data-i18n="sup.p">Fale com o suporte do Hugo Player pelo WhatsApp.</span></div><div style="display:flex;gap:8px;flex-wrap:wrap"><a class="btn" data-lang-only="en es" data-support-email href="mailto:hugoplayervip@gmail.com" data-i18n="sup.email">✉ hugoplayervip@gmail.com</a><a class="btn wa-link" style="background:#25D366;color:#06210f" data-support-wa data-wa-icon hidden href="#" data-i18n="sup.wa">Suporte no WhatsApp</a></div></div>
+  <div class="footer"><span data-i18n="foot.link">Hugo Player • Link fixo para a versão mais nova:</span> <a href="/apk">hugo.streamflixvip.online/apk</a> • <span data-i18n="foot.code">Código Downloader:</span> <span data-dl-code></span> • <a href="/termos" data-i18n="foot.terms">Termos</a> • <a href="/privacidade" data-i18n="foot.privacy">Privacidade</a> • <span data-lang-only="en es"><a data-support-email href="mailto:hugoplayervip@gmail.com">hugoplayervip@gmail.com</a> • </span><a class="wa-link" data-support-wa data-wa-icon hidden href="#" data-i18n="foot.wa">Suporte no WhatsApp</a></div>
 </main>
+<script src="/i18n-baixar.js"></script>
 <script src="/site-config.js"></script>
 <script>
 fetch("https://api-hugo.streamflixvip.online/channels/version", { cache: "no-store" })
   .then(function (r) { return r.json(); })
-  .then(function (v) { if (v && v.versionName) { document.getElementById("ver").textContent = "✓ Versão " + v.versionName + " (mais nova)"; } })
+  .then(function (v) { if (v && v.versionName) { document.getElementById("ver").textContent = T("✓ Versão {v} (mais nova)", { v: v.versionName }); } })
   .catch(function () {});
 </script>
 </body>
