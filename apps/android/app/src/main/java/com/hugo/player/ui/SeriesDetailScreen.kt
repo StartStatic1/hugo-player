@@ -90,12 +90,16 @@ fun SeriesDetailScreen(
         if (activeName == null) activeName = t?.let { SeriesVersionPrefs.choice(context, playlistId, it) } ?: seriesName
     }
     LaunchedEffect(seriesName) { info = TmdbClient.searchTv(seriesName) }
+    // dados do próprio provedor (get_series_info): build play usa primeiro
+    var providerPlot by remember(seriesName) { mutableStateOf<String?>(null) }
+    var providerCover by remember(seriesName) { mutableStateOf<String?>(null) }
 
     LaunchedEffect(playlistId, activeName) {
         val name = activeName ?: return@LaunchedEffect
         episodes = null; meta = emptyMap(); errorMsg = null
         val loaded = com.hugo.player.data.SeriesEpisodes.load(context, playlistId, name)
         meta = loaded.meta.mapValues { (_, m) -> EpisodeMeta(m.plot, m.durationSecs) }
+        providerPlot = loaded.plot; providerCover = loaded.cover
         errorMsg = loaded.error
         episodes = loaded.episodes
     }
@@ -109,7 +113,9 @@ fun SeriesDetailScreen(
         if (episodes != null && !initialFocusDone) { initialFocusDone = true; kotlinx.coroutines.delay(100); if (isWide) runCatching { firstEpisodeFocus.requestFocus() } }
     }
 
-    val poster = info?.poster ?: episodes?.firstOrNull { !it.logo.isNullOrBlank() }?.logo
+    val providerImg = providerCover ?: episodes?.firstOrNull { !it.logo.isNullOrBlank() }?.logo
+    val poster = if (StoreBuild.isPlay) (providerImg ?: info?.poster) else (info?.poster ?: providerImg)
+    val synopsis = if (StoreBuild.isPlay) (info?.overview ?: providerPlot) else info?.overview
     val seasonEps = selectedSeason?.let { bySeason[it] }.orEmpty()
 
     // assistidos / progresso parcial — relê ao voltar do player
@@ -202,8 +208,8 @@ fun SeriesDetailScreen(
             modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
         ) { focused ->
             Column(Modifier.padding(horizontal = 6.dp, vertical = 4.dp)) {
-                Text(info?.overview ?: "Sinopse não disponível.", color = HugoColors.TextMuted, fontSize = 12.sp, maxLines = if (synopsisOpen) 30 else 2, overflow = TextOverflow.Ellipsis)
-                if (info?.overview != null) Text(if (synopsisOpen) "mostrar menos" else "mais…", color = if (focused) Color.White else SeriesAccent, fontSize = 11.sp)
+                if (!(StoreBuild.isPlay && synopsis == null)) Text(synopsis ?: "Sinopse não disponível.", color = HugoColors.TextMuted, fontSize = 12.sp, maxLines = if (synopsisOpen) 30 else 2, overflow = TextOverflow.Ellipsis)
+                if (synopsis != null) Text(if (synopsisOpen) "mostrar menos" else "mais…", color = if (focused) Color.White else SeriesAccent, fontSize = 11.sp)
             }
         }
         errorMsg?.let { Text(it, color = Color(0xFFFCA5A5), fontSize = 12.sp, modifier = Modifier.padding(top = 6.dp)) }

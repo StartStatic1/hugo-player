@@ -96,6 +96,8 @@ object I18n {
         "Vazio" to arrayOf("Empty", "Vacío"),
         "Usuário" to arrayOf("Username", "Usuario"),
         "Senha" to arrayOf("Password", "Contraseña"),
+        "Mostrar senha" to arrayOf("Show password", "Mostrar contraseña"),
+        "Ocultar senha" to arrayOf("Hide password", "Ocultar contraseña"),
         "Translúcido" to arrayOf("Translucent", "Translúcido"),
         "Tela" to arrayOf("Screen", "Pantalla"),
         "Semelhantes" to arrayOf("Similar", "Similares"),

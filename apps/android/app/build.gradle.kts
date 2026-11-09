@@ -79,6 +79,15 @@ android {
     }
 }
 
+// versionCode próprio do build "play" (pacote com.hugo.player.play é separado na Play Store):
+// sobe a cada AAB enviado ao Play Console; não mexe no versionCode do APK do site.
+val playVersionCode = 70
+androidComponents {
+    onVariants(selector().withBuildType("play")) { v ->
+        v.outputs.forEach { it.versionCode.set(playVersionCode) }
+    }
+}
+
 dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)

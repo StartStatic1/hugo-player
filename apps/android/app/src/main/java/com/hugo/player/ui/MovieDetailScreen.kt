@@ -78,11 +78,13 @@ fun MovieDetailScreen(
     LaunchedEffect(movie.name) {
         loading = true
         info = TmdbClient.searchMovie(movie.name)
-        similar = TmdbClient.similarMovies(movie.name)
+        // build play: sem "Semelhantes" do TMDB (capas comerciais de fora do provedor)
+        similar = if (StoreBuild.isPlay) emptyList() else TmdbClient.similarMovies(movie.name)
         loading = false
     }
 
-    val poster = info?.poster ?: movie.logo
+    // build play: imagem do próprio provedor primeiro; TMDB só se o provedor não mandou (e o título bateu)
+    val poster = if (StoreBuild.isPlay) (movie.logo?.takeIf { it.isNotBlank() } ?: info?.poster) else (info?.poster ?: movie.logo)
 
     Box(Modifier.fillMaxSize().background(HugoColors.Background)) {
         poster?.let { p ->
@@ -125,7 +127,7 @@ fun MovieDetailScreen(
                     Spacer(Modifier.height(10.dp))
                     if (loading) {
                         CircularProgressIndicator(Modifier.size(20.dp), color = HugoColors.Accent, strokeWidth = 2.dp)
-                    } else {
+                    } else if (!(StoreBuild.isPlay && info?.overview.isNullOrBlank())) {
                         Text(
                             info?.overview ?: "Sinopse não encontrada.",
                             color = HugoColors.TextMuted,
@@ -172,7 +174,7 @@ fun MovieDetailScreen(
                 }
             }
 
-            if (similar.isNotEmpty()) {
+            if (!StoreBuild.isPlay && similar.isNotEmpty()) {
                 Spacer(Modifier.height(20.dp))
                 Text("Semelhantes", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
                 Spacer(Modifier.height(8.dp))

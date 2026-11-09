@@ -14,7 +14,7 @@ import java.net.URL
  */
 object SeriesEpisodes {
     data class EpisodeMeta(val plot: String?, val durationSecs: Int?)
-    data class Loaded(val episodes: List<ChannelEntity>, val meta: Map<String, EpisodeMeta>, val error: String?)
+    data class Loaded(val episodes: List<ChannelEntity>, val meta: Map<String, EpisodeMeta>, val error: String?, val plot: String? = null, val cover: String? = null)
 
     suspend fun load(context: Context, playlistId: String, name: String): Loaded {
         val repo = CatalogRepository.get(context)
@@ -37,7 +37,8 @@ object SeriesEpisodes {
                 if (code !in 200..299) throw Exception("HTTP $code: ${b.take(200)}")
                 b
             }
-            val arr = JSONObject(body).optJSONArray("episodes")
+            val root = JSONObject(body)
+            val arr = root.optJSONArray("episodes")
             val list = mutableListOf<ChannelEntity>()
             val metaOut = HashMap<String, EpisodeMeta>()
             if (arr != null) {
@@ -49,7 +50,8 @@ object SeriesEpisodes {
                     list.add(ChannelEntity(name = e.optString("name", name), url = e.getString("url"), logo = e.optString("logo").takeIf { it.isNotEmpty() }, group = "", type = "series", playlistId = playlistId, seriesName = name, season = e.optInt("season", 1), episode = e.optInt("episode", i + 1)))
                 }
             }
-            Loaded(list, metaOut, null)
+            fun str(k: String) = root.optString(k).takeIf { it.isNotBlank() && it != "null" }
+            Loaded(list, metaOut, null, plot = str("plot"), cover = str("cover"))
         } catch (ex: Exception) {
             Loaded(
                 local, emptyMap(),

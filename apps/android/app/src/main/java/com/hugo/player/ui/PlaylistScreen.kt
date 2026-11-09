@@ -25,6 +25,8 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Sync
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -486,7 +488,7 @@ fun PlaylistScreen(
                         Spacer(Modifier.height(8.dp))
                         HugoTextField(user, { user = it.trim() }, "Usuário")
                         Spacer(Modifier.height(8.dp))
-                        HugoTextField(pass, { pass = it }, "Senha")
+                        HugoTextField(pass, { pass = it }, "Senha", isPassword = StoreBuild.isPlay)
                     } else {
                         HugoTextField(url, { url = it.trim() }, "URL M3U", keyboardType = KeyboardType.Uri)
                     }
@@ -673,16 +675,30 @@ fun HugoTextField(
     isPin: Boolean = false,
     keyboardType: KeyboardType = KeyboardType.Text,
     modifier: Modifier = Modifier,
+    isPassword: Boolean = false,
 ) {
     val tv = rememberTvTextInput()
+    var reveal by remember { mutableStateOf(false) }
+    val masked = isPin || (isPassword && !reveal)
     OutlinedTextField(
         value = value,
         onValueChange = onChange,
         readOnly = tv.readOnly,
         label = { Text(label) },
         singleLine = true,
-        visualTransformation = if (isPin) PasswordVisualTransformation() else androidx.compose.ui.text.input.VisualTransformation.None,
-        keyboardOptions = KeyboardOptions(keyboardType = if (isPin) KeyboardType.NumberPassword else keyboardType),
+        visualTransformation = if (masked) PasswordVisualTransformation() else androidx.compose.ui.text.input.VisualTransformation.None,
+        keyboardOptions = KeyboardOptions(keyboardType = if (isPin) KeyboardType.NumberPassword else if (isPassword) KeyboardType.Password else keyboardType),
+        trailingIcon = if (isPassword) {
+            {
+                androidx.compose.material3.IconButton(onClick = { reveal = !reveal }) {
+                    Icon(
+                        if (reveal) androidx.compose.material.icons.Icons.Filled.VisibilityOff else androidx.compose.material.icons.Icons.Filled.Visibility,
+                        contentDescription = I18n.t(if (reveal) "Ocultar senha" else "Mostrar senha"),
+                        tint = HugoColors.TextMuted,
+                    )
+                }
+            }
+        } else null,
         colors = OutlinedTextFieldDefaults.colors(
             focusedTextColor = Color.White, unfocusedTextColor = Color.White,
             focusedBorderColor = HugoColors.Accent, unfocusedBorderColor = Color(0xFF334155),
