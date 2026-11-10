@@ -158,6 +158,8 @@ object MovieDedup {
     private val uhdRx = rx("(?i)(?<![\\p{L}\\p{N}])(4k|uhd|2160p?)(?![\\p{L}\\p{N}])")
     private val hdrRx = rx("(?i)(?<![\\p{L}\\p{N}])(hdr10\\+?|hdr|dolby[ ._-]?vision)(?![\\p{L}\\p{N}])")
     private val emptyBrackets = rx("\\[\\s*\\]|\\(\\s*\\)|\\{\\s*\\}")
+    /** marca do painel no começo do nome ("+ Filme (2026)" = novo; "- Filme" já sai no trim) */
+    private val leadMark = rx("^[+*]+\\s+")
 
     /** Nunca lança: se algo der errado, o filme fica com o nome original (sem juntar). */
     fun parse(name: String, group: String = ""): Info =
@@ -172,7 +174,8 @@ object MovieDedup {
         val legendado = legRx.containsMatchIn(s) || foldKey(group).contains("legendad")
         var t = yearRx.replace(s, " ")
         t = legRx.replace(t, " "); t = dubRx.replace(t, " "); t = qRx.replace(t, " ")
-        val clean = emptyBrackets.replace(t, " ").replace(spaces, " ").trim().trim('-', '|', ':', '•', '·', '_', '.', ' ', '/')
+        val clean = leadMark.replace(emptyBrackets.replace(t, " ").replace(spaces, " ").trim(), "")
+            .trim('-', '|', ':', '•', '·', '_', '.', ' ', '/')
         val key = foldKey(clean).ifEmpty { foldKey(name) }
         return Info(key, year, legendado, uhdRx.containsMatchIn(s), hdrRx.containsMatchIn(s), clean.ifEmpty { name.trim() })
     }

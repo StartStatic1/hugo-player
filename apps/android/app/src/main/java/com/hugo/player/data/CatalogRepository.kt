@@ -54,6 +54,7 @@ class CatalogRepository(context: Context) {
         private val RX_GROUP = Regex("group-title=\"([^\"]*)\"", RegexOption.IGNORE_CASE)
         private val RX_LOGO = Regex("tvg-logo=\"([^\"]*)\"", RegexOption.IGNORE_CASE)
         private val RX_TVGID = Regex("tvg-id=\"([^\"]*)\"", RegexOption.IGNORE_CASE)
+        private val RX_TVGNAME = Regex("tvg-name=\"([^\"]*)\"", RegexOption.IGNORE_CASE)
         /** valor que nunca é nome de categoria (a lista NOT IN nunca fica vazia) */
         private const val NO_GROUP = "\u0001__hugo_none__"
 
@@ -122,11 +123,7 @@ class CatalogRepository(context: Context) {
 
     private val maxClientM3uBytes = 150L * 1024 * 1024
 
-    private fun extractExtinfName(extinf: String): String {
-        val i = extinf.lastIndexOf(',')
-        if (i < 0 || i >= extinf.length - 1) return "Canal"
-        return extinf.substring(i + 1).trim().ifBlank { "Canal" }
-    }
+    private fun extractExtinfName(extinf: String): String = extinfName(extinf)
 
     private fun classifyType(name: String, group: String, url: String): String {
         val u = url.lowercase()
@@ -469,6 +466,7 @@ class CatalogRepository(context: Context) {
         onFraction: (Float?) -> Unit,
     ): Int {
         val tmp = java.io.File.createTempFile("hugo_m3u_", ".m3u")
+        var viaRelay: Relay? = null
         try {
             fun download(req: okhttp3.Request) {
                 // DNS seguro (SecureNet): se a operadora bloquear o endereço, resolve pelo Cloudflare/Google
@@ -541,7 +539,7 @@ class CatalogRepository(context: Context) {
                 onProgress("O provedor bloqueou esta internet. Baixando a lista pela rota alternativa...")
                 var ok = false
                 for (r in relays) {
-                    try { download(relayRequest(r, playlistUrl)); ok = true; break }
+                    try { download(relayRequest(r, playlistUrl)); ok = true; viaRelay = r; break }
                     catch (re: Exception) { android.util.Log.w("Hugo", "rota alternativa falhou: ${re.javaClass.simpleName}") }
                 }
                 if (!ok) throw if (e is NotAListException) Exception("o provedor bloqueou esta internet (respondeu uma página em vez da lista)") else e
@@ -549,11 +547,86 @@ class CatalogRepository(context: Context) {
             // o banco ocupa ~1,5x o arquivo da lista: sem espaço o SQLite falha no meio
             val free = appContext.getDatabasePath(HugoDatabase.FILE_NAME).parentFile?.usableSpace ?: Long.MAX_VALUE
             if (free < tmp.length() * 3 / 2 + 30_000_000L) throw Exception("pouco espaço livre no aparelho para guardar esta lista (${free / 1_000_000} MB livres)")
+            // M3U de painel Xtream costuma vir com poucas categorias genéricas: pega as de verdade na player_api
+            val groups = if (XtreamGroups.apiUrl(playlistUrl, "x") == null) null else {
+                onProgress("Organizando categorias...")
+                fetchXtreamGroups(playlistUrl, viaRelay)
+            }
             onProgress("Organizando... 0%")
             onFraction(0.85f)
-            return importM3uFullyLocalStreaming(playlistId, tmp, onProgress, onFraction)
+            return importM3uFullyLocalStreaming(playlistId, tmp, onProgress, onFraction, groups)
         } finally {
             tmp.delete()
+        }
+    }
+
+    /**
+     * Categorias + nomes dos itens pela player_api, do aparelho (pela mesma rota que baixou o M3U; a outra se falhar).
+     * Qualquer falha: null (fica com os group-title do M3U, como antes).
+     */
+    private fun fetchXtreamGroups(playlistUrl: String, viaRelay: Relay?): XtreamGroups? {
+        val client = com.hugo.player.net.SecureNet.client.newBuilder()
+            .connectTimeout(20, java.util.concurrent.TimeUnit.SECONDS)
+            .readTimeout(90, java.util.concurrent.TimeUnit.SECONDS).build()
+        val relays by lazy { runCatching { listRelays() }.getOrDefault(emptyList()) }
+        fun request(url: String, relay: Relay?): okhttp3.Request =
+            if (relay != null) relayRequest(relay, url)
+            else okhttp3.Request.Builder().url(url)
+                .header("User-Agent", "VLC/3.0.20 LibVLC/3.0.20").header("Accept", "*/*").header("Accept-Encoding", "gzip").build()
+        fun <T> read(url: String, parse: (JsonReader) -> T): T? {
+            val routes = if (viaRelay != null) listOf<Relay?>(viaRelay, null) else listOf<Relay?>(null) + relays
+            for (r in routes) {
+                try {
+                    client.newCall(request(url, r)).execute().use { resp ->
+                        if (resp.code !in 200..299) throw Exception("HTTP ${resp.code}")
+                        val raw = resp.body!!.byteStream()
+                        val gz = resp.header("Content-Encoding")?.contains("gzip", ignoreCase = true) == true
+                        val input = if (gz) java.util.zip.GZIPInputStream(raw, 64 * 1024) else raw
+                        val reader = JsonReader(input.bufferedReader(Charsets.UTF_8)).apply { isLenient = true }
+                        if (reader.peek() != JsonToken.BEGIN_ARRAY) throw Exception("not_array")
+                        return parse(reader)
+                    }
+                } catch (e: Exception) {
+                    android.util.Log.w("Hugo", "player_api no aparelho falhou: ${e.javaClass.simpleName}")
+                }
+            }
+            return null
+        }
+        fun JsonReader.scalar(): String? = when (peek()) {
+            JsonToken.STRING, JsonToken.NUMBER -> nextString()
+            JsonToken.BOOLEAN -> nextBoolean().toString()
+            JsonToken.NULL -> { nextNull(); null }
+            else -> { skipValue(); null }
+        }
+        /** [{a:..., b:...}] -> chama [each] com os 2 campos pedidos */
+        fun eachPair(r: JsonReader, a: String, b: String, each: (String?, String?) -> Unit) {
+            r.beginArray()
+            while (r.hasNext()) {
+                if (r.peek() != JsonToken.BEGIN_OBJECT) { r.skipValue(); continue }
+                r.beginObject()
+                var va: String? = null; var vb: String? = null
+                while (r.hasNext()) {
+                    when (r.nextName()) { a -> va = r.scalar(); b -> vb = r.scalar(); else -> r.skipValue() }
+                }
+                r.endObject()
+                each(va, vb)
+            }
+            r.endArray()
+        }
+        return try {
+            val g = XtreamGroups()
+            for ((type, catAction, itemAction) in XtreamGroups.ACTIONS) {
+                val catUrl = XtreamGroups.apiUrl(playlistUrl, catAction) ?: return null
+                val itemUrl = XtreamGroups.apiUrl(playlistUrl, itemAction) ?: return null
+                read(catUrl) { r -> eachPair(r, "category_id", "category_name") { id, n -> if (id != null && n != null) g.addCategory(type, id, n) } } ?: continue
+                read(itemUrl) { r -> eachPair(r, "name", "category_id") { n, id -> if (n != null && id != null) g.addItem(type, n, id) } }
+            }
+            android.util.Log.i("Hugo", "categorias da player_api: live=${g.size("live")} movie=${g.size("movie")} series=${g.size("series")}")
+            g.takeUnless { it.isEmpty }
+        } catch (e: Throwable) {
+            if (e is OutOfMemoryError) System.gc()
+            android.util.Log.w("Hugo", "categorias da player_api falharam: ${e.javaClass.simpleName}")
+            null
         }
     }
 
@@ -562,6 +635,7 @@ class CatalogRepository(context: Context) {
         tmp: java.io.File,
         onProgress: (String) -> Unit,
         onFraction: (Float?) -> Unit,
+        groups: XtreamGroups? = null,
     ): Int {
         dao.deleteChannels(playlistId); dao.deleteCategories(playlistId)
         if ('\u0001' !in playlistId) invalidateSeriesTwins(playlistId)
@@ -572,6 +646,7 @@ class CatalogRepository(context: Context) {
         var pendingGroup = "Outros"
         var pendingLogo: String? = null
         var pendingTvgId: String? = null
+        var pendingTvgName: String? = null
         val fileLen = tmp.length().coerceAtLeast(1L)
         var processedBytes = 0L
 
@@ -586,7 +661,9 @@ class CatalogRepository(context: Context) {
                     pendingGroup = RX_GROUP.find(t)?.groupValues?.get(1)?.trim()?.ifBlank { "Outros" } ?: "Outros"
                     pendingLogo = RX_LOGO.find(t)?.groupValues?.get(1)?.trim()?.takeIf { it.isNotEmpty() }
                     pendingTvgId = RX_TVGID.find(t)?.groupValues?.get(1)?.trim()?.takeIf { it.isNotEmpty() }
+                    pendingTvgName = if (groups != null) RX_TVGNAME.find(t)?.groupValues?.get(1)?.trim() else null
                 } else if (t.isNotEmpty() && !t.startsWith("#")) {
+                    // o tipo sai do group-title original + URL (a categoria da API, ex. "Canais ⫸ Novelas 24h", confundiria)
                     val type = classifyType(pendingName, pendingGroup, t)
                     var seriesName: String? = null
                     var season: Int? = null
@@ -598,6 +675,11 @@ class CatalogRepository(context: Context) {
                             episode = it.episode
                         }
                         if (seriesName == null) seriesName = pendingName
+                    }
+                    if (groups != null) {
+                        val apiGroup = if (type == "series") groups.groupFor(type, seriesName, pendingName)
+                            else groups.groupFor(type, pendingName, pendingTvgName)
+                        if (apiGroup != null) pendingGroup = apiGroup
                     }
                     batch.add(
                         ChannelEntity(
@@ -624,6 +706,7 @@ class CatalogRepository(context: Context) {
                     pendingGroup = "Outros"
                     pendingLogo = null
                     pendingTvgId = null
+                    pendingTvgName = null
                 }
             }
         } finally {
@@ -632,8 +715,12 @@ class CatalogRepository(context: Context) {
         if (batch.isNotEmpty()) dao.insertChannels(batch)
 
         val categories = ArrayList<CategoryEntity>()
+        // com as categorias da API: mesma ordem do modo normal (as que só existem no M3U vêm depois)
+        val ordered = if (groups == null) catCount.entries.toList() else catCount.entries.withIndex()
+            .sortedBy { (i, e) -> val p = e.key.split("\t", limit = 2); groups.position(p[0], p.getOrElse(1) { "" }) ?: (100_000 + i) }
+            .map { it.value }
         var pos = 0
-        for ((ck, count) in catCount) {
+        for ((ck, count) in ordered) {
             val parts = ck.split("\t", limit = 2)
             val type = parts.getOrElse(0) { "live" }
             val name = parts.getOrElse(1) { "Outros" }
