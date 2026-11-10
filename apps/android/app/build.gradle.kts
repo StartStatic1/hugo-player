@@ -83,7 +83,7 @@ android {
 
 // versionCode próprio do build "play" (pacote com.hugo.player.play é separado na Play Store):
 // sobe a cada AAB enviado ao Play Console; não mexe no versionCode do APK do site.
-val playVersionCode = 71
+val playVersionCode = 72
 // Play exige targetSdk 36 (Android 16); APK do site/Fire TV continua no targetSdk do defaultConfig.
 val playTargetSdk = 36
 androidComponents {
