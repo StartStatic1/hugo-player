@@ -9,7 +9,12 @@
 
     <queries tools:node="remove" />
 
-    <application>
+    <!--
+      targetSdk 36 (Android 16): voltar continua pelo KEYCODE_BACK (telas de TV tratam a tecla direto;
+      sem "voltar preditivo"); em telas grandes mantém o paisagem fixo (opt-out temporário do Android 16).
+    -->
+    <application android:enableOnBackInvokedCallback="false">
+        <property android:name="android.window.PROPERTY_COMPAT_ALLOW_RESTRICTED_RESIZABILITY" android:value="true" />
         <receiver android:name=".data.InstallStatusReceiver" tools:node="remove" />
         <provider android:name="androidx.core.content.FileProvider" tools:node="remove" />
     </application>

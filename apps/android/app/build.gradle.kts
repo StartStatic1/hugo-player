@@ -9,7 +9,7 @@ plugins {
 
 android {
     namespace = "com.hugo.player"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.hugo.player"
@@ -63,6 +63,8 @@ android {
             signingConfig = signingConfigs.findByName("playUpload")
             buildConfigField("boolean", "PLAY_STORE", "true")
             matchingFallbacks += listOf("release")
+            // Play Console: símbolos nativos (tabela de símbolos) dentro do AAB
+            ndk { debugSymbolLevel = "SYMBOL_TABLE" }
         }
     }
 
@@ -81,8 +83,13 @@ android {
 
 // versionCode próprio do build "play" (pacote com.hugo.player.play é separado na Play Store):
 // sobe a cada AAB enviado ao Play Console; não mexe no versionCode do APK do site.
-val playVersionCode = 70
+val playVersionCode = 71
+// Play exige targetSdk 36 (Android 16); APK do site/Fire TV continua no targetSdk do defaultConfig.
+val playTargetSdk = 36
 androidComponents {
+    beforeVariants(selector().withBuildType("play")) { b ->
+        b.targetSdk = playTargetSdk
+    }
     onVariants(selector().withBuildType("play")) { v ->
         v.outputs.forEach { it.versionCode.set(playVersionCode) }
     }
