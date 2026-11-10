@@ -157,6 +157,7 @@ object I18n {
         "Atualização obrigatória" to arrayOf("Update required", "Actualización obligatoria"),
         "Atualize para ver suas playlists" to arrayOf("Update to see your playlists", "Actualiza para ver tus playlists"),
         "Avançar 10 segundos" to arrayOf("Forward 10 seconds", "Adelantar 10 segundos"),
+        "Organizando categorias..." to arrayOf("Organizing categories...", "Organizando categorías..."),
         "Baixando legenda…" to arrayOf("Downloading subtitle…", "Descargando subtítulo…"),
         "Baixar e instalar" to arrayOf("Download and install", "Descargar e instalar"),
         "Bloqueio desligado" to arrayOf("Lock off", "Bloqueo apagado"),
