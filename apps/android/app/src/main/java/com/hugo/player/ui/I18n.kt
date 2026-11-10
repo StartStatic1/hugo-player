@@ -336,6 +336,8 @@ object I18n {
         "Entre com os dados de acesso do seu provedor." to arrayOf("Enter the login details from your provider.", "Ingresa los datos de acceso de tu proveedor."),
         "Atualize o Hugo Player pela Google Play para continuar." to arrayOf("Update Hugo Player on Google Play to continue.", "Actualiza Hugo Player en Google Play para continuar."),
         "Abrir Google Play" to arrayOf("Open Google Play", "Abrir Google Play"),
+        "Atualização pronta." to arrayOf("Update ready.", "Actualización lista."),
+        "Reiniciar" to arrayOf("Restart", "Reiniciar"),
     )
 }
 

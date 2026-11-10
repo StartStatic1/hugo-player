@@ -24,6 +24,8 @@ class MainActivity : ComponentActivity() {
         com.hugo.player.net.SecureDns.mode = AppSettings.secureDns
         LiveTvCache.load(this)
         if (BuildConfig.PLAY_STORE) hideSystemBars()
+        // Google Play In-App Updates (só no build play; nos outros é um stub vazio)
+        com.hugo.player.update.InAppUpdates.register(this)
         setContent {
             MaterialTheme(colorScheme = darkColorScheme(background = Color(0xFF07080F))) {
                 Surface(Modifier.fillMaxSize()) {
@@ -48,6 +50,10 @@ class MainActivity : ComponentActivity() {
         if (hasFocus && BuildConfig.PLAY_STORE) hideSystemBars()
     }
 
-    override fun onResume() { super.onResume(); CrashLog.setForeground(true) }
+    override fun onResume() {
+        super.onResume()
+        CrashLog.setForeground(true)
+        com.hugo.player.update.InAppUpdates.onResume(this)
+    }
     override fun onPause() { CrashLog.setForeground(false); super.onPause() }
 }

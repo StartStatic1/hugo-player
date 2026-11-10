@@ -79,11 +79,17 @@ android {
         compose = true
         buildConfig = true
     }
+    // In-App Updates da Google Play: implementação real em src/play; site/Fire TV (debug/release) usam o stub
+    // de src/noPlay e não levam a biblioteca da Play.
+    sourceSets {
+        getByName("debug") { java.srcDir("src/noPlay/java") }
+        getByName("release") { java.srcDir("src/noPlay/java") }
+    }
 }
 
 // versionCode próprio do build "play" (pacote com.hugo.player.play é separado na Play Store):
 // sobe a cada AAB enviado ao Play Console; não mexe no versionCode do APK do site.
-val playVersionCode = 72
+val playVersionCode = 73
 // Play exige targetSdk 36 (Android 16); APK do site/Fire TV continua no targetSdk do defaultConfig.
 val playTargetSdk = 36
 androidComponents {
@@ -120,5 +126,9 @@ dependencies {
     implementation(libs.androidx.room.ktx)
     ksp(libs.androidx.room.compiler)
     debugImplementation(libs.androidx.compose.ui.tooling)
+    // só no build "play" (Google Play In-App Updates)
+    "playImplementation"("com.google.android.play:app-update:2.1.0")
+    // a app-update traz androidx.fragment 1.0.0 (Activity Result API precisa de 1.3.0+)
+    "playImplementation"("androidx.fragment:fragment:1.8.5")
     testImplementation("junit:junit:4.13.2")
 }

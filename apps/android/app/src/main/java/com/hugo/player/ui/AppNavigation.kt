@@ -38,6 +38,7 @@ import androidx.navigation.NavType
 import androidx.navigation.navArgument
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import coil.compose.SubcomposeAsyncImage
 import com.hugo.player.data.AppSettings
@@ -213,6 +214,11 @@ private fun AppNavigationContent() {
             val title = dec(backStack.arguments?.getString("title") ?: "")
             PlayerScreen(PlaybackRequest(url = url, title = title), onBack = { nav.popBackStack() })
         }
+    }
+    // Google Play: versão nova baixada em segundo plano → "Atualização pronta. Reiniciar" (não aparece com vídeo aberto)
+    if (StoreBuild.isPlay) {
+        val route = nav.currentBackStackEntryAsState().value?.destination?.route
+        InAppUpdateBanner(hidden = route == "livePlay" || route == "play" || route?.startsWith("player/") == true)
     }
 }
 
