@@ -178,6 +178,7 @@ class CatalogRepository(context: Context) {
         /** chamado uma vez, assim que o 1º lote de itens está salvo (dá para abrir a lista já) */
         onFirstBatch: () -> Unit = {},
     ) = withContext(Dispatchers.IO) {
+        com.hugo.player.vpn.VpnManager.init(appContext)
         onProgress("Conectando ao servidor...")
         onFraction(null)
         val cur = k(playlistId)
@@ -424,6 +425,9 @@ class CatalogRepository(context: Context) {
 
     class NotAListException : Exception("o provedor respondeu uma página em vez da lista")
 
+    /** HTTP de erro do provedor no aparelho (mesma mensagem de antes: relayWorthy continua olhando o "(403)") */
+    class ProviderHttpException(val code: Int) : Exception("provedor recusou no aparelho ($code)")
+
     private fun looksLikeM3u(f: java.io.File): Boolean {
         val head = f.inputStream().use { val b = ByteArray(2048); val n = it.read(b); if (n <= 0) "" else String(b, 0, n, Charsets.UTF_8) }
         val t = head.trimStart('\uFEFF', ' ', '\n', '\r', '\t')
@@ -486,7 +490,7 @@ class CatalogRepository(context: Context) {
                 }
                 try {
                     val code = resp.code
-                    if (code !in 200..299) throw Exception("provedor recusou no aparelho ($code)")
+                    if (code !in 200..299) throw ProviderHttpException(code)
                     val len = conn.contentLengthLong
                     if (len > maxClientM3uBytes && conn.contentEncoding.isNullOrBlank()) throw Exception("lista muito grande (${len / 1_000_000} MB)")
                     var written = 0L
@@ -529,8 +533,29 @@ class CatalogRepository(context: Context) {
                 // pede compactado e descompacta aqui (assim o contador mostra o que passa de verdade pela internet)
                 .header("Accept-Encoding", "gzip")
                 .build()
+            val sourceId = realId(playlistId)
+            val vpn = com.hugo.player.vpn.VpnManager
+            // fonte já conhecida como "só com IP do país": liga a VPN antes (evita o 403 de novo)
+            if (vpn.ensureForSource(sourceId)) onProgress("VPN ${vpn.activeCountry.value} ligada")
             try {
-                download(direct())
+                try {
+                    download(direct())
+                } catch (e: ProviderHttpException) {
+                    // 403/451 = bloqueio por país/IP: com uma config WireGuard importada, liga a VPN e tenta 1x de novo
+                    if (!vpn.isGeoBlock(e.code) || vpn.isUp || !vpn.autoEnabled || !vpn.hasConfig()) throw e
+                    android.util.Log.d("HugoVpn", "provedor respondeu ${e.code} no aparelho: tentando com VPN")
+                    onProgress("O provedor recusou esta internet (${e.code}). Ligando VPN...")
+                    if (!vpn.ensureConnected()) throw e
+                    onProgress("VPN ${vpn.activeCountry.value} ligada. Baixando de novo...")
+                    try {
+                        download(direct())
+                    } catch (retry: Exception) {
+                        android.util.Log.d("HugoVpn", "nova tentativa com VPN falhou: ${retry.javaClass.simpleName} ${retry.message}")
+                        throw e
+                    }
+                    android.util.Log.d("HugoVpn", "deu certo com VPN: fonte marcada como ${vpn.activeCountry.value}")
+                    vpn.rememberRequired(sourceId, vpn.activeCountry.value)
+                }
             } catch (e: Exception) {
                 // bloqueou no aparelho (DNS, tempo, conexão, página de bloqueio): tenta a rota alternativa só da lista
                 if (!relayWorthy(e)) throw e

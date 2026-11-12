@@ -242,6 +242,7 @@ fun LivePlayerScreen(request: LivePlayRequest, onBack: () -> Unit) {
         if (resolvedFor != current.id || attemptsBase != playCh.url) return@LaunchedEffect
         loading = true
         bufferingSince = System.currentTimeMillis()
+        com.hugo.player.vpn.VpnManager.ensureForSource(src.playlistId)
         exoPlayer.setMediaItem(HugoPlayerFactory.mediaItem(playUrl, forceHls))
         exoPlayer.prepare()
         exoPlayer.playWhenReady = true

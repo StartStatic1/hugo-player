@@ -169,6 +169,8 @@ fun PlayerScreen(request: PlaybackRequest, onBack: () -> Unit) {
         extOptions = emptyList(); extApplied = null; subStatus = null; autoSubTried = false; readyOnce = false; subByAudioSwitch = false
         extCues = emptyList(); extActive = false; subOffsetMs = 0L; subsOffThisVideo = false; embeddedAutoAt = null; subNotice = null
         playerViewRef?.subtitleView?.setCues(emptyList())
+        // fonte marcada como "só com IP do país": liga a VPN antes de abrir o vídeo (nada acontece nas outras)
+        com.hugo.player.vpn.VpnManager.ensureForSource(current.playlistId)
         exoPlayer.setMediaItem(HugoPlayerFactory.mediaItem(current.url, forceHls))
         exoPlayer.prepare()
         val resumeAt = if (current.isLive != true) WatchHistory.getProgress(context, progressKeyFor(current)) else 0L

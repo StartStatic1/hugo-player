@@ -9,6 +9,9 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import com.hugo.player.vpn.VpnManager
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.*
@@ -350,6 +353,10 @@ fun SettingsScreen(deviceId: String, deviceKey: String, onBack: () -> Unit) {
                                 else OutlinedButton(onClick = { AppSettings.secureDns = code; dnsMode = code }, contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)) { androidx.compose.material3.Text(tr(name), fontSize = 13.sp) }
                             }
                         }
+                        if (VpnManager.isEnabled) {
+                            Spacer(Modifier.height(10.dp))
+                            VpnSettings(onMessage = { message = it })
+                        }
                         Spacer(Modifier.height(10.dp))
                         OutlinedButton(onClick = { WatchHistory.clearContinue(context); message = "Continuar assistindo limpo" }, modifier = Modifier.fillMaxWidth(), contentPadding = PaddingValues(vertical = 6.dp)) { Text("Limpar continuar assistindo", fontSize = 13.sp) }
                     }
@@ -575,5 +582,51 @@ private fun LinkButton(title: String, subtitle: String, accent: Color, modifier:
                 Text(subtitle, color = if (focused) Color.White.copy(alpha = 0.85f) else HugoColors.TextMuted, fontSize = 13.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
             }
         }
+    }
+}
+
+
+/** VPN WireGuard automática: importar .conf, ligar sozinha no 403, desligar, remover. */
+@Composable
+private fun VpnSettings(onMessage: (String) -> Unit) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val status by VpnManager.status.collectAsState()
+    val active by VpnManager.activeCountry.collectAsState()
+    var countries by remember { mutableStateOf(VpnManager.countries()) }
+    var auto by remember { mutableStateOf(VpnManager.autoEnabled) }
+    val country = VpnManager.DEFAULT_COUNTRY
+    val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        VpnManager.importConfig(country, uri)
+            .onSuccess { countries = VpnManager.countries(); onMessage(tr("Config da VPN importada") + " ($it)") }
+            .onFailure { onMessage(tr("Arquivo .conf inválido") + ": ${it.message.orEmpty().take(80)}") }
+    }
+    Text("VPN automática (WireGuard)", color = Color.White, fontSize = 14.sp)
+    Text("Liga sozinha só quando o provedor recusa esta internet (erro 403) e tenta de novo.", color = HugoColors.TextMuted, fontSize = 12.sp)
+    val statusText = when (status) {
+        VpnManager.Status.ON -> tr("Ligada") + " (${active ?: country})"
+        VpnManager.Status.CONNECTING -> tr("Conectando...")
+        VpnManager.Status.NEEDS_CONSENT -> tr("Permissão de VPN negada")
+        VpnManager.Status.ERROR -> tr("Não conectou")
+        VpnManager.Status.OFF -> tr("Desligada")
+    }
+    val cfgText = if (countries.isEmpty()) tr("Nenhuma config importada") else tr("Configs") + ": " + countries.joinToString(", ")
+    Text("$statusText · $cfgText", color = HugoColors.TextMuted, fontSize = 12.sp)
+    Spacer(Modifier.height(6.dp))
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text("Ligar sozinha quando precisar", color = Color.White, fontSize = 13.sp, modifier = Modifier.weight(1f))
+        Switch(checked = auto, onCheckedChange = { auto = it; VpnManager.autoEnabled = it }, colors = SwitchDefaults.colors(checkedTrackColor = HugoColors.Accent))
+    }
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        OutlinedButton(onClick = {
+            runCatching { picker.launch(arrayOf("*/*")) }.onFailure { onMessage(tr("Sem seletor de arquivos neste aparelho")) }
+        }, contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)) { Text(tr("Importar .conf") + " ($country)", fontSize = 12.sp) }
+        if (status == VpnManager.Status.ON) OutlinedButton(onClick = {
+            scope.launch { VpnManager.disconnect(); onMessage(tr("VPN desligada")) }
+        }, contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)) { Text(tr("Desligar VPN"), fontSize = 12.sp) }
+        if (countries.isNotEmpty()) OutlinedButton(onClick = {
+            scope.launch { VpnManager.disconnect(); VpnManager.removeConfig(country); countries = VpnManager.countries(); onMessage(tr("Config da VPN removida")) }
+        }, contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)) { Text(tr("Remover"), fontSize = 12.sp) }
     }
 }

@@ -18,6 +18,9 @@ android {
         // Servidor da API; para testar contra outro: ./gradlew assembleDebug -PhugoApiUrl=http://10.0.2.2:8080
         val apiUrl = (project.findProperty("hugoApiUrl") as String?) ?: "https://api-hugo.streamflixvip.online"
         buildConfigField("String", "API_BASE_URL", "\"$apiUrl\"")
+        // VPN WireGuard automática (só quando o provedor bloqueia por país). Build da Play: desligar (false)
+        // e remover o GoBackend\$VpnService do manifesto, a menos que a declaração de VpnService seja aprovada no Console.
+        buildConfigField("boolean", "VPN_ENABLED", "true")
     }
 
     signingConfigs {
@@ -73,6 +76,8 @@ dependencies {
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("com.squareup.okhttp3:okhttp-dnsoverhttps:4.12.0")
     implementation("androidx.navigation:navigation-compose:2.8.3")
+    // túnel WireGuard oficial (GoBackend = wireguard-go embutido, não precisa de root)
+    implementation("com.wireguard.android:tunnel:1.0.20260102")
     implementation(libs.androidx.room.runtime)
     implementation(libs.androidx.room.ktx)
     ksp(libs.androidx.room.compiler)

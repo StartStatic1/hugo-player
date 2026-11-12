@@ -14,6 +14,8 @@ data class RemotePlaylist(
     val updatedAt: String?,
     /** Link próprio do EPG (XMLTV); null = automático (xmltv.php do Xtream / url-tvg). */
     val epgUrl: String? = null,
+    /** País exigido pelo provedor (ex.: "US"): a VPN WireGuard liga sozinha para esta fonte. Opcional no JSON. */
+    val vpnCountry: String? = null,
 )
 
 /** CRUD de playlists no backend + PINs desbloqueados nesta sessão (só em memória). */
@@ -35,7 +37,23 @@ object PlaylistRepository {
         url = o.optString("url", "").takeIf { it.isNotBlank() && it != "null" },
         updatedAt = o.optString("updatedAt", "").takeIf { it.isNotBlank() },
         epgUrl = o.optString("epgUrl", "").takeIf { it.isNotBlank() && it != "null" },
-    ).also { p -> if (!p.isProtected || p.url != null) rememberEpgLink(p.id, p.epgUrl) }
+        vpnCountry = vpnCountryOf(o),
+    ).also { p ->
+        if (!p.isProtected || p.url != null) rememberEpgLink(p.id, p.epgUrl)
+        // só marca (nunca desmarca): o app também aprende sozinho quando um 403 passa com a VPN
+        p.vpnCountry?.let { com.hugo.player.vpn.VpnManager.rememberRequired(p.id, it) }
+    }
+
+    /** `vpnCountry: "US"` ou `requires_vpn`/`requiresVpn`: true (= US) ou "US". Ausente/false = null. */
+    internal fun vpnCountryOf(o: JSONObject): String? {
+        o.optString("vpnCountry", "").trim().takeIf { it.length == 2 }?.let { return it.uppercase() }
+        for (k in listOf("requires_vpn", "requiresVpn")) {
+            val v = o.opt(k)?.toString()?.trim().orEmpty()
+            if (v.equals("true", true)) return com.hugo.player.vpn.VpnManager.DEFAULT_COUNTRY
+            if (v.length == 2 && v.all { it.isLetter() }) return v.uppercase()
+        }
+        return null
+    }
 
     /**
      * Último link de EPG conhecido por playlist (para o EPG baixado no aparelho).
