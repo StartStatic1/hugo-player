@@ -116,6 +116,9 @@ fun LivePlayerScreen(request: LivePlayRequest, onBack: () -> Unit) {
     var bufferingSince by remember { mutableLongStateOf(0L) }
     var errorMsg by remember { mutableStateOf<String?>(null) }
     var retryCount by remember { mutableIntStateOf(0) }
+    /** canal/qualidade que já tentou a VPN depois de um 403/451 (só 1x: evita laço) */
+    var vpnTriedUrl by remember { mutableStateOf<String?>(null) }
+    var vpnNotice by remember { mutableStateOf<String?>(null) }
     var reconnectTick by remember { mutableIntStateOf(0) }
     var foreground by remember { mutableStateOf(true) }
     var videoHeight by remember { mutableIntStateOf(0) }
@@ -265,6 +268,24 @@ fun LivePlayerScreen(request: LivePlayRequest, onBack: () -> Unit) {
                 }
                 // qualquer erro: tenta a outra variante (.ts <-> .m3u8) antes de desistir
                 if (attempt + 1 < attempts.size) { attempt++; return }
+                // 403/451 em todas as variantes = bloqueio por país/IP: liga a VPN (automática) e tenta 1x de novo
+                val geo = com.hugo.player.vpn.VpnPlayback.geoBlockStatus(error)
+                val key = playCh.url
+                if (geo != null && vpnTriedUrl != key && com.hugo.player.vpn.VpnPlayback.canTry()) {
+                    vpnTriedUrl = key
+                    errorMsg = null
+                    vpnNotice = tr("Ligando VPN…")
+                    scope.launch {
+                        val ok = com.hugo.player.vpn.VpnPlayback.connectFor(src.playlistId, geo)
+                        vpnNotice = null
+                        if (playCh.url != key) return@launch
+                        if (ok) {
+                            retryCount = 0
+                            if (attempt == 0) reconnect() else attempt = 0
+                        } else { errorMsg = friendlyError(error); loading = false }
+                    }
+                    return
+                }
                 if ((isRetryable(error) || isLiveFormatFailure(error.errorCode, httpStatus(error))) && retryCount < MAX_LIVE_RETRIES) {
                     retryCount++
                     // recomeça pela primeira variante (TS); com uma só variante, reconecta com espera crescente
@@ -425,10 +446,14 @@ fun LivePlayerScreen(request: LivePlayRequest, onBack: () -> Unit) {
         )
         }
 
-        if (loading && errorMsg == null) {
+        if ((loading || vpnNotice != null) && errorMsg == null) {
             Column(Modifier.align(Alignment.Center), horizontalAlignment = Alignment.CenterHorizontally) {
                 CircularProgressIndicator(color = HugoColors.Accent)
-                if (retryCount > 0) {
+                vpnNotice?.let {
+                    Spacer(Modifier.height(10.dp))
+                    Text(it, color = Color.White, fontSize = 13.sp, modifier = Modifier.background(Color(0xFF12141C), RoundedCornerShape(8.dp)).padding(horizontal = 10.dp, vertical = 4.dp))
+                }
+                if (retryCount > 0 && vpnNotice == null) {
                     Spacer(Modifier.height(10.dp))
                     Text("Reconectando… ($retryCount)", color = Color.White, fontSize = 13.sp, modifier = Modifier.background(Color(0xFF12141C), RoundedCornerShape(8.dp)).padding(horizontal = 10.dp, vertical = 4.dp))
                 }

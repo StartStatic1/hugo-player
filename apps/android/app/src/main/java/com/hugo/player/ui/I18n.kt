@@ -314,6 +314,7 @@ object I18n {
         "DNS seguro" to arrayOf("Secure DNS", "DNS seguro"),
         "VPN automática (WireGuard)" to arrayOf("Automatic VPN (WireGuard)", "VPN automática (WireGuard)"),
         "Liga sozinha só quando o provedor recusa esta internet (erro 403) e tenta de novo." to arrayOf("Turns on by itself only when the provider refuses this internet (error 403) and tries again.", "Se activa sola solo cuando el proveedor rechaza esta internet (error 403) y lo intenta de nuevo."),
+        "Ligando VPN…" to arrayOf("Turning on VPN…", "Activando VPN…"),
         "Ligar sozinha quando precisar" to arrayOf("Turn on automatically when needed", "Activar sola cuando haga falta"),
         "Importar .conf" to arrayOf("Import .conf", "Importar .conf"),
         "Desligar VPN" to arrayOf("Turn off VPN", "Desactivar VPN"),
