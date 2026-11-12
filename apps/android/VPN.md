@@ -20,6 +20,13 @@ Na 1ª vez o Android mostra "Permitir conexão VPN" (VpnService.prepare). A Main
 negar ou não houver tela aberta em 60 s, a VPN não liga e o erro original aparece.
 
 ## Configs por país
+**Automático (padrão):** o dono envia o `.conf` no painel admin (hugo.streamflixvip.online/admin.html › "VPN automática
+(WireGuard)"). Quando precisa da VPN e não há config importada à mão, o app chama `GET /vpn/config/<CC>`
+(x-device-id + x-device-key; só licença/teste ativo), guarda em `filesDir/vpn-remote/<CC>.conf` (privado do app) e
+confere a cada 6 h com `If-None-Match` (hash) se mudou. 404/401/403 apagam a cópia local. Sem config no servidor, não
+pergunta de novo por 10 min. Hosts marcados no painel chegam como `vpnCountry` no `GET /playlists`.
+
+**Manual (reserva, tem prioridade sobre a do servidor):**
 - Configurações › Cache e histórico (junto do DNS seguro) › "VPN automática (WireGuard)" › Importar .conf (US) — seletor de arquivos.
 - Ou copiar o arquivo para `Android/data/com.hugo.player/files/vpn/US.conf` (TVs sem seletor; `adb push`).
 - Outros países: `XX.conf` no mesmo lugar e `VpnManager.ensureConnected("XX")` / `vpnCountry: "XX"` no backend.

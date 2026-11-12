@@ -32,6 +32,8 @@ export interface PlaylistDeps {
   persist: () => Promise<void>;
   /** Autentica pelo par Device ID + Key; retorna o deviceId normalizado ou null. */
   authenticate: (deviceId: string | undefined, deviceKey: string | undefined) => string | null;
+  /** País exigido pelo host da fonte (regras do admin); o app liga a VPN WireGuard sozinho. */
+  vpnCountryFor?: (url: string) => string | undefined;
   /** Limite de tentativas de PIN por minuto (default 20). */
   pinAttemptsPerMinute?: number;
 }
@@ -118,7 +120,7 @@ export function buildPlaylistUrl(p: { type?: "m3u" | "xtream"; url: string; user
   return u.toString();
 }
 
-export function publicView(p: StoredPlaylist, unlocked: boolean) {
+export function basePublicView(p: StoredPlaylist, unlocked: boolean) {
   const isProtected = Boolean(p.pinHash);
   return {
     id: p.id,
@@ -132,6 +134,8 @@ export function publicView(p: StoredPlaylist, unlocked: boolean) {
   };
 }
 
+export const publicView = basePublicView;
+
 function pinFrom(req: Request): string | undefined {
   const h = req.header("x-playlist-pin");
   if (h) return h;
@@ -141,6 +145,11 @@ function pinFrom(req: Request): string | undefined {
 
 export function createPlaylistRouter(deps: PlaylistDeps): Router {
   const r = Router();
+  const publicView = (p: StoredPlaylist, unlocked: boolean) => {
+    const v = basePublicView(p, unlocked);
+    const vpnCountry = deps.vpnCountryFor?.(p.url);
+    return vpnCountry ? { ...v, vpnCountry } : v;
+  };
 
   const pinLimiter = rateLimit({
     windowMs: 60_000,

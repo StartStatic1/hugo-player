@@ -20,6 +20,8 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
+import java.net.HttpURLConnection
+import java.net.URL
 
 /**
  * VPN WireGuard embutida (GoBackend = wireguard-go dentro do app, sem root).
@@ -30,7 +32,9 @@ import java.io.File
  *    depois que um 403 só passou com a VPN).
  * Sem nenhuma config importada nada muda: todas as funções devolvem false e não abrem diálogo.
  *
- * Configs: um arquivo wg-quick (.conf) por país em filesDir/vpn/<CC>.conf (ex.: US.conf).
+ * Configs: automáticas do servidor (GET /vpn/config/<CC>, só com licença/teste ativo; guardadas em
+ * filesDir/vpn-remote/<CC>.conf e atualizadas pelo hash/ETag) ou importadas à mão (têm prioridade):
+ * um arquivo wg-quick (.conf) por país em filesDir/vpn/<CC>.conf (ex.: US.conf).
  * Também lê <externalFilesDir>/vpn/<CC>.conf (Android/data/<pacote>/files/vpn/US.conf), para colocar
  * o arquivo por gerenciador de arquivos/adb em aparelhos de TV sem seletor de arquivos.
  *
@@ -44,6 +48,10 @@ object VpnManager {
     private const val CONNECT_TIMEOUT_MS = 20_000L
     private const val CONSENT_TIMEOUT_MS = 60_000L
     private const val HANDSHAKE_WAIT_MS = 6_000L
+    /** config do servidor já baixada: confere se mudou no máximo a cada 6 h (ETag → 304 barato) */
+    private const val REMOTE_RECHECK_MS = 6 * 3600_000L
+    /** servidor sem config / falhou: não pergunta de novo por 10 min (evita bater no servidor a cada 403) */
+    private const val REMOTE_MISS_BACKOFF_MS = 10 * 60_000L
 
     enum class Status { OFF, CONNECTING, ON, NEEDS_CONSENT, ERROR }
 
@@ -112,9 +120,11 @@ object VpnManager {
 
     fun hasConfig(country: String? = null): Boolean = ready() && loadConfig(cc(country)) != null
 
+    private fun hasManualConfig(country: String): Boolean = configFiles(country).any { it.isFile }
+
     private fun loadConfig(country: String): Config? {
         configs[country]?.let { return it }
-        for (f in configFiles(country)) {
+        for (f in configFiles(country) + remoteFile(country)) {
             if (!f.isFile) continue
             try {
                 val c = f.inputStream().use { Config.parse(it) }
@@ -152,6 +162,97 @@ object VpnManager {
         val c = cc(country)
         configFiles(c).forEach { runCatching { it.delete() } }
         configs.remove(c)
+    }
+
+    // ---------- configs automáticas do servidor ----------
+
+    private fun remoteDir() = File(appContext.filesDir, "vpn-remote")
+    private fun remoteFile(country: String) = File(remoteDir(), "$country.conf")
+
+    /** Países com config automática já baixada do servidor. */
+    fun remoteCountries(): List<String> {
+        if (!ready()) return emptyList()
+        return remoteDir().listFiles { f -> f.name.endsWith(".conf", true) }?.map { it.name.substringBeforeLast('.').uppercase() }?.sorted().orEmpty()
+    }
+
+    private fun dropRemote(country: String) {
+        runCatching { remoteFile(country).delete() }
+        prefs().edit().remove("rhash:$country").remove("rcheck:$country").apply()
+        if (!hasManualConfig(country)) configs.remove(country)
+    }
+
+    /**
+     * Garante uma config para o país: a importada à mão (prioridade) ou a do servidor (baixa sozinha,
+     * guarda no armazenamento privado do app e confere pelo hash se mudou). Nunca lança exceção.
+     */
+    suspend fun prepareConfig(country: String? = null, forceRefresh: Boolean = false): Boolean {
+        if (!ready()) return false
+        val c = cc(country)
+        if (hasManualConfig(c)) return loadConfig(c) != null
+        val now = System.currentTimeMillis()
+        val cached = remoteFile(c).isFile
+        val lastCheck = prefs().getLong("rcheck:$c", 0L)
+        val lastMiss = prefs().getLong("rmiss:$c", 0L)
+        val fresh = cached && now - lastCheck in 0 until REMOTE_RECHECK_MS
+        val backoff = !cached && now - lastMiss in 0 until REMOTE_MISS_BACKOFF_MS
+        if (!forceRefresh && (fresh || backoff)) return loadConfig(c) != null
+        withContext(Dispatchers.IO) { fetchRemote(c) }
+        return loadConfig(c) != null
+    }
+
+    /** GET /vpn/config/<CC> com o Device ID + Key do aparelho. O conteúdo (chave privada) nunca vai para o log. */
+    private fun fetchRemote(country: String) {
+        val p = prefs()
+        val id = runCatching { com.hugo.player.data.DeviceIdentity.get(appContext) }.getOrNull() ?: return
+        val conn = runCatching {
+            URL("${com.hugo.player.data.HugoApi.baseUrl}/vpn/config/$country").openConnection() as HttpURLConnection
+        }.getOrNull() ?: return
+        try {
+            conn.connectTimeout = 10_000
+            conn.readTimeout = 15_000
+            conn.useCaches = false
+            conn.setRequestProperty("Accept", "application/json")
+            conn.setRequestProperty("x-hugo-version-code", BuildConfig.VERSION_CODE.toString())
+            conn.setRequestProperty("x-device-id", id.deviceId)
+            conn.setRequestProperty("x-device-key", id.deviceKey)
+            val known = p.getString("rhash:$country", null)
+            if (known != null && remoteFile(country).isFile) conn.setRequestProperty("If-None-Match", "\"$known\"")
+            when (val code = conn.responseCode) {
+                304 -> {
+                    p.edit().putLong("rcheck:$country", System.currentTimeMillis()).apply()
+                    Log.d(TAG, "config $country do servidor sem mudança")
+                }
+                200 -> {
+                    val body = conn.inputStream.bufferedReader().use { it.readText() }
+                    val o = org.json.JSONObject(body)
+                    val text = o.optString("config", "")
+                    val hash = o.optString("hash", "").ifBlank { conn.getHeaderField("ETag")?.trim('"').orEmpty() }
+                    parseConfig(text) // valida antes de trocar a que já existe
+                    remoteDir().mkdirs()
+                    val tmp = File(remoteDir(), "$country.conf.tmp")
+                    tmp.writeText(text)
+                    if (!tmp.renameTo(remoteFile(country))) { remoteFile(country).delete(); tmp.renameTo(remoteFile(country)) }
+                    configs.remove(country)
+                    p.edit().putString("rhash:$country", hash).putLong("rcheck:$country", System.currentTimeMillis()).remove("rmiss:$country").apply()
+                    Log.d(TAG, "config $country baixada do servidor (hash ${hash.take(8)})")
+                }
+                404, 401, 403 -> {
+                    // servidor sem config para o país, aparelho sem licença ou Key inválida: não usa a cópia antiga
+                    Log.d(TAG, "servidor não entregou config $country (HTTP $code)")
+                    dropRemote(country)
+                    p.edit().putLong("rmiss:$country", System.currentTimeMillis()).apply()
+                }
+                else -> {
+                    Log.w(TAG, "config $country do servidor: HTTP $code (mantém a cópia local, se houver)")
+                    p.edit().putLong("rmiss:$country", System.currentTimeMillis()).apply()
+                }
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "falha ao baixar config $country do servidor: ${e.javaClass.simpleName}")
+            p.edit().putLong("rmiss:$country", System.currentTimeMillis()).apply()
+        } finally {
+            conn.disconnect()
+        }
     }
 
     // ---------- fontes que precisam de país ----------
@@ -194,6 +295,7 @@ object VpnManager {
         return try {
             mutex.withLock {
                 if (isUp && _country.value == c) return@withLock true
+                if (!prepareConfig(c)) { Log.d(TAG, "sem config para $c (nem importada nem do servidor), VPN não liga"); return@withLock false }
                 val base = withContext(Dispatchers.IO) { loadConfig(c) }
                 if (base == null) { Log.d(TAG, "sem config para $c, VPN não liga"); return@withLock false }
                 if (!obtainConsent()) { _status.value = Status.NEEDS_CONSENT; return@withLock false }
@@ -208,12 +310,15 @@ object VpnManager {
                 } ?: false
                 if (!ok) {
                     Log.w(TAG, "VPN $c não ligou (tempo esgotado ou recusada)")
+                    // config do servidor pode ter sido trocada: na próxima vez confere de novo
+                    prefs().edit().putLong("rcheck:$c", 0L).apply()
                     runCatching { withContext(Dispatchers.IO) { backend.setState(tunnel, Tunnel.State.DOWN, null) } }
                     _status.value = Status.ERROR; _country.value = null
                     return@withLock false
                 }
                 _status.value = Status.ON; _country.value = c
                 val hs = waitHandshake()
+                if (!hs) prefs().edit().putLong("rcheck:$c", 0L).apply()
                 Log.d(TAG, "VPN $c ligada" + if (hs) " (handshake ok)" else " (sem handshake ainda)")
                 true
             }

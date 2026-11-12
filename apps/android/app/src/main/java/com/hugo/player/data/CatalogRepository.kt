@@ -542,7 +542,8 @@ class CatalogRepository(context: Context) {
                     download(direct())
                 } catch (e: ProviderHttpException) {
                     // 403/451 = bloqueio por país/IP: com uma config WireGuard importada, liga a VPN e tenta 1x de novo
-                    if (!vpn.isGeoBlock(e.code) || vpn.isUp || !vpn.autoEnabled || !vpn.hasConfig()) throw e
+                    // sem config importada: baixa a do servidor sozinha (licença/teste ativo)
+                    if (!vpn.isGeoBlock(e.code) || vpn.isUp || !vpn.autoEnabled || !vpn.prepareConfig()) throw e
                     android.util.Log.d("HugoVpn", "provedor respondeu ${e.code} no aparelho: tentando com VPN")
                     onProgress("O provedor recusou esta internet (${e.code}). Ligando VPN...")
                     if (!vpn.ensureConnected()) throw e

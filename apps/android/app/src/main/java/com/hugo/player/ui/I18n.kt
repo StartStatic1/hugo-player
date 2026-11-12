@@ -320,6 +320,8 @@ object I18n {
         "Ligada" to arrayOf("On", "Activada"),
         "Não conectou" to arrayOf("Could not connect", "No se conectó"),
         "Permissão de VPN negada" to arrayOf("VPN permission denied", "Permiso de VPN denegado"),
+        "Automática" to arrayOf("Automatic", "Automática"),
+        "Automática: baixa do servidor quando precisar" to arrayOf("Automatic: downloaded from the server when needed", "Automática: se descarga del servidor cuando haga falta"),
         "Nenhuma config importada" to arrayOf("No config imported", "Ninguna config importada"),
         "Configs" to arrayOf("Configs", "Configs"),
         "Config da VPN importada" to arrayOf("VPN config imported", "Config de VPN importada"),

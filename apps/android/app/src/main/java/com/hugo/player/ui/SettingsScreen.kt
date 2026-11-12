@@ -611,7 +611,12 @@ private fun VpnSettings(onMessage: (String) -> Unit) {
         VpnManager.Status.ERROR -> tr("Não conectou")
         VpnManager.Status.OFF -> tr("Desligada")
     }
-    val cfgText = if (countries.isEmpty()) tr("Nenhuma config importada") else tr("Configs") + ": " + countries.joinToString(", ")
+    val remote = remember(status) { VpnManager.remoteCountries() }
+    val cfgText = when {
+        countries.isNotEmpty() -> tr("Configs") + ": " + countries.joinToString(", ")
+        remote.isNotEmpty() -> tr("Automática") + ": " + remote.joinToString(", ")
+        else -> tr("Automática: baixa do servidor quando precisar")
+    }
     Text("$statusText · $cfgText", color = HugoColors.TextMuted, fontSize = 12.sp)
     Spacer(Modifier.height(6.dp))
     Row(verticalAlignment = Alignment.CenterVertically) {
