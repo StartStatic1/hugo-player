@@ -287,6 +287,9 @@ class CatalogRepository(context: Context) {
         var firstBatchDone = false
         var estimated = knownTotal ?: 50000
         var account: Pair<Long?, Boolean>? = null
+        // categorias do servidor: gravadas logo e conferidas no fim com os grupos dos itens (CategoryReconcile)
+        val serverCats = ArrayList<CategoryReconcile.Cat>()
+        val itemCounts = LinkedHashMap<String, Int>()
         try {
             reader.beginObject()
             while (reader.hasNext()) {
@@ -339,6 +342,8 @@ class CatalogRepository(context: Context) {
                                     epgId = if (type == "live") epgId else null,
                                 )
                             )
+                            val ck = CategoryReconcile.key(type, group)
+                            itemCounts[ck] = (itemCounts[ck] ?: 0) + 1
                             total++
                             if (total % 1000 == 0) {
                                 val rt = realTotal
@@ -362,8 +367,6 @@ class CatalogRepository(context: Context) {
                     }
                     "categories" -> {
                         reader.beginArray()
-                        val categories = ArrayList<CategoryEntity>()
-                        var pos = 0
                         while (reader.hasNext()) {
                             reader.beginObject()
                             var cname = "Outros"
@@ -378,10 +381,13 @@ class CatalogRepository(context: Context) {
                                 }
                             }
                             reader.endObject()
-                            categories.add(CategoryEntity(name = cname, count = ccount, type = ctype, playlistId = playlistId, position = pos++))
+                            serverCats.add(CategoryReconcile.Cat(ctype, cname, ccount))
                         }
                         reader.endArray()
-                        if (categories.isNotEmpty()) dao.insertCategories(categories)
+                        // já grava (o servidor manda antes dos canais: dá para abrir a lista enquanto carrega)
+                        if (serverCats.isNotEmpty()) dao.insertCategories(serverCats.mapIndexed { i, c ->
+                            CategoryEntity(name = c.name, count = c.count, type = c.type, playlistId = playlistId, position = i)
+                        })
                     }
                     // vencimento da conta Xtream (null quando a lista veio por M3U)
                     "account" -> {
@@ -410,6 +416,14 @@ class CatalogRepository(context: Context) {
             try { input.close() } catch (_: Exception) {}
         }
         if (channels.isNotEmpty()) dao.insertChannels(channels)
+        // categoria sem nenhum item com aquele nome (abriria vazia) ou grupo sem categoria: refaz pela lista real
+        val fixed = CategoryReconcile.reconcile(serverCats, itemCounts)
+        if (fixed != serverCats) {
+            if (serverCats.isNotEmpty()) android.util.Log.w("Hugo", "categorias do servidor não batem com os itens: refeitas (${serverCats.size} -> ${fixed.size})")
+            dao.deleteCategories(playlistId)
+            fixed.mapIndexed { i, c -> CategoryEntity(name = c.name, count = c.count, type = c.type, playlistId = playlistId, position = i) }
+                .chunked(500).forEach { dao.insertCategories(it) }
+        }
         if (!firstBatchDone && total > 0) runCatching { onFirstBatch() }
         // sem "account" (M3U ou servidor antigo): não marca nada; a conferência leve (ListExpiry.refreshIfStale) resolve
         account?.let { a -> ListExpiry.save(appContext, accountId, a.first, a.second) }
