@@ -73,17 +73,26 @@ const yearOf = (v: unknown): number | undefined => {
   return m ? parseInt(m[0], 10) : undefined;
 };
 
-function categoryList(raw: Obj[], prefix: string, counts: Map<string, number>): CatalogCategory[] {
-  const out: CatalogCategory[] = raw.map((c) => ({
-    id: `${prefix}-${str(c.category_id)}`,
-    name: str(c.category_name) || "Outros",
-    count: counts.get(str(c.category_id)) ?? 0,
-  }));
+/**
+ * Nome da categoria de um category_id. Tem que ser O MESMO para a lista de categorias e para o "group"
+ * de cada item: o app abre a categoria filtrando os itens pelo nome. (Antes, sem a lista de categorias,
+ * a categoria virava "Categoria 113" e os itens "Outros": categoria com contagem, mas vazia ao abrir.)
+ */
+export function categoryNameFor(names: Map<string, string>, id: string): string {
+  return names.get(id) || (id ? `Categoria ${id}` : "Outros");
+}
+
+function categoryList(raw: Obj[], prefix: string, counts: Map<string, number>, names: Map<string, string>): CatalogCategory[] {
+  const out: CatalogCategory[] = [];
+  const seen = new Set<string>();
+  const push = (id: string) => {
+    if (seen.has(id)) return;
+    seen.add(id);
+    out.push({ id: `${prefix}-${id}`, name: categoryNameFor(names, id), count: counts.get(id) ?? 0 });
+  };
+  for (const c of raw) push(str(c.category_id));
   // Categorias referenciadas por streams mas ausentes da lista
-  const known = new Set(raw.map((c) => str(c.category_id)));
-  for (const [id, count] of counts) {
-    if (!known.has(id)) out.push({ id: `${prefix}-${id}`, name: id ? `Categoria ${id}` : "Outros", count });
-  }
+  for (const id of counts.keys()) push(id);
   return out.filter((c) => c.count > 0);
 }
 
@@ -98,6 +107,9 @@ function countBy(items: Obj[]): Map<string, number> {
 
 export interface XtreamOptions {
   liveFormat?: "m3u8" | "ts";
+  /** novas tentativas de cada ação que falhou (painel atrás de Cloudflare às vezes recusa algumas das chamadas paralelas) */
+  retries?: number;
+  retryDelayMs?: number;
 }
 
 /** Conta do provedor (user_info do login da player_api). */
@@ -125,14 +137,26 @@ export async function buildCatalogFromXtream(c: XtreamCredentials, fetchJson: Js
   const liveFormat = opts.liveFormat ?? "m3u8";
   // login (player_api sem action) só para o vencimento da conta; falhar aqui não atrapalha o catálogo
   const accountP = Promise.resolve().then(() => fetchJson(apiUrl(c))).then(parseXtreamAccount, () => null);
-  const settled = await Promise.allSettled([
-    fetchJson(apiUrl(c, "get_live_categories")),
-    fetchJson(apiUrl(c, "get_live_streams")),
-    fetchJson(apiUrl(c, "get_vod_categories")),
-    fetchJson(apiUrl(c, "get_vod_streams")),
-    fetchJson(apiUrl(c, "get_series_categories")),
-    fetchJson(apiUrl(c, "get_series")),
-  ]);
+  const actions = ["get_live_categories", "get_live_streams", "get_vod_categories", "get_vod_streams", "get_series_categories", "get_series"];
+  const settled: PromiseSettledResult<unknown>[] = await Promise.allSettled(actions.map((a) => fetchJson(apiUrl(c, a))));
+  // o que falhou (menos 403, que é bloqueio de IP e não muda) tenta de novo, uma ação por vez
+  const retries = opts.retries ?? 2;
+  const delay = opts.retryDelayMs ?? 1500;
+  const is403 = (r: PromiseSettledResult<unknown>) => r.status === "rejected" && /403/.test(String((r as PromiseRejectedResult).reason?.message ?? ""));
+  if (!settled.some(is403)) {
+    for (let attempt = 0; attempt < retries; attempt++) {
+      const failed = settled.map((r, i) => (r.status === "rejected" ? i : -1)).filter((i) => i >= 0);
+      if (!failed.length || failed.length === actions.length) break;
+      if (delay > 0) await new Promise((res) => setTimeout(res, delay));
+      for (const i of failed) {
+        try {
+          settled[i] = { status: "fulfilled", value: await fetchJson(apiUrl(c, actions[i])) };
+        } catch (e) {
+          settled[i] = { status: "rejected", reason: e };
+        }
+      }
+    }
+  }
   const [liveCatsRaw, liveRaw, vodCatsRaw, vodRaw, seriesCatsRaw, seriesRaw] = settled.map((r) =>
     asArray(r.status === "fulfilled" ? r.value : [])
   );
@@ -153,7 +177,7 @@ export async function buildCatalogFromXtream(c: XtreamCredentials, fetchJson: Js
       name: str(s.name) || `Canal ${id}`,
       url: liveStreamUrl(c, id, liveFormat),
       logo: img(s.stream_icon),
-      group: liveNames.get(cat) || "Outros",
+      group: categoryNameFor(liveNames, cat),
       categoryId: `live-${cat}`,
       epgId: str(s.epg_channel_id) || null,
       streamId: id,
@@ -170,7 +194,7 @@ export async function buildCatalogFromXtream(c: XtreamCredentials, fetchJson: Js
       name: str(s.name) || `Filme ${id}`,
       url: movieStreamUrl(c, id, ext),
       poster: img(s.stream_icon) ?? img(s.cover),
-      group: vodNames.get(cat) || "Outros",
+      group: categoryNameFor(vodNames, cat),
       categoryId: `movie-${cat}`,
       year: yearOf(s.year ?? s.releasedate ?? s.name),
       rating: num(s.rating),
@@ -186,7 +210,7 @@ export async function buildCatalogFromXtream(c: XtreamCredentials, fetchJson: Js
       id: `x-series-${id}`,
       name: str(s.name) || `Série ${id}`,
       cover: img(s.cover),
-      group: seriesNames.get(cat) || "Outros",
+      group: categoryNameFor(seriesNames, cat),
       categoryId: `series-${cat}`,
       year: yearOf(s.releaseDate ?? s.release_date ?? s.year),
       rating: num(s.rating),
@@ -201,11 +225,13 @@ export async function buildCatalogFromXtream(c: XtreamCredentials, fetchJson: Js
     source: "xtream",
     epgUrl: xmltvUrl(c),
     generatedAt: new Date().toISOString(),
-    live: { categories: categoryList(liveCatsRaw, "live", countBy(liveRaw)), items: live },
-    movies: { categories: categoryList(vodCatsRaw, "movie", countBy(vodRaw)), items: movies },
-    series: { categories: categoryList(seriesCatsRaw, "series", countBy(seriesRaw)), items: series },
+    live: { categories: categoryList(liveCatsRaw, "live", countBy(liveRaw), liveNames), items: live },
+    movies: { categories: categoryList(vodCatsRaw, "movie", countBy(vodRaw), vodNames), items: movies },
+    series: { categories: categoryList(seriesCatsRaw, "series", countBy(seriesRaw), seriesNames), items: series },
     stats: { live: live.length, movies: movies.length, series: series.length, episodes: 0 },
     account: await accountP,
+    // veio a lista de itens mas não a das categorias: nomes "Categoria N" (o app funciona, mas é pior)
+    partial: [0, 2, 4].some((i) => settled[i].status === "rejected" && settled[i + 1].status === "fulfilled"),
   };
 }
 

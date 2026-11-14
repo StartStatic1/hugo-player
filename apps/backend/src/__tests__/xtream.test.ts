@@ -54,10 +54,58 @@ test("monta catálogo pela player_api", async () => {
 
 test("catálogo Xtream tolera ação com erro", async () => {
   const { fetcher } = fakeApi({ get_live_categories: [], get_live_streams: [{ stream_id: 1, name: "X", category_id: "7" }] });
-  const cat = await buildCatalogFromXtream(creds, fetcher, { liveFormat: "ts" });
+  const cat = await buildCatalogFromXtream(creds, fetcher, { liveFormat: "ts", retryDelayMs: 0 });
   assert.equal(cat.stats.live, 1);
   assert.equal(cat.live.items[0].url.endsWith("/1.ts"), true);
   assert.equal(cat.live.categories[0].name, "Categoria 7");
+  // o item tem que estar na MESMA categoria que aparece na lista (o app filtra pelo nome)
+  assert.equal(cat.live.items[0].group, "Categoria 7");
+});
+
+test("sem a lista de categorias: categoria e itens com o mesmo nome (não abre vazia)", async () => {
+  const map: Record<string, unknown> = {
+    get_live_streams: [{ stream_id: 1, name: "A", category_id: "113" }, { stream_id: 2, name: "B", category_id: 192 }],
+    get_vod_streams: [{ stream_id: 3, name: "F", category_id: "313" }, { stream_id: 4, name: "G", category_id: "" }],
+  };
+  const fetcher = async (url: string) => {
+    const a = new URL(url).searchParams.get("action") ?? "";
+    if (!(a in map)) throw new Error("upstream_500");
+    return map[a];
+  };
+  const cat = await buildCatalogFromXtream(creds, fetcher, { retryDelayMs: 0 });
+  assert.equal(cat.partial, true);
+  for (const sec of [cat.live, cat.movies]) {
+    const names = new Set(sec.categories.map((c) => c.name));
+    for (const it of sec.items) assert.ok(names.has(it.group), `item em categoria inexistente: ${it.group}`);
+  }
+  assert.deepEqual(cat.live.items.map((i) => i.group), ["Categoria 113", "Categoria 192"]);
+  assert.deepEqual(cat.movies.items.map((i) => i.group), ["Categoria 313", "Outros"]);
+});
+
+test("ação que falhou é tentada de novo (painel recusando chamadas paralelas)", async () => {
+  let catCalls = 0;
+  const fetcher = async (url: string) => {
+    const a = new URL(url).searchParams.get("action") ?? "";
+    if (a === "get_live_categories") {
+      catCalls++;
+      if (catCalls === 1) throw new Error("upstream_500");
+      return [{ category_id: "113", category_name: "Esportes" }];
+    }
+    if (a === "get_live_streams") return [{ stream_id: 1, name: "A", category_id: 113 }];
+    return [];
+  };
+  const cat = await buildCatalogFromXtream(creds, fetcher, { retryDelayMs: 0 });
+  assert.equal(catCalls, 2);
+  assert.equal(cat.partial, false);
+  assert.deepEqual(cat.live.categories, [{ id: "live-113", name: "Esportes", count: 1 }]);
+  assert.equal(cat.live.items[0].group, "Esportes");
+});
+
+test("403 não fica tentando de novo", async () => {
+  let calls = 0;
+  const fetcher = async () => { calls++; throw new Error("upstream_403"); };
+  await assert.rejects(buildCatalogFromXtream(creds, fetcher, { retryDelayMs: 0 }));
+  assert.equal(calls, 7); // 6 ações + login, sem novas tentativas
 });
 
 test("get_series_info → temporadas e episódios", async () => {

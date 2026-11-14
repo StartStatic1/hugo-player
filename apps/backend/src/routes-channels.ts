@@ -245,7 +245,7 @@ class UpstreamHttpError extends Error {
   }
 }
 
-type Catalog = { channels: any[]; categories: any[]; stats?: any; account?: any; source?: string; timestamp: number };
+type Catalog = { channels: any[]; categories: any[]; stats?: any; account?: any; source?: string; timestamp: number; partial?: boolean };
 
 /** Baixa e converte a playlist do provedor (Xtream API → get.php M3U → M3U puro). Lança UpstreamHttpError. */
 async function buildCatalog(playlistUrl: string): Promise<Catalog> {
@@ -288,6 +288,10 @@ async function buildCatalog(playlistUrl: string): Promise<Catalog> {
           ...catalog.series.categories.map((c, i) => ({ name: c.name, count: c.count, type: "series", position: i })),
         ];
         data = { channels, categories, stats: catalog.stats, timestamp: Date.now(), account: catalog.account ?? null, source: "xtream" };
+        if (catalog.partial) {
+          data.partial = true;
+          console.warn("xtream api partial (some actions failed), not caching:", blockKey(xt.baseUrl));
+        }
       }
     } catch (e: any) {
       if (forbidden || e?.message === "upstream_403") {
@@ -347,7 +351,8 @@ function refreshCatalog(playlistUrl: string): Promise<Catalog> {
     p = withBuildSlot(() => buildCatalog(playlistUrl))
       .then(async (data) => {
         rememberChannels(playlistUrl, data.channels.filter((c: any) => c.type === "live"));
-        await writeCatalogCache(playlistUrl, data).catch((e) => console.warn("catalog cache write failed:", e?.message));
+        // catálogo incompleto (ex.: sem nomes de categoria) não vai para o cache: a próxima atualização tenta de novo
+        if (!data.partial) await writeCatalogCache(playlistUrl, data).catch((e) => console.warn("catalog cache write failed:", e?.message));
         return data;
       })
       .finally(() => inflight.delete(key));
