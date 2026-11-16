@@ -1,9 +1,19 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.ksp)
 }
+
+// Senhas da chave de assinatura fora do repositório. Ordem: -P / gradle.properties do usuário,
+// variável de ambiente (GitHub Actions: secrets HUGO_STORE_PASSWORD / HUGO_KEY_PASSWORD), local.properties.
+val hugoLocalProps = Properties().apply {
+    rootProject.file("local.properties").takeIf { it.canRead() }?.inputStream()?.use { load(it) }
+}
+fun signingSecret(prop: String, env: String): String? =
+    (project.findProperty(prop) as String?) ?: System.getenv(env) ?: hugoLocalProps.getProperty(prop)
 
 android {
     namespace = "com.hugo.player"
@@ -26,9 +36,9 @@ android {
     signingConfigs {
         create("release") {
             storeFile = file("../hugo-release.keystore")
-            storePassword = "hugoplayer2026"
+            storePassword = signingSecret("hugoStorePassword", "HUGO_STORE_PASSWORD")
             keyAlias = "hugo"
-            keyPassword = "hugoplayer2026"
+            keyPassword = signingSecret("hugoKeyPassword", "HUGO_KEY_PASSWORD")
         }
     }
     buildTypes {
