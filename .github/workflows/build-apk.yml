@@ -19,6 +19,10 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      # Senhas da chave de assinatura (Settings > Secrets > Actions); lidas em app/build.gradle.kts
+      HUGO_STORE_PASSWORD: ${{ secrets.HUGO_STORE_PASSWORD }}
+      HUGO_KEY_PASSWORD: ${{ secrets.HUGO_KEY_PASSWORD }}
     steps:
       - uses: actions/checkout@v4
         with:

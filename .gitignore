@@ -14,3 +14,6 @@ captures/
 *.aab
 .DS_Store
 ALL_FILES.md
+
+# configs WireGuard (chave privada) nunca no repositório
+apps/android/**/*.conf

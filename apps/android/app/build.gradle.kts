@@ -7,6 +7,14 @@ plugins {
     alias(libs.plugins.ksp)
 }
 
+// Senhas da chave de assinatura fora do repositório. Ordem: -P / gradle.properties do usuário,
+// variável de ambiente (GitHub Actions: secrets HUGO_STORE_PASSWORD / HUGO_KEY_PASSWORD), local.properties.
+val hugoLocalProps = Properties().apply {
+    rootProject.file("local.properties").takeIf { it.canRead() }?.inputStream()?.use { load(it) }
+}
+fun signingSecret(prop: String, env: String): String? =
+    (project.findProperty(prop) as String?) ?: System.getenv(env) ?: hugoLocalProps.getProperty(prop)
+
 android {
     namespace = "com.hugo.player"
     compileSdk = 36
@@ -15,21 +23,24 @@ android {
         applicationId = "com.hugo.player"
         minSdk = 24
         targetSdk = 35
-        versionCode = 69
-        versionName = "0.5.64"
+        versionCode = 74
+        versionName = "0.5.69"
         // Servidor da API; para testar contra outro: ./gradlew assembleDebug -PhugoApiUrl=http://10.0.2.2:8080
         val apiUrl = (project.findProperty("hugoApiUrl") as String?) ?: "https://api-hugo.streamflixvip.online"
         buildConfigField("String", "API_BASE_URL", "\"$apiUrl\"")
         // false no APK do site / Fire TV; true só no build "play" (Google Play)
         buildConfigField("boolean", "PLAY_STORE", "false")
+        // VPN WireGuard automática (só quando o provedor bloqueia por país). Build da Play: desligar (false)
+        // e remover o GoBackend\$VpnService do manifesto, a menos que a declaração de VpnService seja aprovada no Console.
+        buildConfigField("boolean", "VPN_ENABLED", "true")
     }
 
     signingConfigs {
         create("release") {
             storeFile = file("../hugo-release.keystore")
-            storePassword = "hugoplayer2026"
+            storePassword = signingSecret("hugoStorePassword", "HUGO_STORE_PASSWORD")
             keyAlias = "hugo"
-            keyPassword = "hugoplayer2026"
+            keyPassword = signingSecret("hugoKeyPassword", "HUGO_KEY_PASSWORD")
         }
         // Google Play: chave de UPLOAD (fora do repositório). Caminho do .properties em
         // -PhugoPlaySigning=/caminho/hugo-play-upload.properties (storeFile, storePassword, keyAlias, keyPassword).
@@ -89,7 +100,7 @@ android {
 
 // versionCode próprio do build "play" (pacote com.hugo.player.play é separado na Play Store):
 // sobe a cada AAB enviado ao Play Console; não mexe no versionCode do APK do site.
-val playVersionCode = 73
+val playVersionCode = 74
 // Play exige targetSdk 36 (Android 16); APK do site/Fire TV continua no targetSdk do defaultConfig.
 val playTargetSdk = 36
 androidComponents {
@@ -122,6 +133,8 @@ dependencies {
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("com.squareup.okhttp3:okhttp-dnsoverhttps:4.12.0")
     implementation("androidx.navigation:navigation-compose:2.8.3")
+    // túnel WireGuard oficial (GoBackend = wireguard-go embutido, não precisa de root)
+    implementation("com.wireguard.android:tunnel:1.0.20260102")
     implementation(libs.androidx.room.runtime)
     implementation(libs.androidx.room.ktx)
     ksp(libs.androidx.room.compiler)

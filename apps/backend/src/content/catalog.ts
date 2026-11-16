@@ -82,6 +82,8 @@ export interface Catalog {
   stats: { live: number; movies: number; series: number; episodes: number };
   /** Só Xtream: vencimento da conta do provedor (user_info.exp_date). */
   account?: { expiresAt: string | null; unlimited: boolean; status?: string; maxConnections?: number } | null;
+  /** Só Xtream: alguma ação da player_api falhou mesmo depois das novas tentativas (ex.: veio canal mas não o nome das categorias). */
+  partial?: boolean;
 }
 
 export function shortId(...parts: string[]): string {

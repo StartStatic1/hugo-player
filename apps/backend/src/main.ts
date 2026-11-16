@@ -23,6 +23,7 @@ import { createSecurity, ensureSecurityStore, type SecurityStore } from "./secur
 import { backfillExisting, decideTrial, newDeviceTrial, webPendingTrial, resolvePendingTrial, type TrialFlag, type TrialLedger, type TrialPendingReason, type TrialPolicy } from "./trial-ledger.js";
 import { PAID_PLANS, PLAN_LABELS, PLAN_PRICES, planExpiry, renewalBase, type PaidPlan } from "./plans.js";
 import { revokeRefundedOrder } from "./refunds.js";
+import { createVpnAdminRouter, createVpnRouter, createVpnStore } from "./vpn.js";
 import { createResellerAdminRouter, createResellerRouter, ensureResellerStore, type ActivatedBy, type ResellerStore } from "./resellers.js";
 
 const PORT = Number(process.env.PORT ?? 8080);
@@ -31,6 +32,9 @@ const TRIAL_DAYS = Number(process.env.TRIAL_DAYS ?? 7);
 const ADMIN_TOKEN = process.env.ADMIN_TOKEN ?? "";
 const INFINITEPAY_HANDLE = (process.env.INFINITEPAY_HANDLE ?? "").replace(/^\$/, "").trim();
 const PUBLIC_WEB_URL = (process.env.PUBLIC_WEB_URL ?? "https://hugo.streamflixvip.online").replace(/\/+$/, "");
+// configs WireGuard por país (fora do git e do db.json; pasta 700, arquivos 600)
+const VPN_DIR = path.resolve(process.env.VPN_DIR ?? path.join(path.dirname(DATA_FILE), "vpn"));
+const vpnStore = createVpnStore(VPN_DIR);
 const PUBLIC_API_URL = (process.env.PUBLIC_API_URL ?? "https://api-hugo.streamflixvip.online").replace(/\/+$/, "");
 
 type LicenseType = "trial" | "premium" | "expired";
@@ -267,6 +271,16 @@ const resellerDeps = {
 };
 app.use("/reseller", createResellerRouter(resellerDeps));
 app.use("/admin/resellers", createResellerAdminRouter({ ...resellerDeps, allDevices: () => Object.values(db.devices) }));
+app.use("/admin/vpn", createVpnAdminRouter({ store: vpnStore, adminToken: ADMIN_TOKEN }));
+// app: config WireGuard do país, só para aparelho com licença ou teste ativo
+app.use("/vpn", createVpnRouter({
+  store: vpnStore,
+  adminToken: ADMIN_TOKEN,
+  authorize: (id, key) => {
+    const d = authDevice(id, key);
+    return d ? { deviceId: d.deviceId, status: hasActiveLicense(d) ? "ok" : "inactive" } : null;
+  },
+}));
 app.get("/admin/security", (req, res) => (security.validAdmin(req) ? res.json(security.summary()) : res.status(401).json({ error: "admin_unauthorized" })));
 app.post("/admin/security/unban", (req, res) => {
   if (!security.validAdmin(req)) return res.status(401).json({ error: "admin_unauthorized" });
@@ -644,6 +658,7 @@ app.use(
       const device = authDevice(id, key);
       return device && hasActiveLicense(device) ? device.deviceId : null;
     },
+    vpnCountryFor: (url) => vpnStore.countryForUrl(url),
   }),
 );
 
@@ -668,4 +683,5 @@ app.use("/epg", createEpgRouter(resolvePlaylist));
 app.use((_req, res) => res.status(404).json({ error: "not_found" }));
 
 await loadDb();
+await vpnStore.load().catch((e) => console.warn(`vpn: não carregou as configs (${(e as Error).message})`));
 app.listen(PORT, () => console.log(`Hugo Player API on port ${PORT}`));

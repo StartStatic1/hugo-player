@@ -178,6 +178,7 @@ class CatalogRepository(context: Context) {
         /** chamado uma vez, assim que o 1º lote de itens está salvo (dá para abrir a lista já) */
         onFirstBatch: () -> Unit = {},
     ) = withContext(Dispatchers.IO) {
+        com.hugo.player.vpn.VpnManager.init(appContext)
         onProgress("Conectando ao servidor...")
         onFraction(null)
         val cur = k(playlistId)
@@ -286,6 +287,9 @@ class CatalogRepository(context: Context) {
         var firstBatchDone = false
         var estimated = knownTotal ?: 50000
         var account: Pair<Long?, Boolean>? = null
+        // categorias do servidor: gravadas logo e conferidas no fim com os grupos dos itens (CategoryReconcile)
+        val serverCats = ArrayList<CategoryReconcile.Cat>()
+        val itemCounts = LinkedHashMap<String, Int>()
         try {
             reader.beginObject()
             while (reader.hasNext()) {
@@ -338,6 +342,8 @@ class CatalogRepository(context: Context) {
                                     epgId = if (type == "live") epgId else null,
                                 )
                             )
+                            val ck = CategoryReconcile.key(type, group)
+                            itemCounts[ck] = (itemCounts[ck] ?: 0) + 1
                             total++
                             if (total % 1000 == 0) {
                                 val rt = realTotal
@@ -361,8 +367,6 @@ class CatalogRepository(context: Context) {
                     }
                     "categories" -> {
                         reader.beginArray()
-                        val categories = ArrayList<CategoryEntity>()
-                        var pos = 0
                         while (reader.hasNext()) {
                             reader.beginObject()
                             var cname = "Outros"
@@ -377,10 +381,13 @@ class CatalogRepository(context: Context) {
                                 }
                             }
                             reader.endObject()
-                            categories.add(CategoryEntity(name = cname, count = ccount, type = ctype, playlistId = playlistId, position = pos++))
+                            serverCats.add(CategoryReconcile.Cat(ctype, cname, ccount))
                         }
                         reader.endArray()
-                        if (categories.isNotEmpty()) dao.insertCategories(categories)
+                        // já grava (o servidor manda antes dos canais: dá para abrir a lista enquanto carrega)
+                        if (serverCats.isNotEmpty()) dao.insertCategories(serverCats.mapIndexed { i, c ->
+                            CategoryEntity(name = c.name, count = c.count, type = c.type, playlistId = playlistId, position = i)
+                        })
                     }
                     // vencimento da conta Xtream (null quando a lista veio por M3U)
                     "account" -> {
@@ -409,6 +416,14 @@ class CatalogRepository(context: Context) {
             try { input.close() } catch (_: Exception) {}
         }
         if (channels.isNotEmpty()) dao.insertChannels(channels)
+        // categoria sem nenhum item com aquele nome (abriria vazia) ou grupo sem categoria: refaz pela lista real
+        val fixed = CategoryReconcile.reconcile(serverCats, itemCounts)
+        if (fixed != serverCats) {
+            if (serverCats.isNotEmpty()) android.util.Log.w("Hugo", "categorias do servidor não batem com os itens: refeitas (${serverCats.size} -> ${fixed.size})")
+            dao.deleteCategories(playlistId)
+            fixed.mapIndexed { i, c -> CategoryEntity(name = c.name, count = c.count, type = c.type, playlistId = playlistId, position = i) }
+                .chunked(500).forEach { dao.insertCategories(it) }
+        }
         if (!firstBatchDone && total > 0) runCatching { onFirstBatch() }
         // sem "account" (M3U ou servidor antigo): não marca nada; a conferência leve (ListExpiry.refreshIfStale) resolve
         account?.let { a -> ListExpiry.save(appContext, accountId, a.first, a.second) }
@@ -423,6 +438,9 @@ class CatalogRepository(context: Context) {
     }
 
     class NotAListException : Exception("o provedor respondeu uma página em vez da lista")
+
+    /** HTTP de erro do provedor no aparelho (mesma mensagem de antes: relayWorthy continua olhando o "(403)") */
+    class ProviderHttpException(val code: Int) : Exception("provedor recusou no aparelho ($code)")
 
     private fun looksLikeM3u(f: java.io.File): Boolean {
         val head = f.inputStream().use { val b = ByteArray(2048); val n = it.read(b); if (n <= 0) "" else String(b, 0, n, Charsets.UTF_8) }
@@ -486,7 +504,7 @@ class CatalogRepository(context: Context) {
                 }
                 try {
                     val code = resp.code
-                    if (code !in 200..299) throw Exception("provedor recusou no aparelho ($code)")
+                    if (code !in 200..299) throw ProviderHttpException(code)
                     val len = conn.contentLengthLong
                     if (len > maxClientM3uBytes && conn.contentEncoding.isNullOrBlank()) throw Exception("lista muito grande (${len / 1_000_000} MB)")
                     var written = 0L
@@ -529,8 +547,30 @@ class CatalogRepository(context: Context) {
                 // pede compactado e descompacta aqui (assim o contador mostra o que passa de verdade pela internet)
                 .header("Accept-Encoding", "gzip")
                 .build()
+            val sourceId = realId(playlistId)
+            val vpn = com.hugo.player.vpn.VpnManager
+            // fonte já conhecida como "só com IP do país": liga a VPN antes (evita o 403 de novo)
+            if (vpn.ensureForSource(sourceId)) onProgress("VPN ${vpn.activeCountry.value} ligada")
             try {
-                download(direct())
+                try {
+                    download(direct())
+                } catch (e: ProviderHttpException) {
+                    // 403/451 = bloqueio por país/IP: com uma config WireGuard importada, liga a VPN e tenta 1x de novo
+                    // sem config importada: baixa a do servidor sozinha (licença/teste ativo)
+                    if (!vpn.isGeoBlock(e.code) || vpn.isUp || !vpn.autoEnabled || !vpn.prepareConfig()) throw e
+                    android.util.Log.d("HugoVpn", "provedor respondeu ${e.code} no aparelho: tentando com VPN")
+                    onProgress("O provedor recusou esta internet (${e.code}). Ligando VPN...")
+                    if (!vpn.ensureConnected()) throw e
+                    onProgress("VPN ${vpn.activeCountry.value} ligada. Baixando de novo...")
+                    try {
+                        download(direct())
+                    } catch (retry: Exception) {
+                        android.util.Log.d("HugoVpn", "nova tentativa com VPN falhou: ${retry.javaClass.simpleName} ${retry.message}")
+                        throw e
+                    }
+                    android.util.Log.d("HugoVpn", "deu certo com VPN: fonte marcada como ${vpn.activeCountry.value}")
+                    vpn.rememberRequired(sourceId, vpn.activeCountry.value)
+                }
             } catch (e: Exception) {
                 // bloqueou no aparelho (DNS, tempo, conexão, página de bloqueio): tenta a rota alternativa só da lista
                 if (!relayWorthy(e)) throw e

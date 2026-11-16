@@ -112,6 +112,9 @@ fun PlayerScreen(request: PlaybackRequest, onBack: () -> Unit) {
     var retryCount by remember { mutableIntStateOf(0) }
     var retryTick by remember { mutableIntStateOf(0) }
     var forceHls by remember { mutableStateOf(false) }
+    /** vídeo que já tentou a VPN depois de um 403/451 (só 1x por vídeo: evita laço) */
+    var vpnTriedUrl by remember { mutableStateOf<String?>(null) }
+    var vpnNotice by remember { mutableStateOf<String?>(null) }
     var resizeIndex by remember { mutableIntStateOf(0) }
     var positionMs by remember { mutableLongStateOf(0L) }
     var durationMs by remember { mutableLongStateOf(C.TIME_UNSET) }
@@ -169,6 +172,8 @@ fun PlayerScreen(request: PlaybackRequest, onBack: () -> Unit) {
         extOptions = emptyList(); extApplied = null; subStatus = null; autoSubTried = false; readyOnce = false; subByAudioSwitch = false
         extCues = emptyList(); extActive = false; subOffsetMs = 0L; subsOffThisVideo = false; embeddedAutoAt = null; subNotice = null
         playerViewRef?.subtitleView?.setCues(emptyList())
+        // fonte marcada como "só com IP do país": liga a VPN antes de abrir o vídeo (nada acontece nas outras)
+        com.hugo.player.vpn.VpnManager.ensureForSource(current.playlistId)
         exoPlayer.setMediaItem(HugoPlayerFactory.mediaItem(current.url, forceHls))
         exoPlayer.prepare()
         val resumeAt = if (current.isLive != true) WatchHistory.getProgress(context, progressKeyFor(current)) else 0L
@@ -195,6 +200,30 @@ fun PlayerScreen(request: PlaybackRequest, onBack: () -> Unit) {
                     retryTick++
                     return
                 }
+                // 403/451 no vídeo = bloqueio por país/IP: liga a VPN (automática) e tenta 1x de novo
+                val geo = com.hugo.player.vpn.VpnPlayback.geoBlockStatus(error)
+                if (geo != null && vpnTriedUrl != current.url && com.hugo.player.vpn.VpnPlayback.canTry()) {
+                    val item = current
+                    vpnTriedUrl = item.url
+                    errorMsg = null
+                    vpnNotice = tr("Ligando VPN…")
+                    scope.launch {
+                        val ok = com.hugo.player.vpn.VpnPlayback.connectFor(item.playlistId, geo)
+                        vpnNotice = null
+                        if (current !== item) return@launch
+                        if (ok) {
+                            retryCount = 0
+                            loading = true
+                            exoPlayer.prepare()
+                            exoPlayer.playWhenReady = true
+                        } else showError(error)
+                    }
+                    return
+                }
+                showError(error)
+            }
+
+            fun showError(error: PlaybackException) {
                 errorMsg = friendlyError(error)
                 errorDetail = "${error.errorCodeName} · ${error.message ?: ""}".trim()
                 loading = false
@@ -599,10 +628,14 @@ fun PlayerScreen(request: PlaybackRequest, onBack: () -> Unit) {
             modifier = Modifier.fillMaxSize()
         )
 
-        if (loading && errorMsg == null) {
+        if ((loading || vpnNotice != null) && errorMsg == null) {
             Column(Modifier.align(Alignment.Center), horizontalAlignment = Alignment.CenterHorizontally) {
                 CircularProgressIndicator(color = Accent, modifier = Modifier.size(52.dp))
-                if (retryCount > 0) {
+                vpnNotice?.let {
+                    Spacer(Modifier.height(12.dp))
+                    Text(it, color = Color.White, fontSize = 13.sp)
+                }
+                if (retryCount > 0 && vpnNotice == null) {
                     Spacer(Modifier.height(12.dp))
                     Text("Reconectando… ($retryCount/$MAX_AUTO_RETRIES)", color = Color.White, fontSize = 13.sp)
                 }
