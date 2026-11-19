@@ -76,6 +76,16 @@ export interface TrialPolicy {
   ipLimited?: boolean;
 }
 
+/**
+ * Build da Play Store: o app manda versionName terminando em "-play" no cadastro
+ * (ainda não envia o package name). Esses cadastros ficam isentos do limite de
+ * 1 teste por IP / 24 h, para revisores do Google no mesmo IP. O teste de 7 dias
+ * e as outras travas (ANDROID_ID já usado, etc.) continuam iguais.
+ */
+export function isPlayStoreBuild(appVersion?: string | null): boolean {
+  return typeof appVersion === "string" && appVersion.trim().toLowerCase().endsWith("-play");
+}
+
 /** Licença inicial de um aparelho novo conforme a decisão. Não mexe em nada já existente. */
 export function newDeviceTrial(
   decision: TrialDecision,

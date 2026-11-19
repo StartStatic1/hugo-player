@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { backfillExisting, decideTrial, hashAndroidId, newDeviceTrial, normalizeAndroidId, type TrialDevice, type TrialLedger } from "../trial-ledger.js";
+import { backfillExisting, decideTrial, hashAndroidId, isPlayStoreBuild, newDeviceTrial, normalizeAndroidId, type TrialDevice, type TrialLedger } from "../trial-ledger.js";
 
 const now = new Date("2026-10-26T12:00:00.000Z");
 const SSAID = "3f2a9c41b7d0e8a5";
@@ -111,4 +111,24 @@ test("cadastro pelo site: sem teste; o teste nasce no 1º uso do app (com trava 
   resolvePendingTrial(web2, "1a2b3c4d5e6f7a8b", ledger, now, 7);
   assert.equal(web2.license.type, "expired");
   assert.ok(web2.trialDenied);
+});
+
+test("isPlayStoreBuild: versionName da Play termina em -play; build do site não", () => {
+  assert.equal(isPlayStoreBuild("0.5.69-play"), true);
+  assert.equal(isPlayStoreBuild("  0.5.69-PLAY  "), true);
+  assert.equal(isPlayStoreBuild("0.5.69"), false);
+  assert.equal(isPlayStoreBuild("0.5.69-play-debug"), false);
+  assert.equal(isPlayStoreBuild(""), false);
+  assert.equal(isPlayStoreBuild(undefined), false);
+  assert.equal(isPlayStoreBuild(null), false);
+});
+
+test("build da Play com IP no limite: isenção é na policy (ipLimited=false); se a policy marcar, a trava continua", () => {
+  const ledger: TrialLedger = {};
+  const granted = newDeviceTrial(decideTrial("a1b2c3d4e5f60718", ledger), "02:P1:00:00:00:01", now, 7, ledger, { ipLimited: false });
+  assert.equal(granted.license.type, "trial");
+  assert.equal(granted.trialPending, undefined);
+  const blocked = newDeviceTrial(decideTrial("b1b2c3d4e5f60718", ledger), "02:P1:00:00:00:02", now, 7, ledger, { ipLimited: true });
+  assert.equal(blocked.license.type, "expired");
+  assert.equal(blocked.trialPending, "ip_limit");
 });

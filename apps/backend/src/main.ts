@@ -20,7 +20,7 @@ import { clientVersionCode, normalizeConfig, updateRequired, type AppConfig } fr
 import { createSubtitlesRouter } from "./subtitles.js";
 import { searchTmdb } from "./tmdb.js";
 import { createSecurity, ensureSecurityStore, type SecurityStore } from "./security.js";
-import { backfillExisting, decideTrial, newDeviceTrial, webPendingTrial, resolvePendingTrial, type TrialFlag, type TrialLedger, type TrialPendingReason, type TrialPolicy } from "./trial-ledger.js";
+import { backfillExisting, decideTrial, isPlayStoreBuild, newDeviceTrial, webPendingTrial, resolvePendingTrial, type TrialFlag, type TrialLedger, type TrialPendingReason, type TrialPolicy } from "./trial-ledger.js";
 import { PAID_PLANS, PLAN_LABELS, PLAN_PRICES, planExpiry, renewalBase, type PaidPlan } from "./plans.js";
 import { revokeRefundedOrder } from "./refunds.js";
 import { createVpnAdminRouter, createVpnRouter, createVpnStore } from "./vpn.js";
@@ -344,7 +344,7 @@ app.post("/devices/register", async (req, res) => {
       // app atualizado: decide o teste pendente (se havia) ou só anota o ANDROID_ID (a licença não muda)
       existing.lastIp = ip;
       const wasPending = Boolean(existing.trialPending);
-      if (!resolvePendingTrial(existing, parsed.data.androidId, db.trialLedger ??= {}, now, TRIAL_DAYS, trialPolicy(platform, ip, now, existing))) {
+      if (!resolvePendingTrial(existing, parsed.data.androidId, db.trialLedger ??= {}, now, TRIAL_DAYS, trialPolicy(platform, ip, now, existing, appVersion))) {
         backfillExisting(existing, parsed.data.androidId, db.trialLedger, now);
       }
       if (wasPending && !existing.trialPending) markTrialIp(existing, ip, now);
@@ -367,7 +367,7 @@ app.post("/devices/register", async (req, res) => {
   const webPending = platform === "web";
   const trial = webPending
     ? { ...webPendingTrial(now), androidIdHash: undefined, trialFlag: undefined, trialDenied: undefined }
-    : newDeviceTrial(decision, storeKey, now, TRIAL_DAYS, db.trialLedger, trialPolicy(platform, ip, now));
+    : newDeviceTrial(decision, storeKey, now, TRIAL_DAYS, db.trialLedger, trialPolicy(platform, ip, now, undefined, appVersion));
   const device: Device = {
     deviceId: storeKey,
     keyHash: hash,
@@ -414,8 +414,13 @@ const IP_WINDOW_MS = 24 * 3600 * 1000;
 const MAX_DEVICES_PER_IP = 3;
 const MAX_TRIALS_PER_IP = 1;
 
-/** Limite por IP em 24 h: até 3 aparelhos novos e 1 teste grátis. Acima disso o teste fica pendente. */
-function trialPolicy(platform: string, ip: string, now: Date, self?: Device): TrialPolicy {
+/** Limite por IP em 24 h: até 3 aparelhos novos e 1 teste grátis. Acima disso o teste fica pendente.
+ *  Builds da Play (appVersion terminando em -play) ficam isentos: o cadastro acontece antes do login da conta demo. */
+function trialPolicy(platform: string, ip: string, now: Date, self?: Device, appVersion?: string): TrialPolicy {
+  const allowUnverified = NO_ANDROID_ID_PLATFORMS.has(platform);
+  if (isPlayStoreBuild(appVersion ?? self?.appVersion)) {
+    return { allowUnverified, ipLimited: false };
+  }
   const since = now.getTime() - IP_WINDOW_MS;
   let devices = 0, trials = 0;
   if (ip) {
@@ -425,7 +430,7 @@ function trialPolicy(platform: string, ip: string, now: Date, self?: Device): Tr
       if (d.trialIp === ip && d.trialAt && new Date(d.trialAt).getTime() >= since) trials++;
     }
   }
-  return { allowUnverified: NO_ANDROID_ID_PLATFORMS.has(platform), ipLimited: devices >= MAX_DEVICES_PER_IP || trials >= MAX_TRIALS_PER_IP };
+  return { allowUnverified, ipLimited: devices >= MAX_DEVICES_PER_IP || trials >= MAX_TRIALS_PER_IP };
 }
 
 function markTrialIp(device: Device, ip: string, now: Date) {
