@@ -365,7 +365,16 @@ app.post("/devices/register", async (req, res) => {
     return res.status(400).json({ error: "invalid_device_id", message: "Device ID inválido. Copie exatamente como aparece no app (ex.: F6:55:39:4F:0B:0C — use 0 zero, não a letra O)." });
   }
   const { salt, hash } = hashKey(deviceKey);
-  const decision = decideTrial(parsed.data.androidId, db.trialLedger ??= {});
+  let decision = decideTrial(parsed.data.androidId, db.trialLedger ??= {});
+  // Fase de teste da Play: build nova ganha o teste UMA vez por aparelho, mesmo que o aparelho já tenha usado
+  // teste antes (site / Play antiga). Registro separado em db.playTrialLedger. Reverter quando a Play estiver no ar.
+  const playLedger: Record<string, { deviceId: string; at: string }> = ((db as any).playTrialLedger ??= {});
+  if (platform !== "web" && decision.kind === "denied" && isPlayStoreBuild(appVersion, packageName) && !playLedger[decision.hash]) {
+    playLedger[decision.hash] = { deviceId: storeKey, at: now.toISOString() };
+    decision = { kind: "granted", hash: decision.hash };
+  } else if (platform !== "web" && decision.kind === "granted" && isPlayStoreBuild(appVersion, packageName)) {
+    playLedger[decision.hash] ??= { deviceId: storeKey, at: now.toISOString() };
+  }
   // criado pelo site: sem teste grátis. O teste nasce no primeiro uso do app (com a trava por ANDROID_ID).
   // app sem ANDROID_ID / app antigo / IP no limite: teste pendente (o admin pode liberar)
   const webPending = platform === "web";
