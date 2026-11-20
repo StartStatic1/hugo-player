@@ -77,13 +77,40 @@ export interface TrialPolicy {
 }
 
 /**
- * Build da Play Store: o app manda versionName terminando em "-play" no cadastro
- * (ainda não envia o package name). Esses cadastros ficam isentos do limite de
- * 1 teste por IP / 24 h, para revisores do Google no mesmo IP. O teste de 7 dias
- * e as outras travas (ANDROID_ID já usado, etc.) continuam iguais.
+ * Build nova da Play (pacote com.hugoplayer.app), não a antiga com.hugo.player.play
+ * (conta xfdapx). O app hoje só manda versionName; a antiga publicada era 0.5.64-play.
+ * A nova começa em 0.5.69-play / 0.5.70-play. Se o app mandar o package name, ele prevalece.
  */
-export function isPlayStoreBuild(appVersion?: string | null): boolean {
-  return typeof appVersion === "string" && appVersion.trim().toLowerCase().endsWith("-play");
+export const PLAY_STORE_TRIAL_DAYS = 30;
+const NEW_PLAY_PACKAGE = "com.hugoplayer.app";
+const OLD_PLAY_PACKAGE = "com.hugo.player.play";
+const NEW_PLAY_MIN: readonly [number, number, number] = [0, 5, 69];
+
+function parsePlayAppVersion(appVersion?: string | null): [number, number, number] | null {
+  if (typeof appVersion !== "string") return null;
+  const m = appVersion.trim().toLowerCase().match(/^(\d+)\.(\d+)\.(\d+)-play$/);
+  if (!m) return null;
+  return [Number(m[1]), Number(m[2]), Number(m[3])];
+}
+
+function versionAtLeast(v: readonly [number, number, number], min: readonly [number, number, number]): boolean {
+  for (let i = 0; i < 3; i++) {
+    if (v[i] > min[i]) return true;
+    if (v[i] < min[i]) return false;
+  }
+  return true;
+}
+
+export function isPlayStoreBuild(appVersion?: string | null, packageName?: string | null): boolean {
+  const pkg = typeof packageName === "string" ? packageName.trim().toLowerCase() : "";
+  if (pkg === NEW_PLAY_PACKAGE) return true;
+  if (pkg === OLD_PLAY_PACKAGE) return false;
+  const parsed = parsePlayAppVersion(appVersion);
+  return parsed !== null && versionAtLeast(parsed, NEW_PLAY_MIN);
+}
+
+export function trialDaysForBuild(appVersion?: string | null, packageName?: string | null, defaultDays = 7): number {
+  return isPlayStoreBuild(appVersion, packageName) ? PLAY_STORE_TRIAL_DAYS : defaultDays;
 }
 
 /** Licença inicial de um aparelho novo conforme a decisão. Não mexe em nada já existente. */

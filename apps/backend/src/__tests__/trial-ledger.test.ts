@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { backfillExisting, decideTrial, hashAndroidId, isPlayStoreBuild, newDeviceTrial, normalizeAndroidId, type TrialDevice, type TrialLedger } from "../trial-ledger.js";
+import { backfillExisting, decideTrial, hashAndroidId, isPlayStoreBuild, newDeviceTrial, normalizeAndroidId, trialDaysForBuild, PLAY_STORE_TRIAL_DAYS, type TrialDevice, type TrialLedger } from "../trial-ledger.js";
 
 const now = new Date("2026-10-26T12:00:00.000Z");
 const SSAID = "3f2a9c41b7d0e8a5";
@@ -113,14 +113,28 @@ test("cadastro pelo site: sem teste; o teste nasce no 1º uso do app (com trava 
   assert.ok(web2.trialDenied);
 });
 
-test("isPlayStoreBuild: versionName da Play termina em -play; build do site não", () => {
+test("isPlayStoreBuild: só a build nova da Play (>= 0.5.69-play ou pacote com.hugoplayer.app)", () => {
   assert.equal(isPlayStoreBuild("0.5.69-play"), true);
   assert.equal(isPlayStoreBuild("  0.5.69-PLAY  "), true);
+  assert.equal(isPlayStoreBuild("0.5.70-play"), true);
+  assert.equal(isPlayStoreBuild("1.0.0-play"), true);
+  assert.equal(isPlayStoreBuild("0.5.64-play"), false); // build antiga com.hugo.player.play
+  assert.equal(isPlayStoreBuild("0.5.68-play"), false);
   assert.equal(isPlayStoreBuild("0.5.69"), false);
   assert.equal(isPlayStoreBuild("0.5.69-play-debug"), false);
   assert.equal(isPlayStoreBuild(""), false);
   assert.equal(isPlayStoreBuild(undefined), false);
   assert.equal(isPlayStoreBuild(null), false);
+  // package name, quando o app mandar, manda na decisão
+  assert.equal(isPlayStoreBuild("0.5.64-play", "com.hugoplayer.app"), true);
+  assert.equal(isPlayStoreBuild("0.5.69-play", "com.hugo.player.play"), false);
+  assert.equal(isPlayStoreBuild("0.5.69", "com.hugoplayer.app"), true);
+  assert.equal(trialDaysForBuild("0.5.70-play"), PLAY_STORE_TRIAL_DAYS);
+  assert.equal(trialDaysForBuild("0.5.64-play"), 7);
+  assert.equal(trialDaysForBuild("0.5.69"), 7);
+  const thirty = newDeviceTrial(decideTrial("c1b2c3d4e5f60718", {}), "02:P1:00:00:00:09", now, trialDaysForBuild("0.5.70-play"), {});
+  assert.equal(thirty.license.type, "trial");
+  assert.equal(thirty.license.expiresAt, "2026-11-25T12:00:00.000Z");
 });
 
 test("build da Play com IP no limite: isenção é na policy (ipLimited=false); se a policy marcar, a trava continua", () => {

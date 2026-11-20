@@ -20,7 +20,7 @@ import { clientVersionCode, normalizeConfig, updateRequired, type AppConfig } fr
 import { createSubtitlesRouter } from "./subtitles.js";
 import { searchTmdb } from "./tmdb.js";
 import { createSecurity, ensureSecurityStore, type SecurityStore } from "./security.js";
-import { backfillExisting, decideTrial, isPlayStoreBuild, newDeviceTrial, webPendingTrial, resolvePendingTrial, type TrialFlag, type TrialLedger, type TrialPendingReason, type TrialPolicy } from "./trial-ledger.js";
+import { backfillExisting, decideTrial, isPlayStoreBuild, newDeviceTrial, webPendingTrial, resolvePendingTrial, trialDaysForBuild, type TrialFlag, type TrialLedger, type TrialPendingReason, type TrialPolicy } from "./trial-ledger.js";
 import { PAID_PLANS, PLAN_LABELS, PLAN_PRICES, planExpiry, renewalBase, type PaidPlan } from "./plans.js";
 import { revokeRefundedOrder } from "./refunds.js";
 import { createVpnAdminRouter, createVpnRouter, createVpnStore } from "./vpn.js";
@@ -206,6 +206,8 @@ const registerSchema = z.object({
   deviceKey: z.string().min(4).max(64),
   platform: z.string().max(64),
   appVersion: z.string().max(32).optional(),
+  /** package name, se o app mandar (com.hugoplayer.app vs com.hugo.player.play) */
+  packageName: z.string().max(128).optional(),
   /** Settings.Secure.ANDROID_ID (null quando o aparelho não tem) */
   androidId: z.string().max(128).nullable().optional(),
 });
@@ -331,6 +333,8 @@ app.post("/devices/register", async (req, res) => {
   const deviceKey = parsed.data.deviceKey.trim();
   const platform = parsed.data.platform;
   const appVersion = parsed.data.appVersion;
+  const packageName = parsed.data.packageName;
+  const days = trialDaysForBuild(appVersion, packageName, TRIAL_DAYS);
   const now = new Date();
   const ip = clientIp(req);
   const storeKey = canonicalDeviceId(deviceId);
@@ -344,7 +348,7 @@ app.post("/devices/register", async (req, res) => {
       // app atualizado: decide o teste pendente (se havia) ou só anota o ANDROID_ID (a licença não muda)
       existing.lastIp = ip;
       const wasPending = Boolean(existing.trialPending);
-      if (!resolvePendingTrial(existing, parsed.data.androidId, db.trialLedger ??= {}, now, TRIAL_DAYS, trialPolicy(platform, ip, now, existing, appVersion))) {
+      if (!resolvePendingTrial(existing, parsed.data.androidId, db.trialLedger ??= {}, now, trialDaysForBuild(appVersion ?? existing.appVersion, packageName, TRIAL_DAYS), trialPolicy(platform, ip, now, existing, appVersion, packageName))) {
         backfillExisting(existing, parsed.data.androidId, db.trialLedger, now);
       }
       if (wasPending && !existing.trialPending) markTrialIp(existing, ip, now);
@@ -367,7 +371,7 @@ app.post("/devices/register", async (req, res) => {
   const webPending = platform === "web";
   const trial = webPending
     ? { ...webPendingTrial(now), androidIdHash: undefined, trialFlag: undefined, trialDenied: undefined }
-    : newDeviceTrial(decision, storeKey, now, TRIAL_DAYS, db.trialLedger, trialPolicy(platform, ip, now, undefined, appVersion));
+    : newDeviceTrial(decision, storeKey, now, days, db.trialLedger, trialPolicy(platform, ip, now, undefined, appVersion, packageName));
   const device: Device = {
     deviceId: storeKey,
     keyHash: hash,
@@ -415,10 +419,11 @@ const MAX_DEVICES_PER_IP = 3;
 const MAX_TRIALS_PER_IP = 1;
 
 /** Limite por IP em 24 h: até 3 aparelhos novos e 1 teste grátis. Acima disso o teste fica pendente.
- *  Builds da Play (appVersion terminando em -play) ficam isentos: o cadastro acontece antes do login da conta demo. */
-function trialPolicy(platform: string, ip: string, now: Date, self?: Device, appVersion?: string): TrialPolicy {
+ *  Só a build nova da Play (com.hugoplayer.app, versionName >= 0.5.69-play) fica isenta do limite de IP.
+ *  A build antiga (com.hugo.player.play, 0.5.64-play) continua no limite. */
+function trialPolicy(platform: string, ip: string, now: Date, self?: Device, appVersion?: string, packageName?: string): TrialPolicy {
   const allowUnverified = NO_ANDROID_ID_PLATFORMS.has(platform);
-  if (isPlayStoreBuild(appVersion ?? self?.appVersion)) {
+  if (isPlayStoreBuild(appVersion ?? self?.appVersion, packageName)) {
     return { allowUnverified, ipLimited: false };
   }
   const since = now.getTime() - IP_WINDOW_MS;
